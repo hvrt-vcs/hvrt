@@ -24,7 +24,12 @@
   affect it's source FID. If the file at the same path is recreated in the next
   commit, it receives a new FID (which should be unique since it is derived
   from a unique commit hash, even if the path that is added to the hash is the
-  same as before).
-    - in a way, there is no real difference between a rename and a copy: if a file
+  same as before), and it's source FID should either be null (if it is created
+  ex nihilo) or the FID of whatever it was copied from; it should NOT have the
+  source FID of the file at the same path that was previously deleted.
+    - With all this in mind, there is no real difference between a rename and a copy: if a file
       is copied AND renamed in the same commit, the system sees them equally.
-      The system sees them both as derived copies.
+      The system sees them both as derived copies. So a rename is really just
+      a single copy combined with a delete in the same commit.
+    - All of this makes it trivially fast and easy to ask about the full history
+      of a file, even across renames/copies. In essence, blame/annotate works perfectly even across copies/renames.

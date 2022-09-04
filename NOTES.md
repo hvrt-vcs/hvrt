@@ -18,7 +18,7 @@
   or copied from is its source FID. If an FID was created without a source FID,
   then it's source FID is just null. The FID is pseudorandom: it is a hash
   derived from several values: (1) the file path relative to the root of the
-  repo, and (2) the hash of the parent commit(s). These two values should be
+  repo preceded by (2) the hash of the parent commit(s). These two values should be
   enough to ensure uniqueness and reproducibility. The same FID is referred to
   forever until and if the file is deleted or renamed; a copied file does not
   affect it's source FID. If the file at the same path is recreated in the next
@@ -30,6 +30,6 @@
     - With all this in mind, there is no real difference between a rename and a copy: if a file
       is copied AND renamed in the same commit, the system sees them equally.
       The system sees them both as derived copies. So a rename is really just
-      a single copy combined with a delete in the same commit.
+      a single copy combined with the deletion of the source in the same commit.
     - All of this makes it trivially fast and easy to ask about the full history
-      of a file, even across renames/copies. In essence, blame/annotate works perfectly even across copies/renames.
+      of a file (e.g. blame/annotate), even across renames/copies.

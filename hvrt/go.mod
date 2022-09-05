@@ -1,3 +1,3 @@
-module github.com/eestrada/yadv
+module github.com/eestrada/hvrt
 
 go 1.19

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/eestrada/yadv"
+	"github.com/eestrada/hvrt"
 )
 
 func main() {
@@ -18,7 +18,7 @@ func main() {
 	names := []string{"Gladys", "Samantha", "Darrin"}
 
 	// Request greeting messages for the names.
-	messages, err := yadv.Hellos(names)
+	messages, err := hvrt.Hellos(names)
 	if err != nil {
 		log.Fatal(err)
 	}

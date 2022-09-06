@@ -26,10 +26,14 @@
   from a unique commit hash, even if the path that is added to the hash is the
   same as before), and it's source FID should either be null (if it is created
   ex nihilo) or the FID of whatever it was copied from; it should NOT have the
-  source FID of the file at the same path that was previously deleted.
+  source FID of the file at the same path that was previously deleted. Automatic
+  Rename detection can, and shouod, be used at commit time (like git, but detected
+  at commit time instead of after the fact, ad hoc).
     - With all this in mind, there is no real difference between a rename and a copy: if a file
       is copied AND renamed in the same commit, the system sees them equally.
       The system sees them both as derived copies. So a rename is really just
       a single copy combined with the deletion of the source in the same commit.
     - All of this makes it trivially fast and easy to ask about the full history
       of a file (e.g. blame/annotate), even across renames/copies.
+    - A file can have more than one source FID. For example, when merging two
+      files together, this can be useful.

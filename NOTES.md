@@ -33,6 +33,9 @@
       is copied AND renamed in the same commit, the system sees them equally.
       The system sees them both as derived copies. So a rename is really just
       a single copy combined with the deletion of the source in the same commit.
+      However, the new file can be completely rewritten and still point back to
+      its source, unlike git, which requires two commits to do the same thing
+      (assuming those two commits don't get squashed together somehow).
     - All of this makes it trivially fast and easy to ask about the full history
       of a file (e.g. blame/annotate), even across renames/copies.
     - A file can have more than one source FID. For example, when merging two

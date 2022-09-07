@@ -72,7 +72,7 @@ things that matter to me:
     the files, then immediately merge the branch. Now both the old and new
     files would show up in `git blame`. This worked ok, although it was
     klunky. Also, it worked because it was a small company with only a few
-    developers.
+    developers and no one questioned my weird commit tree structure.
   - At larger companies, it isn't uncommon for feature branches
     to get completely squashed down to one commit to make dev history
     "cleaner". However, this introduces the problem that our nifty little

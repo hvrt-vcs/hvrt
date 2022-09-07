@@ -40,12 +40,12 @@ and interesting compared to other VCSs and if it might meet your needs:
 Some things it doesn't do:
 * It doesn't add issues, wiki, forum, etc. like `fossil` does (for as awesome as
   this all is, the above list a lot to deal with already). Hopefully someone
-  will come along and make the equivalent of gitea for Havarti, so then you only
+  will come along and fork gitea and make it work for Havarti, so then you only
   need to download _two_ binaries, instead of just one :)
 * There are no plans to support bi-directional bridges from/to `git`, `fossil`,
-  or anything else at the moment. Although there likely be a `git` importer, and
-  there will definitely be a patch exporter. This will probably change with
-  time/popularity.
+  or anything else at the moment. This will probably change with
+  time/popularity. However there will likely be a `git` importer, and there will
+  definitely be a patch exporter/importer.
 
 ## Why this and why now?
 
@@ -86,10 +86,11 @@ things that matter to me:
 * Support of any file size
     - I have worked at a pinball game company in the past. Many of our workflows
       came from the video game industry. Handling big files well in a VCS is a
-      prerequisite, which is why lots of places use Perforce or plastic, both
-      of which support large files pretty well.
+      prerequisite, which is why lots of places use Perforce or Plastic, both of
+      which support large files pretty well. We used `git` and `git-lfs` and it
+      was a pain at the time. It's probably gotten easier since then.
     - `git` can handle large files locally, since they are just dumped directly
-      to disk in the repo (so whatever the file system supports, `git`
+      to disk in the repo (so whatever limits the file system supports, `git`
       supports). However, without a centralizing feature, this becomes harder to
       use. There are third party tools for this (like `git-lfs` and `scalar`
       from Microsoft), but really, `git` wasn't built for this.
@@ -116,11 +117,11 @@ things that matter to me:
   - `git` is slowly growing support for this as large contributors like
     Microsoft develop extensions for it, but, like `hg`, this isn't how it was
     originally developed to work and it only works via extensions, work arounds,
-    and (sometimes nasty) hacks. Given that Linus Torvalds designed `git` and uses
-    `git` for distributed Kernel development, it's distributed focus is unlikely
-    to ever change either. Case in point, none of the tools to support these
-    features have ever been brought into mainline `git`. My guess is that they
-    never will be.
+    and (sometimes nasty) hacks. Given that Linus Torvalds designed `git` and
+    uses `git` for distributed Kernel development, it's distributed focus is
+    unlikely to ever change either. Case in point, none of the tools to support
+    these features have ever been brought into mainline `git`. My guess is that
+    they never will be.
 * Support for multiple SQL backends
   - This makes the above centralized workflows easier to implement and scale.
   - `fossil` was created by the author of sqlite in order to support the
@@ -130,85 +131,149 @@ things that matter to me:
     change for some reason. For as interesting as this style of data management
     is, it is limiting for extending the system. A "real" database just seems
     cleaner to me; since sqlite works basically everywhere, it fits the bill
-    quite well.
+    quite well for local repo storage, even in a more centralized model.
 
 #### Ideas for future features (no promises that these will ever happen)
+* file pinning
+  - This is probably pretty similar to something like `git-lfs`. Basically, for
+    particularly large files, make it possible to pin a particular version/blob
+    hash and not pull updates by default. This is especially useful for game
+    studios where users don't need to pull updates for assets they don't care
+    about at a given point in time.
+* binary deltas for storage and transmission
+  - Adding this will make file pinning far more appealing, since users will
+    actually want to store their files in the repo as opposed to "out-of-band"
+    storage on S3 or whatever. Also it will be lighter to pull updates on large
+    binary files when one decides to do so.
 * Support more SQL databases than just sqlite, postgres is the first planned
   after sqlite, but given that the database uses pretty much only strings and
   blobs, it should work on nearly any SQL db. This would also make creating
-  systems like Github/Gitlab/Bitbucket much easier, or at least potentially cleaner.
+  systems like Github/Gitlab/Bitbucket much easier, or at least potentially
+  cleaner.
 * Add support for storing blobs (which is the bulk of data, by byte percentage)
   outside the main SQL database (for example, on disk or in S3 style object
   storage). Then the upstream database can be much smaller and lighter, since
   the "foreign key" is just a cryptographic hash that points somewhere else.
 * Add support for clients to stream blobs from somewhere other than directly
-  from the upstream repo (for example, just let the upstream
-  repo return a map of presigned S3 urls for the client to retrieve directly,
-  thus freeing up more resources on the upstream VCS servers and opening up bandwidth).
-  Clients could potentially also retrieve hashed blobs from a read-only network
-  mounted file share in "piles of files" fashion.
+  from the upstream repo (for example, just let the upstream repo return a map
+  of presigned S3 urls for the client to retrieve directly, thus freeing up more
+  resources on the upstream VCS servers and opening up bandwidth). Clients could
+  potentially also retrieve hashed blobs from a read-only network mounted file
+  share in "piles of files" fashion.
 * Possibly add support for locking. This would be pretty simplistic. Basically,
   just add a commit that says (via internal data structures): "so-and-so locked
   files x, y, and z", then if anyone, including the user who locked them, tries
   to commit modified versions of those files, the VCS will refuse (although they
   could do the changes in a separate branch where the files weren't locked,
-  based on this model, so perhaps more thought is needed). Changes to
-  locked files could be committed at the same time as an unlock call on the
-  same files, so once the user wants to commit their changes, they just run
-  `hvrt unlock <files> && hvrt commit <same files>`. Locking and unlocking
-  would be like renaming and copying: it would be staged for the next commit.
+  based on this model, so perhaps more thought is needed). Changes to locked
+  files could be committed at the same time as an unlock call on the same files,
+  so once the user wants to commit their changes, they just run `hvrt unlock
+  <files> && hvrt commit <same files>`. Locking and unlocking would be like
+  renaming and copying: it would be staged for the next commit.
   - Since adding authentication and authorization is beyond the scope of all
-    this, technically **anyone** could unlock the file. However their name
-    would show up on the commit, leaving a paper trail. In an environment where
-    it matters (and repo owners are worried about contributors spoofing
-    committer and author metadata), they could just sign their commits with PGP
-    (or something) to prove who actually made or approved the commit. "Won't
+    this, technically **anyone** could unlock the file. However their name would
+    show up on the commit, leaving a paper trail. In an environment where it
+    matters (and repo owners are worried about contributors spoofing committer
+    and author metadata), they could just sign their commits with PGP (or
+    something) to prove who actually made or approved the commit. "Won't
     lock/unlock support junk up the commit history?" Yes and no. If a commit
     only contains locking or unlocking changes with nothing else in them, a UI
     could just collapse/hide them. On the other hand, some files should perhaps
     rarely or **never** be unlocked. Having metadata tracked regarding locking
     allows filtering on that so that reviewers can make sure special files
     aren't fiddled with, ever. Server side, the VCS could reject commits
-    changing these files based on a blacklist and/or whitelist. The upstream
-    VCS could also reject locking/unlocking via other mechanisms. For example,
+    changing these files based on a blacklist and/or whitelist. The upstream VCS
+    could also reject locking/unlocking via other mechanisms. For example,
     systems like Github and Gitlab associate SSH keys with certain accounts, not
-    to main plain old credentials for simple HTTPS pushing/pulling. If
-    certain accounts haven't been authorized to do locking/unlocking, those
-    commits could be bounced in a pre-receive hook.
+    to main plain old credentials for simple HTTPS pushing/pulling. If certain
+    accounts haven't been authorized to do locking/unlocking, those commits
+    could be bounced in a pre-receive hook.
+
 
 ### Design ideas
+* Branches
+  - In the same vein as `fossil`, branches should be "global" by default (i.e.
+    they are marked as global, global branches are pushed/pulled at every sync
+    as a matter of policy, autosync is turned on by default, and autosync is
+    triggered by creating a global branch). Although it should be possible to
+    create local only branches, that needs to be something the user flags
+    specifically at creation time. In the same vein of `fossil`'s ethos of
+    "don't forget things", global branches should never be deletable, however
+    they should be hidable (so as to not junk up the interface once branches are
+    no longer relevant to current development). In any interfaces, hiding a
+    branch should cause it to appear as a single commit (or some other symbol)
+    without any information displayed next to it; clicking/selecting it should
+    expand the branch and its information in some way. The only branch that
+    should never be hidable is the `trunk` branch. Since `hvrt` is just backed
+    by a SQL database, if a user truly needs to delete something globally, they
+    can just do that via some SQL. Lastly, "local" branches should be upgradable
+    to global branches if so desired, or can be deleted (the only type of
+    branches that can be truly deleted). Any commits/blobs on a local branch
+    that have not ever been pushed globally should be deleted as well; deletion
+    of local branches and commits should require some sort of `--force` flag to
+    make it clear that one should not do this. Local branches are also hidable
+    and hiding should be considered the default workflow.
+  - I don't think a rebase command, even for local branches, is a good idea. I
+    agree with the creator of fossil: [rebase is an anti-pattern that is better
+    avoided](https://fossil-scm.org/home/doc/trunk/www/rebaseharm.md). One thing
+    I've learned over the years is that the easy way to do things should be the
+    right way to do things. Making rebasing easy encourages doing things the
+    wrong way. If someone wants to do things the wrong way, they will need to do
+    it by subverting the system. For example, by exporting one or many patches
+    of that branch and then applying the patch(es) in a globally accessible
+    branch. Although it is possible, it is ugly and difficult to do things this
+    way, and it should be, because rebasing is almost always the wrong way to do
+    it. Not being able to rebase should also [encourage better commit
+    messages](https://xkcd.com/1296/), even if it is only by a little, since a
+    developer knows that they can't easily squash or rebase crummy commit
+    messages to make them disappear. If other people want to wrap tools around
+    `hvrt` to make a rebase command, they are free to do so (since, again, it is
+    just exporting and applying patches across a range of commits, so the
+    functionality is completely possible given the core functionality of the
+    tool), but it won't ever be part of the tool proper.
+* Commit message annotations
+  - `fossil` supports this. Basically, the original commit message and metadata
+    remains unchanged and is used for the hash calculation, but annotations are
+    just edits layered on top; they are extra data (like an edit button on an
+    online post that still lets you see the state of the post prior to the
+    edit). This removes some of the need to do squashing and rebasing; any
+    mistakes in code can be clarified in updated commit messages. Other metadata
+    like author and committer can also be annotated (again, leaving the original
+    commit metadata unmolested, since it is required to be unchanged for proper
+    cryptographic hashing).
 * Since we are using golang, there is a unified interface for connecting to
   different SQL databases. We'll probably still need to deal with DB specific
   syntax and idiosyncracies, but that's fine: we just need to write tests that
   are backend agnostic (i.e. they are only looking at the data that comes out
   of the DB, and only use features common to all DBs, such as foreign key
   constraints).
-* Since Postgres is most similar to Sqlite, we will start with that as our
-  second backend. MySQL and others can come later.
+* Since PostgreSQL is most similar to Sqlite, we will aim for that as our second
+  backend.
 * File renames can be tracked by using a file id (FID). This can be thought of
   like an inode, kind of. FIDs have a source FID (or a parent, if you want). If
   a file is renamed or copied from an existing FID, then the FID it was renamed
   or copied from is its source FID. If an FID was created without a source FID,
   then it's source FID is just null. The FID is pseudorandom: it is a hash
   derived from several values: (1) the file path relative to the root of the
-  repo preceded by (2) the hash of the parent commit(s). These two values should be
-  enough to ensure uniqueness and reproducibility. The same FID is referred to
-  forever until and if the file is deleted or renamed; a copied file does not
+  repo preceded by (2) the hash of the parent commit(s). These two values should
+  be enough to ensure uniqueness and reproducibility. The same FID is referred
+  to forever until and if the file is deleted or renamed; a copied file does not
   affect it's source FID. If the file at the same path is recreated in the next
-  commit, it receives a new FID (which should be unique since it is derived
-  from a unique commit hash, even if the path that is added to the hash is the
-  same as before), and it's source FIDs should either be null (if it is created
-  ex nihilo) or the FIDs of whatever it was copied from; it should NOT have the
+  commit, it receives a new FID (which should be unique since it is derived from
+  a unique commit hash, even if the path that is added to the hash is the same
+  as before), and it's source FIDs should either be null (if it is created ex
+  nihilo) or the FIDs of whatever it was copied from; it should NOT have the
   source FID of the file at the same path that was previously deleted. Automatic
-  Rename detection can, and should, be used at commit time (like git, but detected
-  at commit time instead of after the fact, ad hoc).
-    - With all this in mind, there is no real difference between a rename and a copy: if a file
-      is copied AND renamed in the same commit, the system sees them equally.
-      The system sees them both as derived copies. So a rename is really just
-      a single copy combined with the deletion of the source in the same commit.
-      However, the new file can be completely rewritten and still point back to
-      its source, unlike git, which requires two commits to do the same thing
-      (assuming those two commits don't get squashed together somehow).
+  Rename detection can, and should, be used at commit time (like `git`, but
+  detected at commit time instead of after the fact, ad hoc).
+    - With all this in mind, there is no real difference between a rename and a
+      copy: if a file is copied AND renamed in the same commit, the system sees
+      them equally. The system sees them both as derived copies. So a rename is
+      really just a single copy combined with the deletion of the source in the
+      same commit. However, the new file can be completely rewritten and still
+      point back to its source, unlike `git`, which requires two commits to do the
+      same thing (assuming those two commits don't get squashed together
+      somehow, which is a common workflow in `git`).
     - All of this makes it trivially fast and easy to ask about the full history
       of a file (e.g. blame/annotate), even across renames/copies.
     - A file can have more than one source FID. For example, when merging two

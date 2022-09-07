@@ -81,7 +81,7 @@ things that matter to me:
     copies, even though this is a useful feature under certain circumstances
     like the one I experienced. And it is no harder to track copies than it is
     to track renames, so you might as well do both if you're going to do one.
-  - `hg` supposedly supports renamse, but, again, it has other problems that
+  - `hg` supposedly supports renames, but, again, it has other problems that
     are a turn off to me.
 * Support of any file size
     - I have worked at a pinball game company in the past. Many of our workflows

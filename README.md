@@ -303,3 +303,7 @@ things that matter to me:
         default, concatenate the contents of the source file(s) to the
         destination file (although the concatenation behavior can be turned off
         with a flag).
+* The command set should be modeled heavily on `fossil`.
+  - Only a few places where fossil doesn't include the functionality that we do
+    or is confusing should there be much difference.
+  - Official command reference: https://fossil-scm.org/home/help

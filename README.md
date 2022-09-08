@@ -25,7 +25,7 @@ and interesting compared to other VCSs and if it might meet your needs:
 
 * It supports tracking explicit file renames _and_ file copies.
 * It is a single binary, easy to install with no external dependencies.
-* Cross platform (Windows, Mac, Linux, *BSD, and more)
+* Cross platform (Windows, Mac, Linux, and more)
 * It can run either distributed or centralized or a combination of the two.
 * It is backed by a SQL database (sqlite), so most operations are _fast_.
 * It can handle files of any size.
@@ -135,17 +135,23 @@ things that matter to me:
 
 #### Ideas for future features (no promises that these will ever happen)
 * file pinning
-  - This is probably pretty similar to something like `git-lfs`. Basically, for
-    particularly large files, make it possible to pin a particular version/blob
-    hash and not pull updates by default. This is especially useful for game
-    studios where users don't need to pull updates for assets they don't care
-    about at a given point in time.
+  - Make it possible to pin a particular file version/blob hash and not pull
+    updates for it by default. This is especially useful for game studios where
+    users don't always need to pull updates for large binary blob assets.
+  - Pinning should be possible on either file paths, FIDs, or both (see design
+    below to understand what FIDs are). Invoking as `hvrt pin <spec>` will work
+    with paths or FIDs and will try to do the right thing (look for an file path
+    and if that can't be found, look for an FID starting with that value). This
+    is only a problem if the user has file paths that are formated like FIDs
+    within the directory they are invoking the tool from. To be explicit, they
+    can pass a `--fid` or `-i` flag to ensure the spec is treated as a FID, or
+    `--path` or `-p` to ensure it is treated as a path.
 * binary deltas for storage and transmission
   - Adding this will make file pinning far more appealing, since users will
     actually want to store their files in the repo as opposed to "out-of-band"
-    storage on S3 or whatever. Also it will be lighter to pull updates on large
-    binary files when one decides to do so.
-* Support more SQL databases than just sqlite, postgres is the first planned
+    storage on S3 or whatever. Also it will be lighter to push/pull updates on
+    large binary files when one decides to do so.
+* Support SQL databases other than just sqlite. postgres is the first planned
   after sqlite, but given that the database uses pretty much only strings and
   blobs, it should work on nearly any SQL db. This would also make creating
   systems like Github/Gitlab/Bitbucket much easier, or at least potentially
@@ -241,6 +247,20 @@ things that matter to me:
     like author and committer can also be annotated (again, leaving the original
     commit metadata unmolested, since it is required to be unchanged for proper
     cryptographic hashing).
+* Have hooks like `git`, but be truly cross platform.
+  - So on *nix, just look at the executable flag (just as `git` does). But on
+    Windows, look for files of the same name, but with an known file extension
+    found in `PATHEXT` envar (e.g. `.COM`, `.EXE`, `.BAT`, `.CMD`, etc.). This
+    will put it worlds ahead of "git for Windows" where one needs to have a full
+    posix compatibility layer to do hooks on Windows (I should know, I have had
+    to do it before).
+  - Or maybe just store the scripts/executables as blobs in the local repo? They
+    shouldn't clash with anything (again cryptographic hashes shouldn't collide)
+    and there could just be a pointer to them in the database, and when a branch
+    is checked out on disk those get unpacked as well.
+* Ala `fossil`, allow for multiple checkouts per repo to be easy.
+  - This way a user can have multiple directories with different branches
+    checked out at the same time, make workflows a bit easier.
 * Since we are using golang, there is a unified interface for connecting to
   different SQL databases. We'll probably still need to deal with DB specific
   syntax and idiosyncracies, but that's fine: we just need to write tests that

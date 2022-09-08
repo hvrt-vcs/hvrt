@@ -59,3 +59,15 @@ Postgres can support large objects up to 4TB in size and can efficiently read/wr
 
 Interesting case study:
 * https://levelup.gitconnected.com/how-was-i-build-a-version-control-system-vcs-using-pure-go-83ec8ec5d4f4
+
+Compression and archival in many formats. Pure golang:
+* https://pkg.go.dev/github.com/mholt/archiver/v3
+
+For historical compatibility reasons, SQLite has lots of quirks by default:
+* https://www.sqlite.org/quirks.html
+
+Binary diffing library in golang:
+* https://github.com/kr/binarydist
+
+Well defined binary diff format:
+* https://en.m.wikipedia.org/wiki/VCDIFF

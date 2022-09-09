@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+
+	// "modernc.org/sqlite"
 )
 
 // Hello returns a greeting for the named person.

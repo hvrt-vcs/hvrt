@@ -197,6 +197,19 @@ things that matter to me:
 
 
 ### Design ideas
+
+Most of these are based on a single rule/commandment: "Thou shalt not throw away
+data". Most issues I have with `git` are that useful data gets thrown away
+easily. Usually this is justified with the idea that it creates "clean history".
+I'm not sure that is good enough justification. Some examples of git playing
+loose and fast with it's history: branches aren't synchronized by default,
+renames and copies aren't tracked, rebasing/squashing is done all the time
+because the default tools make it easy, and so on). It is better to layer extra
+data on top of what exists, or add metadata to hide data that is rarely needed.
+Metadata is incredibly small, and therefore, cheap. Layering extra metadata or
+hiding the a small amount of metadata costs little space, and no computation
+time if you do not reference it.
+
 * Branches
   - In the same vein as `fossil`, branches should be "global" by default (i.e.
     they are marked as global, global branches are pushed/pulled at every sync
@@ -226,7 +239,7 @@ things that matter to me:
     right way to do things. Making rebasing easy encourages doing things the
     wrong way. If someone wants to do things the wrong way, they will need to do
     it by subverting the system. For example, by exporting one or many patches
-    of that branch and then applying the patch(es) in a globally accessible
+    of that branch and then applying the patch(es) in a separate
     branch. Although it is possible, it is ugly and difficult to do things this
     way, and it should be, because rebasing is almost always the wrong way to do
     it. Not being able to rebase should also [encourage better commit
@@ -237,7 +250,33 @@ things that matter to me:
     just exporting and applying patches across a range of commits, so the
     functionality is completely possible given the core functionality of the
     tool), but it won't ever be part of the tool proper.
-* Commit message annotations
+  - Ideas on features that can replace rebasing:
+    - Have the concept of a "bundle". A bundle is a pointer to a series of
+      commits (much like using rebase to squash commits). In any UIs (textual or
+      graphical), bundles are shown in lieu of a series of commits. Bundles can
+      have their own metadata, such as a message, author, and date. There can
+      also be annotations to bundle metadata, just like there can be with commit
+      metadata. By default, merged branches should be flagged as bundles. This
+      merged-branch-defaults-to-bundle feature should be overridable via
+      configuration. For operations like "bisect" bundles should, by default, be
+      treated as a singular unit. That is the multiple individual underlying
+      commits should be treated as a single logical commit. There should be a
+      flag to override this default behavior and to run bisect against all
+      underlying commits. A commit can only ever be part of one bundle. A given
+      bundle cannot be a child of another bundle. Should bundles be
+      soft-deletable?
+    - Perhaps differentiate between "conflicted" merge commits and
+      "nonconflicted" merge commits. "nonconflicted" should, for all intents and
+      purposes, be ignored in history views. Or should be visually flagged as
+      uninteresting, perhaps with a special color or shape. "conflicted" merge
+      commits should be visually flagged as such. In this way, reviewers can
+      know whether a merge needs inspection or not. This could simply be
+      metadata; if a merge is automatically done with no human intervention,
+      then it is flagged as "nonconflicted"; if it required any human
+      interaction at all, it is considered "conflicted". This is not a piece of
+      metadata that should be annotatable via official tools, and it should be
+      calculated in a commit's hash.
+* Annotations for commit (and bundle) messages
   - `fossil` supports this. Basically, the original commit message and metadata
     remains unchanged and is used for the hash calculation, but annotations are
     just edits layered on top; they are extra data (like an edit button on an

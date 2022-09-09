@@ -15,26 +15,50 @@ builds:
     targets:
       # Based on supported platforms of SQLite module we depend on:
       #   https://pkg.go.dev/modernc.org/sqlite#hdr-Supported_platforms_and_architectures
+
+      # We choose the lowest possible versions of all archs to ensure as broad
+      # of support as possible.
       - darwin_amd64_v1
+      # - darwin_amd64_v4
       - darwin_arm64
       - freebsd_amd64_v1
-      - linux_386
+      # - freebsd_amd64_v4
+      - linux_386_softfloat
+      # - linux_386_sse2
       - linux_amd64_v1
-      - linux_arm
+      # - linux_amd64_v4
+      - linux_arm_5
+      - linux_arm_6
+      - linux_arm_7
       - linux_arm64
       - linux_riscv64
       - windows_amd64_v1
+      # - windows_amd64_v4
       - windows_arm64
 archives:
   - replacements:
-      windows: Windows
+      aix: AIX
+      android: Android
       darwin: macOS
-      linux: Linux
+      dragonfly: DragonFlyBSD
       freebsd: FreeBSD
-      openbsd: OpenBSD
+      illumos: Illumos
+      ios: iOS
+      linux: Linux
       netbsd: NetBSD
+      openbsd: OpenBSD
+      plan9: Plan9
+      solaris: Solaris
+      windows: Windows
       386: "i386"
       amd64: x86_64
+
+    # Can be used to change the archive formats for specific GOOSs.
+    # Most common use case is to archive as zip on Windows.
+    # Default is empty.
+    format_overrides:
+      - goos: windows
+        format: zip
 checksum:
   name_template: 'checksums.txt'
 snapshot:

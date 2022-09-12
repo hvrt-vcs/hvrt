@@ -133,69 +133,6 @@ things that matter to me:
     cleaner to me; since sqlite works basically everywhere, it fits the bill
     quite well for local repo storage, even in a more centralized model.
 
-#### Ideas for future features (no promises that these will ever happen)
-* file pinning
-  - Make it possible to pin a particular file version/blob hash and not pull
-    updates for it by default. This is especially useful for game studios where
-    users don't always need to pull updates for large binary blob assets.
-  - Pinning should be possible on either file paths, FIDs, or both (see design
-    below to understand what FIDs are). Invoking as `hvrt pin <spec>` will work
-    with paths or FIDs and will try to do the right thing (look for an file path
-    and if that can't be found, look for an FID starting with that value). This
-    is only a problem if the user has file paths that are formated like FIDs
-    within the directory they are invoking the tool from. To be explicit, they
-    can pass a `--fid` or `-i` flag to ensure the spec is treated as a FID, or
-    `--path` or `-p` to ensure it is treated as a path.
-* binary deltas for storage and transmission
-  - Adding this will make file pinning far more appealing, since users will
-    actually want to store their files in the repo as opposed to "out-of-band"
-    storage on S3 or whatever. Also it will be lighter to push/pull updates on
-    large binary files when one decides to do so.
-* Support SQL databases other than just sqlite. postgres is the first planned
-  after sqlite, but given that the database uses pretty much only strings and
-  blobs, it should work on nearly any SQL db. This would also make creating
-  systems like Github/Gitlab/Bitbucket much easier, or at least potentially
-  cleaner.
-* Add support for storing blobs (which is the bulk of data, by byte percentage)
-  outside the main SQL database (for example, on disk or in S3 style object
-  storage). Then the upstream database can be much smaller and lighter, since
-  the "foreign key" is just a cryptographic hash that points somewhere else.
-* Add support for clients to stream blobs from somewhere other than directly
-  from the upstream repo (for example, just let the upstream repo return a map
-  of presigned S3 urls for the client to retrieve directly, thus freeing up more
-  resources on the upstream VCS servers and opening up bandwidth). Clients could
-  potentially also retrieve hashed blobs from a read-only network mounted file
-  share in "piles of files" fashion.
-* Possibly add support for locking. This would be pretty simplistic. Basically,
-  just add a commit that says (via internal data structures): "so-and-so locked
-  files x, y, and z", then if anyone, including the user who locked them, tries
-  to commit modified versions of those files, the VCS will refuse (although they
-  could do the changes in a separate branch where the files weren't locked,
-  based on this model, so perhaps more thought is needed). Changes to locked
-  files could be committed at the same time as an unlock call on the same files,
-  so once the user wants to commit their changes, they just run `hvrt unlock
-  <files> && hvrt commit <same files>`. Locking and unlocking would be like
-  renaming and copying: it would be staged for the next commit.
-  - Since adding authentication and authorization is beyond the scope of all
-    this, technically **anyone** could unlock the file. However their name would
-    show up on the commit, leaving a paper trail. In an environment where it
-    matters (and repo owners are worried about contributors spoofing committer
-    and author metadata), they could just sign their commits with PGP (or
-    something) to prove who actually made or approved the commit. "Won't
-    lock/unlock support junk up the commit history?" Yes and no. If a commit
-    only contains locking or unlocking changes with nothing else in them, a UI
-    could just collapse/hide them. On the other hand, some files should perhaps
-    rarely or **never** be unlocked. Having metadata tracked regarding locking
-    allows filtering on that so that reviewers can make sure special files
-    aren't fiddled with, ever. Server side, the VCS could reject commits
-    changing these files based on a blacklist and/or whitelist. The upstream VCS
-    could also reject locking/unlocking via other mechanisms. For example,
-    systems like Github and Gitlab associate SSH keys with certain accounts, not
-    to main plain old credentials for simple HTTPS pushing/pulling. If certain
-    accounts haven't been authorized to do locking/unlocking, those commits
-    could be bounced in a pre-receive hook.
-
-
 ### Design ideas
 
 Most of these are based on a single rule/commandment: "Thou shalt not throw away
@@ -232,6 +169,7 @@ time if you do not reference it.
     of local branches and commits should require some sort of `--force` flag to
     make it clear that one should not do this. Local branches are also hidable
     and hiding should be considered the default workflow.
+* Don't allow rebasing
   - I don't think a rebase command, even for local branches, is a good idea. I
     agree with the creator of fossil: [rebase is an anti-pattern that is better
     avoided](https://fossil-scm.org/home/doc/trunk/www/rebaseharm.md). One thing
@@ -239,7 +177,7 @@ time if you do not reference it.
     right way to do things. Making rebasing easy encourages doing things the
     wrong way. If someone wants to do things the wrong way, they will need to do
     it by subverting the system. For example, by exporting one or many patches
-    of that branch and then applying the patch(es) in a separate
+    or snapshots of that branch and then applying the patch(es) in a separate
     branch. Although it is possible, it is ugly and difficult to do things this
     way, and it should be, because rebasing is almost always the wrong way to do
     it. Not being able to rebase should also [encourage better commit
@@ -250,6 +188,53 @@ time if you do not reference it.
     just exporting and applying patches across a range of commits, so the
     functionality is completely possible given the core functionality of the
     tool), but it won't ever be part of the tool proper.
+  - We should probably clearly define rebase. Really, when people talk about
+    rebasing in `git`, they are talking about 3 separate concepts (these muddle
+    concepts are combined in `git` mostly because commands are named after
+    implementation, not any sort of logical model a user can make. Again, `git`
+    is thin on abstractions):
+      1. `squash` commits for a "clean" history. Usually done in a feature
+        branch before merging into a parent branch. Done with `git merge --squash` or
+        `git rebase -i`.
+        - Alternative: just use the `bundle` concept described below. You lose
+          no history and you gain the clean visual display of a `git` squash.
+      2. `replay` commits from a source branch on top of a destination branch.
+        Done using `git rebase <upstream>` where the current branch is replayed
+        on top of `<upstream>`.
+          - Alternative: `replay`s are just merges with lost history, so just
+            use a real merge. The UI should make it easy to hide merged branches
+            and bundles, thus getting the "clean history" so many git fanboys
+            rave about when singing the praises of rewriting history with
+            `rebase`.
+      3. `reorder` commits from a source branch into an unnamed destination
+        branch, then move the named pointer from the source branch to the
+        destination branch. Done with `git rebase -i`.
+          - Alternative: Suggesting a good alternative is hard since `reorder`
+            should simply not be done; the opportunity to royally mess things up
+            is not offset by any of the perceived benefits of "logically"
+            reordering history (the internet is filled with stories of people
+            using `git rebase -i` to completely mess up their history, either
+            immediately, or much later down the line when they have already
+            garbage collected the original commits and now they have introduced
+            subtle bugs because they messed with history order). If possible,
+            just `bundle` sets of changes. But if bundling is not enough, it can
+            be done via out of order cherry-picks to a new branch (cherry-pick
+            sources are tracked in the repo, so it is clear what the original
+            source is), or, if the user is feeling like subverting the system,
+            can be done by scripting the copying of snapshots or patches, then
+            manually reapplying them on top of the current state of the repo
+            (which is really all that `git rebase -i` is doing anyway, since it
+            forgets where the cherry-picks came from after committing the
+            changes; a cherry-pick in `git` is just a regular commit). If a user
+            is worried about tracked cherry-picks junking up the history, the
+            connections can be hidden in the UI just like merged branches and
+            bundles can be. Just because we have the metadata, doesn't mean we
+            need to show it all the time in a UI. In fact, we should probably
+            default to **not** showing it other than perhaps displaying
+            cherry-pick commits, merge commits, and bundles with different
+            shapes and/or colors for their node in the graph. We just add a
+            legend to help users know what each shape/color means. Probably
+            prefer shapes over colors to support color blind users.
   - Ideas on features that can replace rebasing:
     - Have the concept of a "bundle". A bundle is a pointer to a series of
       commits (much like using rebase to squash commits). In any UIs (textual or
@@ -346,3 +331,65 @@ time if you do not reference it.
   - Only a few places where fossil doesn't include the functionality that we do
     or is confusing should there be much difference.
   - Official command reference: https://fossil-scm.org/home/help
+
+#### Ideas for future features (no promises that these will ever happen)
+  * file pinning
+    - Make it possible to pin a particular file version/blob hash and not pull
+      updates for it by default. This is especially useful for game studios where
+      users don't always need to pull updates for large binary blob assets.
+    - Pinning should be possible on either file paths, FIDs, or both (see design
+      below to understand what FIDs are). Invoking as `hvrt pin <spec>` will work
+      with paths or FIDs and will try to do the right thing (look for an file path
+      and if that can't be found, look for an FID starting with that value). This
+      is only a problem if the user has file paths that are formated like FIDs
+      within the directory they are invoking the tool from. To be explicit, they
+      can pass a `--fid` or `-i` flag to ensure the spec is treated as a FID, or
+      `--path` or `-p` to ensure it is treated as a path.
+  * binary deltas for storage and transmission
+    - Adding this will make file pinning far more appealing, since users will
+      actually want to store their files in the repo as opposed to "out-of-band"
+      storage on S3 or whatever. Also it will be lighter to push/pull updates on
+      large binary files when one decides to do so.
+  * Support SQL databases other than just sqlite. postgres is the first planned
+    after sqlite, but given that the database uses pretty much only strings and
+    blobs, it should work on nearly any SQL db. This would also make creating
+    systems like Github/Gitlab/Bitbucket much easier, or at least potentially
+    cleaner.
+  * Add support for storing blobs (which is the bulk of data, by byte percentage)
+    outside the main SQL database (for example, on disk or in S3 style object
+    storage). Then the upstream database can be much smaller and lighter, since
+    the "foreign key" is just a cryptographic hash that points somewhere else.
+  * Add support for clients to stream blobs from somewhere other than directly
+    from the upstream repo (for example, just let the upstream repo return a map
+    of presigned S3 urls for the client to retrieve directly, thus freeing up more
+    resources on the upstream VCS servers and opening up bandwidth). Clients could
+    potentially also retrieve hashed blobs from a read-only network mounted file
+    share in "piles of files" fashion.
+  * Possibly add support for locking. This would be pretty simplistic. Basically,
+    just add a commit that says (via internal data structures): "so-and-so locked
+    files x, y, and z", then if anyone, including the user who locked them, tries
+    to commit modified versions of those files, the VCS will refuse (although they
+    could do the changes in a separate branch where the files weren't locked,
+    based on this model, so perhaps more thought is needed). Changes to locked
+    files could be committed at the same time as an unlock call on the same files,
+    so once the user wants to commit their changes, they just run `hvrt unlock
+    <files> && hvrt commit <same files>`. Locking and unlocking would be like
+    renaming and copying: it would be staged for the next commit.
+    - Since adding authentication and authorization is beyond the scope of all
+      this, technically **anyone** could unlock the file. However their name would
+      show up on the commit, leaving a paper trail. In an environment where it
+      matters (and repo owners are worried about contributors spoofing committer
+      and author metadata), they could just sign their commits with PGP (or
+      something) to prove who actually made or approved the commit. "Won't
+      lock/unlock support junk up the commit history?" Yes and no. If a commit
+      only contains locking or unlocking changes with nothing else in them, a UI
+      could just collapse/hide them. On the other hand, some files should perhaps
+      rarely or **never** be unlocked. Having metadata tracked regarding locking
+      allows filtering on that so that reviewers can make sure special files
+      aren't fiddled with, ever. Server side, the VCS could reject commits
+      changing these files based on a blacklist and/or whitelist. The upstream VCS
+      could also reject locking/unlocking via other mechanisms. For example,
+      systems like Github and Gitlab associate SSH keys with certain accounts, not
+      to main plain old credentials for simple HTTPS pushing/pulling. If certain
+      accounts haven't been authorized to do locking/unlocking, those commits
+      could be bounced in a pre-receive hook.

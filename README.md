@@ -217,24 +217,35 @@ time if you do not reference it.
             immediately, or much later down the line when they have already
             garbage collected the original commits and now they have introduced
             subtle bugs because they messed with history order). If possible,
-            just `bundle` sets of changes. But if bundling is not enough, it can
-            be done via out of order cherry-picks to a new branch (cherry-pick
-            sources are tracked in the repo, so it is clear what the original
-            source is), or, if the user is feeling like subverting the system,
-            can be done by scripting the copying of snapshots or patches, then
-            manually reapplying them on top of the current state of the repo
-            (which is really all that `git rebase -i` is doing anyway, since it
-            forgets where the cherry-picks came from after committing the
-            changes; a cherry-pick in `git` is just a regular commit). If a user
-            is worried about tracked cherry-picks junking up the history, the
-            connections can be hidden in the UI just like merged branches and
-            bundles can be. Just because we have the metadata, doesn't mean we
-            need to show it all the time in a UI. In fact, we should probably
-            default to **not** showing it other than perhaps displaying
-            cherry-pick commits, merge commits, and bundles with different
-            shapes and/or colors for their node in the graph. We just add a
-            legend to help users know what each shape/color means. Probably
-            prefer shapes over colors to support color blind users.
+            just `bundle` sets of changes. If it is just some commit messages or
+            other metadata that need changing, use commit amendments. If those
+            are not enough, it can be done via out of order cherry-picks to a
+            new branch (cherry-pick sources are tracked in the repo, so it is
+            clear what the original source is), or, if the user is feeling like
+            subverting the system, can be done by scripting the copying of
+            snapshots or patches, then manually reapplying them on top of the
+            current state of the repo (which is really all that `git rebase -i`
+            is doing anyway, since it forgets where the cherry-picks came from
+            after committing the changes; a cherry-pick in `git` is just a
+            regular commit). If a user is worried about tracked cherry-picks
+            junking up the history, the connections can be hidden in the UI just
+            like merged branches and bundles can be. Just because we have the
+            metadata, doesn't mean we need to show it all the time in a UI. In
+            fact, we should probably default to **not** showing it other than
+            perhaps displaying cherry-pick commits, merge commits, and bundles
+            with different shapes and/or colors for their node in the graph. We
+            just add a legend to help users know what each shape/color means.
+            Probably prefer shapes over colors to support color blind users.
+          - Perhaps a `hvrt unsafe` command could be added that can be used on
+            local branches for things like `reorder` and `squash`. Something
+            like `hvrt push --force` should not exist; if someone needs to
+            forcefully rewrite history, they need to have direct access to the
+            machine where the upstream repo lives, not just generic `push`
+            access. Remember, we have no identity or authentication systems, in
+            the same way `git` does not have them, so if a person has remote
+            `push` access, they can do _anything_ that is possible via the
+            tools. Thus, the tools should make it impossible to remotely rewrite
+            history.
   - Ideas on features that can replace rebasing:
     - Have the concept of a "bundle". A bundle is a pointer to a series of
       commits (much like using rebase to squash commits). In any UIs (textual or

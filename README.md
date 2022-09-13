@@ -1,6 +1,6 @@
 # Havarti
 
-## "It just gets better with time!" - Ethan, probably
+## What do you do when you take a snapshot? You say "Cheese!"
 
 #### Havarti is a Hybrid VCS that works just as well distributed as it does centralized.
 
@@ -31,11 +31,11 @@ and interesting compared to other VCSs and if it might meet your needs:
 * It can handle files of any size.
 * It can retrieve only metadata without file data, and grab file data lazily
   from an external source (which works well with large centralized monorepos).
-* It can retrieve/checkout only parts of a source tree (also good for large
-  monorepos).
+* It can grab narrow clones (i.e. retrieve/checkout only parts of a source tree
+  which is also good for large monorepos).
 * It can grab shallow clones to make local repos even smaller (historical
-  commits, both data and metadata, can be retrieved from upstream as only
-  when needed).
+  commits, both data and metadata, can be retrieved from upstream only when
+  needed).
 
 Some things it doesn't do:
 * It doesn't add issues, wiki, forum, etc. like `fossil` does (for as awesome as
@@ -46,6 +46,8 @@ Some things it doesn't do:
   or anything else at the moment. This will probably change with
   time/popularity. However there will likely be a `git` importer, and there will
   definitely be a patch exporter/importer.
+* It doesn't make rewriting history easy (like `git rebase`), although it does
+  make it possible (unlike `fossil`).
 
 ## Why this and why now?
 
@@ -111,9 +113,9 @@ things that matter to me:
     working with truly centralized repos.
   - `hg` supports centralized repos via extensions created for (and by)
     FaceBook/Meta. However hg is not a single binary and is
-    difficult to use in environments where installing large runtimes,
+    difficult to use in environments where installing large runtimes (python),
     package dependencies, and extensions is just not feasible (this happens
-    surprisingly often with in house development non-software companies).
+    surprisingly often with in-house development at non-software companies).
   - `git` is slowly growing support for this as large contributors like
     Microsoft develop extensions for it, but, like `hg`, this isn't how it was
     originally developed to work and it only works via extensions, work arounds,
@@ -129,23 +131,25 @@ things that matter to me:
     SQL backends.
   - `git` and `hg` are "piles of files" systems. It seems unlikely this will
     change for some reason. For as interesting as this style of data management
-    is, it is limiting for extending the system. A "real" database just seems
-    cleaner to me; since sqlite works basically everywhere, it fits the bill
-    quite well for local repo storage, even in a more centralized model.
+    is, it is limiting for extending the system to other backends. A SQL
+    database just seems cleaner to me, since many databases support the SQL
+    standard so porting should be relatively easy; since sqlite works basically
+    everywhere, it fits the bill quite well for local repo storage on clients,
+    even in a more centralized model.
 
 ### Design ideas
 
-Most of these are based on a single rule/commandment: "Thou shalt not throw away
+Most design choices are based on a single rule/commandment: "Thou shalt not throw away
 data". Most issues I have with `git` are that useful data gets thrown away
 easily. Usually this is justified with the idea that it creates "clean history".
 I'm not sure that is good enough justification. Some examples of git playing
 loose and fast with it's history: branches aren't synchronized by default,
-renames and copies aren't tracked, rebasing/squashing is done all the time
+renames and copies aren't explicitly tracked, rebasing/squashing is done all the time
 because the default tools make it easy, and so on). It is better to layer extra
 data on top of what exists, or add metadata to hide data that is rarely needed.
 Metadata is incredibly small, and therefore, cheap. Layering extra metadata or
 hiding the a small amount of metadata costs little space, and no computation
-time if you do not reference it.
+time if you do not reference or use it.
 
 * Branches
   - In the same vein as `fossil`, branches should be "global" by default (i.e.

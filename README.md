@@ -238,7 +238,8 @@ time if you do not reference it.
             Probably prefer shapes over colors to support color blind users.
           - Perhaps a `hvrt unsafe` command could be added that can be used on
             local branches for things like `reorder` and `squash` (`replay`,
-            again, is a terrible idea; just merge the branch). Something like
+            again, is a terrible idea; just merge the branch and hide merged
+            branches in the UI; or use in-order cherry-picking). Something like
             `hvrt push --force` should not exist; if someone needs to forcefully
             rewrite public (i.e. already pushed) history, they need to have
             direct access (e.g. ssh interactive shell) to the machine where the
@@ -246,7 +247,36 @@ time if you do not reference it.
             have no identity or authentication systems, in the same way `git`
             does not have them, so if a person has remote `push` access, they
             can do _anything_ that is possible via the tools. Thus, the tools
-            should make it impossible to remotely rewrite history.
+            should make it impossible to remotely rewrite history. Either that,
+            or we nest it under `unsafe` (e.g. `hvrt unsafe push --force`).
+          - At the end of the day, a VCS is meant to empower the user to work in
+            whatever way they prefer. Unlike `fossil`, perhaps we should allow
+            unsafe operations. However, unlike `git`, we will clearly mark
+            unsafe operations as such; just because old commits are hidden
+            somewhere in the "reflog" after a rebase or squash in `git`, doesn't
+            mean the average user has any clue where to find this stuff or how
+            to back it out. With the improved data structures and tracked
+            metadata of `hvrt`, the need for unsafe operations should be
+            severely diminished. `git` throws away lots of metadata (e.g.
+            renames and cherry pick sources); it makes rebase more appealing.
+            For example, the difference between a `reorder` and a cherry-pick is
+            identical in `git`: you are recreating commits and forgetting where
+            they came from. If you have bundles and tracked cherry-picks, the
+            distinction becomes more pronounced and it makes it more worthwhile
+            to use the better tools to do the job. In other words, don't
+            disallow doing it the "wrong" way, make doing it the "right" way so
+            much better that almost no one wants to do it the "wrong" way. Also,
+            flag the "wrong" way as, well, being wrong (under the `unsafe`
+            subcommand).
+          - The `unsafe` subcommand should just set an unsafe flag and then
+            delegate to the underlying command set. Basically, it should act
+            like a `--force` flag on all commands. However, because of how it is
+            invoked, it should dissuade people from using it. When they post
+            online "I used `hvrt unsafe <blah>` and then things broke!" Then
+            people will respond "The word 'unsafe' was literally in the command.
+            Why were you using an unsafe command if you didn't know what you
+            were doing?" Basically, this goes back to allow unsafe operations,
+            but dissuade people from using them.
   - Ideas on features that can replace rebasing:
     - Have the concept of a "bundle". A bundle is a pointer to a series of
       commits (much like using rebase to squash commits). In any UIs (textual or

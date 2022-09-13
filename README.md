@@ -237,15 +237,16 @@ time if you do not reference it.
             just add a legend to help users know what each shape/color means.
             Probably prefer shapes over colors to support color blind users.
           - Perhaps a `hvrt unsafe` command could be added that can be used on
-            local branches for things like `reorder` and `squash`. Something
-            like `hvrt push --force` should not exist; if someone needs to
-            forcefully rewrite history, they need to have direct access to the
-            machine where the upstream repo lives, not just generic `push`
-            access. Remember, we have no identity or authentication systems, in
-            the same way `git` does not have them, so if a person has remote
-            `push` access, they can do _anything_ that is possible via the
-            tools. Thus, the tools should make it impossible to remotely rewrite
-            history.
+            local branches for things like `reorder` and `squash` (`replay`,
+            again, is a terrible idea; just merge the branch). Something like
+            `hvrt push --force` should not exist; if someone needs to forcefully
+            rewrite public (i.e. already pushed) history, they need to have
+            direct access (e.g. ssh interactive shell) to the machine where the
+            upstream repo lives, not just generic `push` access. Remember, we
+            have no identity or authentication systems, in the same way `git`
+            does not have them, so if a person has remote `push` access, they
+            can do _anything_ that is possible via the tools. Thus, the tools
+            should make it impossible to remotely rewrite history.
   - Ideas on features that can replace rebasing:
     - Have the concept of a "bundle". A bundle is a pointer to a series of
       commits (much like using rebase to squash commits). In any UIs (textual or

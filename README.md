@@ -86,25 +86,25 @@ things that matter to me:
   - `hg` supposedly supports renames, but, again, it has other problems that
     are a turn off to me.
 * Support of any file size
-    - I have worked at a pinball game company in the past. Many of our workflows
-      came from the video game industry. Handling big files well in a VCS is a
-      prerequisite, which is why lots of places use Perforce or Plastic, both of
-      which support large files pretty well. We used `git` and `git-lfs` and it
-      was a pain at the time. It's probably gotten easier since then.
-    - `git` can handle large files locally, since they are just dumped directly
-      to disk in the repo (so whatever limits the file system supports, `git`
-      supports). However, without a centralizing feature, this becomes harder to
-      use. There are third party tools for this (like `git-lfs` and `scalar`
-      from Microsoft), but really, `git` wasn't built for this.
-    - `fossil` only supports files up to the size of a sqlite blob, which is
-      around 2GB. Realistically it is far less than that with
-      performance degrading with really large blobs (since memory needs to be
-      allocated for the whole blob and then the entire thing must be completely
-      read into memory all at once). `hvrt` instead divides the files into much
-      smaller chunks and streams them into memory as needed. The chunk size is
-      configurable when initially creating or later repacking the database.
-    - `hg` supports this in the same way `git` does: locally and remotely via
-      extensions.
+  - I have worked at a pinball game company in the past. Many of our workflows
+    came from the video game industry. Handling big files well in a VCS is a
+    prerequisite, which is why lots of places use Perforce or Plastic, both of
+    which support large files pretty well. We used `git` and `git-lfs` and it
+    was a pain at the time. It's probably gotten easier since then.
+  - `git` can handle large files locally, since they are just dumped directly
+    to disk in the repo (so whatever limits the file system supports, `git`
+    supports). However, without a centralizing feature, this becomes harder to
+    use. There are third party tools for this (like `git-lfs` and `scalar`
+    from Microsoft), but really, `git` wasn't built for this.
+  - `fossil` only supports files up to the size of a sqlite blob, which is
+    around 2GB. Realistically it is far less than that with
+    performance degrading with really large blobs (since memory needs to be
+    allocated for the whole blob and then the entire thing must be completely
+    read into memory all at once). `hvrt` instead divides the files into much
+    smaller chunks and streams them into memory as needed. The chunk size is
+    configurable when initially creating or later repacking the database.
+  - `hg` supports this in the same way `git` does: locally and remotely via
+    extensions.
 * Support for centralized workflows
   - Although `fossil` has default behaviors that support centralized
     workflows (like autosyncing and pushing all branches publicly upstream by
@@ -439,3 +439,20 @@ time if you do not reference or use it.
       to main plain old credentials for simple HTTPS pushing/pulling. If certain
       accounts haven't been authorized to do locking/unlocking, those commits
       could be bounced in a pre-receive hook.
+  * Much like `fossil`, make it possible to serve files directly from a repo.
+    Unlike `fossil`, don't make it use some bespoke wiki format (that seems very
+    limiting in the long run). Just allow a repo to serve static files from a
+    particular branch under a particular directory (kind of like Github or
+    Gitlab). It is interesting that this can be set up in `fossil` with a two
+    line CGI script. Being able to push content to a repo and have it show up
+    dynamically is a useful feature in a VCS. It is up to the user to create
+    those files by hand (e.g. writing html files by hand) or by using static
+    site generators like Jekyll or Hugo. Some examples:
+      - Keep generated docs under `./docs/html` in the trunk branch and serve
+        those files as a static site.
+      - Have a branch called `website` and serve files directly from the root
+        of the repo.
+      - Serve the docs on a per tag basis, so `v1.0`, `v2.0` could be exposed at
+        the URL path level and just work. This wouuld probably need to be an
+        option in `hvrt` to serve all tags or serve all branches or something.
+        Need to explore this idea further.

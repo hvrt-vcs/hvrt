@@ -39,17 +39,19 @@ and interesting compared to other VCSs and if it might meet your needs:
 
 A quick comparison of Havarti to Git, Fossil, Mercurial, and Subversion:
 
-| Feature                   | Havarti | Git                                | Fossil | Mercurial       | Subversion |
-|:--------------------------|:--------|:-----------------------------------|:-------|:----------------|:-----------|
-| **Explicit File Renames** | ✔️       | ❌(Heuristically)                   | ❔      | ✔️               | ✔️          |
-| **Explicit File Copies**  | ✔️       | ❌(Heuristically)                   | ❔      | ❔               | ✔️          |
-| **Single Binary**         | ✔️       | ❌                                  | ✔️      | ❌               | ❔          |
-| **Native Cross Platform** | ✔️       | ❌ (compatibility layer in Windows) | ✔️      | ✔️               | ✔️          |
-| **Distributed model**     | ✔️       | ✔️                                  | ✔️      | ✔️               | ❌          |
-| **Centralized model**     | ✔️       | Thru third party extensions        | ❌      | Thru extensions | ✔️          |
-| **Any file size**         | ✔️       | ✔️                                  | ❌      | ✔️               | ✔️          |
-| **Shallow clones**        | ✔️       | ✔️                                  | ❌      | ✔️               | ✔️*         |
-| **Narrow clones**         | ✔️       | ❌                                  | ❌      | ❌               | ✔️*         |
+| Feature                               | Havarti | Git                                | Fossil | Mercurial       | Subversion |
+|:--------------------------------------|:--------|:-----------------------------------|:-------|:----------------|:-----------|
+| **Explicit File Renames**             | ✔️       | ❌(Heuristically)                   | ❔      | ✔️               | ✔️          |
+| **Explicit File Copies**              | ✔️       | ❌(Heuristically)                   | ❔      | ❔               | ✔️          |
+| **Single Binary**                     | ✔️       | ❌                                  | ✔️      | ❌               | ❔          |
+| **Native Cross Platform**             | ✔️       | ❌ (compatibility layer in Windows) | ✔️      | ✔️               | ✔️          |
+| **Distributed model**                 | ✔️       | ✔️                                  | ✔️      | ✔️               | ❌          |
+| **Centralized model**                 | ✔️       | Thru third party extensions        | ❌      | Thru extensions | ✔️          |
+| **Any file size**                     | ✔️       | ✔️                                  | ❌      | ✔️               | ✔️          |
+| **Shallow clones**                    | ✔️       | ✔️                                  | ❌      | ✔️               | ✔️*         |
+| **Narrow clones**                     | ✔️       | ❌                                  | ❌      | ❌               | ✔️*         |
+| **Serve static content as a website** | ✔️       | ❌                                  | ✔️      | ❌               | ❌          |
+| **Builtin issue tracker, etc.**       | ❌       | ❌                                  | ✔️      | ❌               | ❌          |
 
 Some things it doesn't do:
 * It doesn't add issues, wiki, forum, etc. like `fossil` does (for as awesome as

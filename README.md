@@ -59,12 +59,12 @@ similar features:
 | **Builtin issue tracker, etc.**           | ❌       | ❌      | ✔️      | ❌         | ❌          |
 | **Bidirectional bridge to git**           | ❌       | ✔️      | ❌      | ✔️         | ✔️          |
 
-[1]: /# "Lazily calculated heuristically after the fact."
-[2]: /# "Windows support via a Posix compatibility layer."
-[3]: /# "Possible with shallow clones, partial clones, and extensions."
-[4]: /# "Available via extensions."
-[5]: /# "Not just SVN, but All centralized VCSs support this behavior since they don't clone, they checkout."
-[6]: /# "Disallowing users to do dangerous things also makes it impossible for them to do clever things."
+[1]: # "Lazily calculated heuristically after the fact. Slow and can be wrong using incorrect flags."
+[2]: # "Windows support via a Posix compatibility layer."
+[3]: # "Possible with shallow clones, partial clones, and extensions."
+[4]: # "Available via extensions."
+[5]: # "Not just SVN, but All centralized VCSs support this behavior since they don't clone, they checkout."
+[6]: # "Disallowing users to do dangerous things also makes it impossible for them to do clever things."
 
 [9]: https://github.blog/2020-12-21-get-up-to-speed-with-partial-clone-and-shallow-clone/
 

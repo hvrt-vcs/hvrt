@@ -44,27 +44,27 @@ similar features:
 | Feature                                   | Havarti | Git    | Fossil | Mercurial | Subversion |
 |:------------------------------------------|:--------|:-------|:-------|:----------|:-----------|
 | **Explicit File Renames**                 | ✔️       | ❌[1][] | ❔      | ✔️         | ✔️          |
-| **Explicit File Copies**                  | ✔️       | ❌[1][] | ❔      | ❔         | ✔️          |
-| **Single Binary**                         | ✔️       | ❌      | ✔️      | ❌         | ❔          |
-| **Native Cross Platform**                 | ✔️       | ❌[2][] | ✔️      | ✔️         | ✔️          |
+| **Explicit File Copies**                  | ✔️       | ❌[1][] | ❔      | ✔️         | ✔️          |
+| **Single Binary**                         | ✔️       | ❌      | ✔️      | ❌         | ❌          |
+| **Native Cross Platform**                 | ✔️       | ❕[2][] | ✔️      | ✔️         | ✔️          |
 | **Commit offline (i.e. distributed)**     | ✔️       | ✔️      | ✔️      | ✔️         | ❌          |
 | **Centralized model**                     | ✔️       | ❕[3][] | ❌      | ❕[4][]    | ✔️          |
 | **Autosync with upstream (configurable)** | ✔️       | ❌      | ✔️      | ❌         | ✔️[5][]     |
-| [**Shallow clone**][9]                    | ✔️       | ✔️      | ❌      | ✔️         | ✔️[5][]     |
+| [**Shallow clone**][9]                    | ✔️       | ✔️      | ❔      | ✔️         | ✔️[5][]     |
 | [**Partial clone**][9]                    | ✔️       | ✔️      | ❌      | ❌[4][]    | ✔️[5][]     |
 | **Narrow clone/checkout**                 | ✔️       | ❌      | ❌      | ❌[4][]    | ✔️[5][]     |
 | **Any file size**                         | ✔️       | ✔️      | ❌      | ✔️         | ✔️          |
-| **History rewriting abilities**[6][]      | ✔️       | ✔️      | ❌      | ✔️         | ❌          |
+| **History rewriting abilities** [6][]     | ✔️       | ✔️      | ❌      | ✔️         | ❌          |
 | **Serve static content as a website**     | ✔️       | ❌      | ✔️      | ❌         | ❌          |
-| **Builtin issue tracker, etc.**           | ❌       | ❌      | ✔️      | ❌         | ❌          |
 | **Bidirectional bridge to git**           | ❌       | ✔️      | ❌      | ✔️         | ✔️          |
+| **Builtin issue tracker, etc.**           | ❌       | ❌      | ✔️      | ❌         | ❌          |
 
-[1]: # "Lazily calculated heuristically after the fact. Slow and can be wrong using incorrect flags."
+[1]: # "Lazily calculated heuristically from tree snapshots. Slower than eagerly calculating. Can be wrong depending on CLI flags passed to `git blame` or level of change between diffs."
 [2]: # "Windows support via a Posix compatibility layer."
 [3]: # "Possible with shallow clones, partial clones, and extensions."
 [4]: # "Available via extensions."
 [5]: # "Not just SVN, but All centralized VCSs support this behavior since they don't clone, they checkout."
-[6]: # "Disallowing users to do dangerous things also makes it impossible for them to do clever things."
+[6]: # "Disallowing users to do dangerous things also makes it impossible for them to do clever things. Don't arbitrarily handicap users."
 
 [9]: https://github.blog/2020-12-21-get-up-to-speed-with-partial-clone-and-shallow-clone/
 

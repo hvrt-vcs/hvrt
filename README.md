@@ -37,29 +37,45 @@ and interesting compared to other VCSs and if it might meet your needs:
   commits, both data and metadata, can be retrieved from upstream only when
   needed).
 
-A quick comparison of Havarti to Git, Fossil, Mercurial, and Subversion:
+Here is quick comparison of Havarti to Git, Fossil, Mercurial, and Subversion.
+Havarti's features were chosen primarily because they matter to me. Maybe value
+similar features:
 
-| Feature                               | Havarti | Git                                | Fossil | Mercurial       | Subversion |
-|:--------------------------------------|:--------|:-----------------------------------|:-------|:----------------|:-----------|
-| **Explicit File Renames**             | ✔️       | ❌(Heuristically)                   | ❔      | ✔️               | ✔️          |
-| **Explicit File Copies**              | ✔️       | ❌(Heuristically)                   | ❔      | ❔               | ✔️          |
-| **Single Binary**                     | ✔️       | ❌                                  | ✔️      | ❌               | ❔          |
-| **Native Cross Platform**             | ✔️       | ❌ (compatibility layer in Windows) | ✔️      | ✔️               | ✔️          |
-| **Distributed model**                 | ✔️       | ✔️                                  | ✔️      | ✔️               | ❌          |
-| **Centralized model**                 | ✔️       | Thru third party extensions        | ❌      | Thru extensions | ✔️          |
-| **Any file size**                     | ✔️       | ✔️                                  | ❌      | ✔️               | ✔️          |
-| **Shallow clones**                    | ✔️       | ✔️                                  | ❌      | ✔️               | ✔️*         |
-| **Narrow clones**                     | ✔️       | ❌                                  | ❌      | ❌               | ✔️*         |
-| **Serve static content as a website** | ✔️       | ❌                                  | ✔️      | ❌               | ❌          |
-| **Builtin issue tracker, etc.**       | ❌       | ❌                                  | ✔️      | ❌               | ❌          |
+| Feature                                   | Havarti | Git    | Fossil | Mercurial | Subversion |
+|:------------------------------------------|:--------|:-------|:-------|:----------|:-----------|
+| **Explicit File Renames**                 | ✔️       | ❌[1][] | ❔      | ✔️         | ✔️          |
+| **Explicit File Copies**                  | ✔️       | ❌[1][] | ❔      | ❔         | ✔️          |
+| **Single Binary**                         | ✔️       | ❌      | ✔️      | ❌         | ❔          |
+| **Native Cross Platform**                 | ✔️       | ❌[2][] | ✔️      | ✔️         | ✔️          |
+| **Commit offline (i.e. distributed)**     | ✔️       | ✔️      | ✔️      | ✔️         | ❌          |
+| **Centralized model**                     | ✔️       | ❕[3][] | ❌      | ❕[4][]    | ✔️          |
+| **Autosync with upstream (configurable)** | ✔️       | ❌      | ✔️      | ❌         | ✔️[5][]     |
+| [**Shallow clone**][9]                    | ✔️       | ✔️      | ❌      | ✔️         | ✔️[5][]     |
+| [**Partial clone**][9]                    | ✔️       | ✔️      | ❌      | ❌[4][]    | ✔️[5][]     |
+| **Narrow clone/checkout**                 | ✔️       | ❌      | ❌      | ❌[4][]    | ✔️[5][]     |
+| **Any file size**                         | ✔️       | ✔️      | ❌      | ✔️         | ✔️          |
+| **History rewriting abilities**[6][]      | ✔️       | ✔️      | ❌      | ✔️         | ❌          |
+| **Serve static content as a website**     | ✔️       | ❌      | ✔️      | ❌         | ❌          |
+| **Builtin issue tracker, etc.**           | ❌       | ❌      | ✔️      | ❌         | ❌          |
+| **Bidirectional bridge to git**           | ❌       | ✔️      | ❌      | ✔️         | ✔️          |
+
+[1]: /# "Lazily calculated heuristically after the fact."
+[2]: /# "Windows support via a Posix compatibility layer."
+[3]: /# "Possible with shallow clones, partial clones, and extensions."
+[4]: /# "Available via extensions."
+[5]: /# "Not just SVN, but All centralized VCSs support this behavior since they don't clone, they checkout."
+[6]: /# "Disallowing users to do dangerous things also makes it impossible for them to do clever things."
+
+[9]: https://github.blog/2020-12-21-get-up-to-speed-with-partial-clone-and-shallow-clone/
 
 Some things it doesn't do:
 * It doesn't add issues, wiki, forum, etc. like `fossil` does (for as awesome as
   this all is, the above list a lot to deal with already). Hopefully someone
-  will come along and fork gitea and make it work for Havarti, so then you only
-  need to download _two_ binaries, instead of just one :)
-* There are no plans to support bi-directional bridges from/to `git`, `fossil`,
-  or anything else at the moment. This will probably change with
+  will come along and fork gitea and make it work for Havarti instead of (or
+  along with) git, so then you only need to download _two_ binaries, instead of
+  just one :)
+* There are no immediate plans to support bi-directional bridges from/to `git`,
+  `fossil`, or anything else at the moment. This will probably change with
   time/popularity. However there will likely be a `git` importer, and there will
   definitely be a patch exporter/importer.
 * It doesn't make rewriting history easy (like `git rebase`), although it does

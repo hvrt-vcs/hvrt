@@ -485,6 +485,25 @@ time if you do not reference or use it.
       - Have a branch called `website` and serve files directly from the root
         of the repo.
       - Serve the docs on a per tag basis, so `v1.0`, `v2.0` could be exposed at
-        the URL path level and just work. This wouuld probably need to be an
+        the URL path level and just work. This would probably need to be an
         option in `hvrt` to serve all tags or serve all branches or something.
         Need to explore this idea further.
+  * Some command line examples/ideas for potential static site serving CLI:
+    - Allow serving multiple branches from multiple site roots. These flags can
+      be mixed and repeated.
+    - `hvrt serve --version trunk '/www' '/'`: Serve the "www" directory in the
+      trunk branch to the root of the website.
+    - `hvrt serve --multiple-versions trunk,dev,stable '/docs/html' '/docs'`:
+      Serve the "docs/html" directory of each branch under the "docs" path of
+      the site. For example, for the `trunk` branch, it serves "docs/html" to
+      "docs/trunk", for the `dev` branch it serves to "docs/dev", and so on.
+    - `hvrt serve --regex-versions '[0-9]\.[0-9]\.[0-9]' '/docs/html' '/docs/versioned'`:
+      Serve the "docs/html" directory of each version that matches a simple a
+      semantic version regex under the "docs/versioned" path of the site.
+      Same nesting version behavior as `--multiple-versions`.
+    - `hvrt serve --unversioned '/releases'`: serve unversioned files in the
+      repo under the "releases" path of the site.
+    - Should also include things like flags for `--port`, `--hostname`, and so on.
+    - These can be "layered". Should it error if some paths are ambiguous? Or
+      just go by a simple rule, like "What ever is specified last is the top
+      layer"? I'm leaning towards the latter.

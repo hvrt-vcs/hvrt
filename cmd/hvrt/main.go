@@ -3,31 +3,48 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
- "github.com/integrii/flaggy"
+	"github.com/integrii/flaggy"
 
 	"github.com/eestrada/hvrt"
 )
 
-func main() {
+// command line flags
+type cmdArgs struct {
+	// general flags
+	verbosity []bool
+	unsafe    bool
 
-	// Declare variables and their defaults
-	var stringFlag = "defaultValue"
+	// clone flags
+	cloneDir string
+}
 
-	// Create the subcommand
-	subcommand := flaggy.NewSubcommand("subcommandExample")
+func parseArgs() cmdArgs {
 
-	// Add a flag to the subcommand
-	subcommand.String(&stringFlag, "f", "flag", "A test string flag")
+	parsed_args := cmdArgs{unsafe: false, cloneDir: ""}
+
+	flaggy.BoolSlice(&parsed_args.verbosity, "v", "verbose", "Add increased output. May be specified multiple times to increase verbosity.")
+	flaggy.Bool(&parsed_args.unsafe, "", "unsafe", "Force unsafe operations to proceed.")
+
+	// Create the clone subcommand
+	cloneSubcommand := flaggy.NewSubcommand("clone")
+
+	// Add flags to the clone subcommand
+	cloneSubcommand.String(&parsed_args.cloneDir, "d", "directory", "Directory to clone repo into. Defaults to name of repo in current directory.")
 
 	// Add the subcommand to the parser at position 1
-	flaggy.AttachSubcommand(subcommand, 1)
+	flaggy.AttachSubcommand(cloneSubcommand, 1)
 
-	// Parse the subcommand and all flags
 	flaggy.Parse()
 
-	// Use the flag
-	fmt.Println(stringFlag)
+	return parsed_args
+}
+
+func main() {
+	parsed_args := parseArgs()
+
+	log.Printf("%+v\n", parsed_args)
 
 	// Set properties of the predefined Logger, including
 	// the log entry prefix and a flag to disable printing
@@ -46,4 +63,5 @@ func main() {
 	// If no error was returned, print the returned map of
 	// messages to the console.
 	fmt.Println(messages)
+	os.Exit(0)
 }

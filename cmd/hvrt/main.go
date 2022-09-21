@@ -6,35 +6,45 @@ import (
 	"os"
 
 	"github.com/integrii/flaggy"
+	"github.com/pelletier/go-toml/v2"
 
 	"github.com/eestrada/hvrt"
 )
 
-// command line flags
-type cmdArgs struct {
-	// general flags
-	verbosity []bool
-	unsafe    bool
-
-	// clone flags
-	cloneDir string
+// config values
+type CfgValues struct {
+	Autosync bool
+	Version  int
+	Name     string
+	Tags     []string
 }
 
-func parseArgs() cmdArgs {
+// command line flags
+type CmdArgs struct {
+	// general flags
+	Verbosity []bool
+	Unsafe    bool
 
-	parsed_args := cmdArgs{unsafe: false, cloneDir: ""}
+	// init flags
+	RepoFile    string
+	CheckoutDir string
+}
 
-	flaggy.BoolSlice(&parsed_args.verbosity, "v", "verbose", "Add increased output. May be specified multiple times to increase verbosity.")
-	flaggy.Bool(&parsed_args.unsafe, "", "unsafe", "Force unsafe operations to proceed.")
+func parseArgs() CmdArgs {
+	parsed_args := CmdArgs{Unsafe: false}
 
-	// Create the clone subcommand
-	cloneSubcommand := flaggy.NewSubcommand("clone")
+	flaggy.BoolSlice(&parsed_args.Verbosity, "v", "verbose", "Add increased output. May be specified multiple times to increase verbosity.")
+	flaggy.Bool(&parsed_args.Unsafe, "", "unsafe", "Force unsafe operations to proceed.")
+
+	// Create the init subcommand
+	initSubcommand := flaggy.NewSubcommand("init")
 
 	// Add flags to the clone subcommand
-	cloneSubcommand.String(&parsed_args.cloneDir, "d", "directory", "Directory to clone repo into. Defaults to name of repo in current directory.")
+	initSubcommand.String(&parsed_args.RepoFile, "r", "repo-file", "Where to create the repo Sqlite file.")
+	initSubcommand.String(&parsed_args.RepoFile, "c", "checkout", "Where to initially checkout the default branch.")
 
 	// Add the subcommand to the parser at position 1
-	flaggy.AttachSubcommand(cloneSubcommand, 1)
+	flaggy.AttachSubcommand(initSubcommand, 1)
 
 	flaggy.Parse()
 
@@ -42,6 +52,24 @@ func parseArgs() cmdArgs {
 }
 
 func main() {
+
+	defaultCfg := `
+autosync = true
+version = 2
+name = "go-toml"
+tags = ["go", "toml"]
+`
+
+	var cfg CfgValues
+	err := toml.Unmarshal([]byte(defaultCfg), &cfg)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("autosync:", cfg.Autosync)
+	fmt.Println("version:", cfg.Version)
+	fmt.Println("name:", cfg.Name)
+	fmt.Println("tags:", cfg.Tags)
+
 	parsed_args := parseArgs()
 
 	log.Printf("%+v\n", parsed_args)

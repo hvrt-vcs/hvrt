@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+	"os"
+	"io/fs"
+	"log"
 	// "modernc.org/sqlite"
 )
 
@@ -57,4 +60,17 @@ func randomFormat() string {
 	// Return a randomly selected message format by specifying
 	// a random index for the slice of formats.
 	return formats[rand.Intn(len(formats))]
+}
+
+func Status(repo_file, work_tree string) int {
+	fileSystem := os.DirFS(work_tree)
+
+	fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(path)
+		return nil
+	})
+	return 0
 }

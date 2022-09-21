@@ -41,7 +41,7 @@ func parseArgs() CmdArgs {
 
 	// Add flags to the clone subcommand
 	initSubcommand.String(&parsed_args.RepoFile, "r", "repo-file", "Where to create the repo Sqlite file.")
-	initSubcommand.String(&parsed_args.RepoFile, "c", "checkout", "Where to initially checkout the default branch.")
+	initSubcommand.String(&parsed_args.CheckoutDir, "c", "checkout", "Where to initially checkout the default branch.")
 
 	// Add the subcommand to the parser at position 1
 	flaggy.AttachSubcommand(initSubcommand, 1)
@@ -65,14 +65,11 @@ tags = ["go", "toml"]
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("autosync:", cfg.Autosync)
-	fmt.Println("version:", cfg.Version)
-	fmt.Println("name:", cfg.Name)
-	fmt.Println("tags:", cfg.Tags)
+	log.Printf("Parsed configs: %+v\n", cfg)
 
 	parsed_args := parseArgs()
 
-	log.Printf("%+v\n", parsed_args)
+	log.Printf("Parsed args: %+v\n", parsed_args)
 
 	// Set properties of the predefined Logger, including
 	// the log entry prefix and a flag to disable printing

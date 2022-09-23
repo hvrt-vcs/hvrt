@@ -10,7 +10,7 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
-    main: ./cmd/hvrt
+    main: ./
     binary: hvrt
     targets:
       # Based on supported platforms of SQLite module we depend on:

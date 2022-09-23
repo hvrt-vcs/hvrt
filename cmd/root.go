@@ -54,8 +54,8 @@ func init() {
 		log.Println("Values of values at init", RepoPath, WorkTree)
 	}
 
-	rootCmd.PersistentFlags().StringVar(&RepoPath, "repo", "", "Path to repo (default is ./.hvrt/repo.sqlite)")
-	rootCmd.PersistentFlags().StringVar(&WorkTree, "work-tree", "", "Path to work tree (default is ./)")
+	rootCmd.PersistentFlags().StringVar(&RepoPath, "repo", RepoPath, "Path to repo (default is ./.hvrt/repo.sqlite)")
+	rootCmd.PersistentFlags().StringVar(&WorkTree, "work-tree", WorkTree, "Path to work tree (default is ./)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

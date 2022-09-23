@@ -62,8 +62,9 @@ func randomFormat() string {
 	return formats[rand.Intn(len(formats))]
 }
 
-func Status(repo_file, work_tree string) int {
-	fileSystem := os.DirFS(work_tree)
+func Status(repo_file, work_tree *string) error {
+	fileSystem := os.DirFS(*work_tree)
+	log.Println("values of variables at status call: ", *repo_file, *work_tree, fileSystem)
 
 	fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -72,5 +73,5 @@ func Status(repo_file, work_tree string) int {
 		fmt.Println(path)
 		return nil
 	})
-	return 0
+	return nil
 }

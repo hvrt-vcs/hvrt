@@ -1,8 +1,8 @@
 package cmd
 
 import (
+	"log"
 	"os"
-	// "log"
 
 	"github.com/spf13/cobra"
 	// "github.com/pelletier/go-toml/v2"
@@ -22,20 +22,42 @@ var rootCmd = &cobra.Command{
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Encountered unexpected error: %s", r)
+			os.Exit(123)
+		}
+	}()
 	err := rootCmd.Execute()
 	if err != nil {
+		log.Printf("Encountered error: %s", err)
 		os.Exit(1)
+	} else {
+		os.Exit(0)
 	}
 }
+
+var RepoPath string
+var WorkTree string
 
 func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
+	cwd, err := os.Getwd()
+	// log.Println(cwd, err)
+	if err != nil {
+		panic("Cannot determine current working directory.")
+	} else {
+		RepoPath = cwd + "/.hvrt/repo.sqlite"
+		WorkTree = cwd
+		log.Println("Values of values at init", RepoPath, WorkTree)
+	}
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.hvrt.yaml)")
+	rootCmd.PersistentFlags().StringVar(&RepoPath, "repo", "", "Path to repo (default is ./.hvrt/repo.sqlite)")
+	rootCmd.PersistentFlags().StringVar(&WorkTree, "work-tree", "", "Path to work tree (default is ./)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

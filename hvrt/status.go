@@ -15,28 +15,39 @@ import (
 func init() {
 }
 
-type PathPair struct {
-	Ptype string
-	Path string
+// func IgnoreFileParse(ignore_file io.Reader) []string {
+// 	patterns := make([]string, 0, 8)
+// 	for line := range ignore_file {
+// 		switch line {
+// 		case condition:
+//
+// 		}
+// 	}
+// }
+
+type RepoStat struct {
+	DelPaths []string
+	ModPaths []string
+	NewPaths []string
+	UnkPaths []string
 }
 
-func Status(repo_file, work_tree *string, paths_chan chan PathPair) error {
-	fileSystem := os.DirFS(*work_tree)
+func Status(repo_file, work_tree string) (RepoStat, error) {
+	stat := RepoStat{}
+	fileSystem := os.DirFS(work_tree)
 	log.Println(
 		"values of variables at status call:",
-		*repo_file,
-		*work_tree,
+		repo_file,
+		work_tree,
 		fileSystem,
-		paths_chan,
 	)
 
 	fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			log.Fatal(err)
 		}
-		paths_chan <- PathPair{Ptype: "any", Path: path}
+		stat.ModPaths = append(stat.ModPaths, path)
 		return nil
 	})
-	close(paths_chan)
-	return nil
+	return stat, nil
 }

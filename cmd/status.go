@@ -28,6 +28,11 @@ var statusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("Values of args before status call:", args)
 		log.Println("Values of variables before status call:", RepoPath, WorkTree)
-		hvrt.Status(&RepoPath, &WorkTree)
+		paths_chan := make(chan string, 128)
+		go hvrt.Status(&RepoPath, &WorkTree, paths_chan)
+
+		for path := range paths_chan {
+			log.Println("The currently printing path is: ", path)
+		}
 	},
 }

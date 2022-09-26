@@ -15,7 +15,12 @@ import (
 func init() {
 }
 
-func Status(repo_file, work_tree *string, paths_chan chan string) error {
+type PathPair struct {
+	Ptype string
+	Path string
+}
+
+func Status(repo_file, work_tree *string, paths_chan chan PathPair) error {
 	fileSystem := os.DirFS(*work_tree)
 	log.Println(
 		"values of variables at status call:",
@@ -29,7 +34,7 @@ func Status(repo_file, work_tree *string, paths_chan chan string) error {
 		if err != nil {
 			log.Fatal(err)
 		}
-		paths_chan <- path
+		paths_chan <- PathPair{Ptype: "any", Path: path}
 		return nil
 	})
 	close(paths_chan)

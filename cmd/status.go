@@ -28,7 +28,7 @@ var statusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		stat, _ := hvrt.Status(RepoPath, WorkTree)
 		for i := range stat.ModPaths {
-			fmt.Println(stat.ModPaths[i])
+			fmt.Println(hvrt.HashFile(stat.ModPaths[i]))
 		}
 	},
 }

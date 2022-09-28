@@ -1,23 +1,40 @@
 package hvrt
 
 import (
-	// "errors"
-	// "fmt"
-	// "io"
 	"bufio"
+	"encoding/hex"
+	"errors"
+	"golang.org/x/crypto/sha3"
+	"io"
 	"io/fs"
 	"log"
-	// "math/rand"
 	"os"
 	"path/filepath"
-	"errors"
 	"strings"
-	// "time"
 	// "modernc.org/sqlite"
 )
 
 // init sets initial values for variables used in the package.
 func init() {
+}
+
+type FileHashPair struct {
+	HexDigest string
+	FilePath  string
+}
+
+func HashFile(file_path string) (FileHashPair, error) {
+	source_file, err := os.Open(file_path)
+	if err != nil {
+		return FileHashPair{}, errors.New("Could not open source file.")
+	}
+	defer source_file.Close()
+
+	hash := sha3.New256()
+	io.Copy(hash, source_file)
+	digest := hash.Sum([]byte{})
+	hex_digest := hex.EncodeToString(digest)
+	return FileHashPair{HexDigest: hex_digest, FilePath: file_path}, nil
 }
 
 func ParseIgnoreFile(ignore_file_path string) []string {
@@ -37,7 +54,7 @@ func ParseIgnoreFile(ignore_file_path string) []string {
 	for scanner.Scan() {
 		trimmed := strings.TrimSpace(scanner.Text())
 		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
-				patterns = append(patterns, trimmed)
+			patterns = append(patterns, trimmed)
 		}
 	}
 	if _DEBUG != 0 && len(patterns) > 0 {
@@ -98,28 +115,28 @@ type RepoStat struct {
 }
 
 func MatchesIgnore(root, path string, de fs.DirEntry, patterns []string) bool {
-		for i := range patterns {
-			pat := patterns[i]
-			if strings.HasSuffix(pat, "/") {
-				if !de.IsDir() {
-					continue
+	for i := range patterns {
+		pat := patterns[i]
+		if strings.HasSuffix(pat, "/") {
+			if !de.IsDir() {
+				continue
+			}
+			match, err := filepath.Match(strings.TrimSuffix(pat, "/"), de.Name())
+			if err != nil {
+				if _DEBUG != 0 {
+					log.Println("Skipping malformed ignore pattern:", pat)
 				}
-				match, err := filepath.Match(strings.TrimSuffix(pat, "/"), de.Name())
-				if err != nil {
-					if _DEBUG != 0 {
-						log.Println("Skipping malformed ignore pattern:", pat)
-					}
-					continue
-				}
-				if match {
-					return true
-				}
+				continue
+			}
+			if match {
+				return true
 			}
 		}
-		return false
+	}
+	return false
 }
 
-func recurseWorktree(wt_root, cur_dir string, rstat *RepoStat, all_patterns []string)  {
+func recurseWorktree(wt_root, cur_dir string, rstat *RepoStat, all_patterns []string) {
 	loc_patterns := ParseIgnoreFile(filepath.Join(cur_dir, ".hvrtignore"))
 	loc_patterns = append(loc_patterns, all_patterns...)
 

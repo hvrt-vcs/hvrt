@@ -3,11 +3,15 @@ package hvrt
 import (
 	// "errors"
 	// "fmt"
+	// "io"
+	"bufio"
 	"io/fs"
 	"log"
 	// "math/rand"
 	"os"
 	"path/filepath"
+	"errors"
+	"strings"
 	// "time"
 	// "modernc.org/sqlite"
 )
@@ -16,41 +20,72 @@ import (
 func init() {
 }
 
-// func IgnoreFileParse(ignore_file io.Reader) []string {
-// 	patterns := make([]string, 0, 8)
-// 	for line := range ignore_file {
-// 		switch line {
-// 		case condition:
-//
-// 		}
-// 	}
-// }
-
-func GetWorkTreeRoot(start_dir string) string {
-
-	if start_dir == "" {
-		start_dir = "."
-	}
-
-	abs_path, err := filepath.Abs(start_dir)
+func ParseIgnoreFile(ignore_file_path string) []string {
+	patterns := make([]string, 0)
+	ignore_file, err := os.Open(ignore_file_path)
 	if err != nil {
-		panic("Cannot determine the root of the work tree.")
-	}
-
-	cur_dir := abs_path
-	for cur_dir != "" {
-		cur_dir_fs := os.DirFS(cur_dir)
-		entries, _ := fs.ReadDir(cur_dir_fs, ".")
-		log.Println(entries)
-		log.Println(cur_dir)
-		if cur_dir == "/" {
-			cur_dir = ""
-		} else {
-			cur_dir = filepath.Dir(cur_dir)
+		return patterns
+	} else {
+		istat, ierr := ignore_file.Stat()
+		if ierr != nil || istat.IsDir() {
+			return patterns
 		}
 	}
+	scanner := bufio.NewScanner(ignore_file)
+	for scanner.Scan() {
+		trimmed := strings.TrimSpace(scanner.Text())
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+				patterns = append(patterns, trimmed)
+		}
+	}
+	if _DEBUG != 0 && len(patterns) > 0 {
+		log.Println("Found some patterns:", patterns)
+	}
+	return patterns
+}
 
-	return ""
+func getParentdir(dir string) string {
+	if dir == filepath.Dir(dir) {
+		return ""
+	} else {
+		return filepath.Dir(dir)
+	}
+}
+
+func panicAbs(maybe_rel_path string) string {
+	if maybe_rel_path == "" {
+		maybe_rel_path = "."
+	}
+
+	abs_path, err := filepath.Abs(maybe_rel_path)
+	if err != nil {
+		panic("Cannot determine absolute path of given work tree.")
+	} else {
+		return abs_path
+	}
+}
+
+func GetWorkTreeRoot(start_dir string) string {
+	abs_path := panicAbs(start_dir)
+	cur_dir := abs_path
+	for cur_dir != "" {
+		// log.Println(cur_dir)
+		cur_dir_fs := os.DirFS(cur_dir).(fs.StatFS)
+		if wt_dir_finfo, wt_err := cur_dir_fs.Stat(".hvrt"); wt_err != nil {
+			if errors.Is(wt_err, fs.ErrNotExist) {
+				cur_dir = getParentdir(cur_dir)
+			} else {
+				panic(wt_err)
+			}
+		} else {
+			if wt_dir_finfo.IsDir() {
+				return cur_dir
+			} else {
+				cur_dir = getParentdir(cur_dir)
+			}
+		}
+	}
+	panic("Could not find hvrt work tree in given directory or parent directories.")
 }
 
 type RepoStat struct {
@@ -60,27 +95,77 @@ type RepoStat struct {
 	UnkPaths []string
 }
 
-func Status(repo_file, work_tree string) (RepoStat, error) {
-	real_work_tree := GetWorkTreeRoot(work_tree)
-	log.Println(real_work_tree)
+func MatchesIgnore(root, path string, de fs.DirEntry, patterns []string) bool {
+		for i := range patterns {
+			pat := patterns[i]
+			if strings.HasSuffix(pat, "/") {
+				if !de.IsDir() {
+					continue
+				}
+				match, err := filepath.Match(strings.TrimSuffix(pat, "/"), de.Name())
+				if err != nil {
+					if _DEBUG != 0 {
+						log.Println("Skipping malformed ignore pattern:", pat)
+					}
+					continue
+				}
+				if match {
+					return true
+				}
+			}
+		}
+		return false
+}
 
+func recurseWorktree(wt_root, cur_dir string, rstat *RepoStat, all_patterns []string)  {
+	loc_patterns := ParseIgnoreFile(filepath.Join(cur_dir, ".hvrtignore"))
+	loc_patterns = append(loc_patterns, all_patterns...)
+
+	dir_entries, err := os.ReadDir(cur_dir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range dir_entries {
+		full_path := filepath.Join(cur_dir, entry.Name())
+		if MatchesIgnore(cur_dir, full_path, entry, loc_patterns) {
+			if _DEBUG != 0 {
+				log.Println("Ignored file:", full_path)
+			}
+			continue
+		}
+		if entry.IsDir() {
+			recurseWorktree(wt_root, filepath.Join(cur_dir, entry.Name()), rstat, loc_patterns)
+		} else {
+			rstat.ModPaths = append(rstat.ModPaths, full_path)
+		}
+	}
+}
+
+func Status(repo_file, work_tree string) (RepoStat, error) {
+	abs_work_tree := panicAbs(work_tree)
+	real_work_tree := GetWorkTreeRoot(abs_work_tree)
+	// log.Println("work_tree =", work_tree)
+	// log.Println("abs_work_tree =", abs_work_tree)
+	// log.Println("real_work_tree =", real_work_tree)
 
 	stat := RepoStat{}
-	fileSystem := os.DirFS(work_tree)
-	log.Println(
-		"values of variables at status call:",
-		repo_file,
-		work_tree,
-		fileSystem,
-	)
-	panic("whatever")
+	// fileSystem := os.DirFS(real_work_tree)
+	// log.Println(
+	// 	"values of variables at status call:",
+	// 	repo_file,
+	// 	work_tree,
+	// 	fileSystem,
+	// )
 
-	fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			log.Fatal(err)
-		}
-		stat.ModPaths = append(stat.ModPaths, path)
-		return nil
-	})
+	recurseWorktree(real_work_tree, real_work_tree, &stat, []string{".hvrt/"})
+
+	// fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// 	stat.ModPaths = append(stat.ModPaths, path)
+	// 	return nil
+	// })
 	return stat, nil
 }

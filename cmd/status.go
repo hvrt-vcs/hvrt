@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	// "fmt"
-	"log"
+	"fmt"
+	// "log"
 
 	"github.com/eestrada/hvrt/hvrt"
 	"github.com/spf13/cobra"
@@ -26,12 +26,9 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Print the status of the given repo and work tree.",
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Println("Values of args before status call:", args)
-		log.Println("Values of variables before status call:", RepoPath, WorkTree)
 		stat, _ := hvrt.Status(RepoPath, WorkTree)
-
 		for i := range stat.ModPaths {
-			log.Println(stat.ModPaths[i])
+			fmt.Println(stat.ModPaths[i])
 		}
 	},
 }

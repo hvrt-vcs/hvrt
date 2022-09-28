@@ -1,5 +1,33 @@
-# This file should always end in a file extension.
+# This file should always end in a file extension. Currently that is `toml`
+
 [repo]
   # type of "internal" means the repo exists as `repo.hvrt` inside this .hvrt directory.
-  # type of "external" means that there is an absolute path specified to the repo file.
   type = "internal"
+
+  # # type of "external" means that there is an absolute path specified to the repo file.
+  # type = "external"
+  # path = "/absolute/path/to/<repo name>.hvrt"
+
+  # If/when repos contained in other datastores (like postgres) become
+  # available, there will be other `type` values to indicate this. Something
+  # like "postgres" or "db_url" or "upstream" or something.
+
+  # It should be possible early on to make the `type` be "upstream", where the
+  # upstream is treated as the repo for all purposes other than local work tree
+  # state.
+
+  # work tree state is kept in another sqlite DB within this `.hvrt` directory.
+  # Let's say it is called `work_tree_state.sqlite` (we use the `sqlite`
+  # extension since this should never be directly user facing). It is *always* a
+  # local sqlite file, even when the repo is contained in something other than a
+  # sqlite file (e.g. a Postgres DB or the upstream repo).
+
+  # Work tree state should include things like the current branch we are working
+  # on, the commit hash of the "HEAD" (in git nomenclature), the used blobs from
+  # that commit (not all blobs are necessarily pulled since we support narrow
+  # checkouts), the "staging area" where staged changes are held, and any other
+  # infomation that is relavent.
+
+  # Unlike git, no working tree state should "live" inside the repo area. This
+  # is part of what makes working with multiple work trees harder in git; it
+  # assumes a single work tree workflow and things can get weird otherwise.

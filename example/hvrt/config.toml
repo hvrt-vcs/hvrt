@@ -1,0 +1,5 @@
+# This file should always end in a file extension.
+[repo]
+  # type of "internal" means the repo exists as `repo.hvrt` inside this .hvrt directory.
+  # type of "external" means that there is an absolute path specified to the repo file.
+  type = "internal"

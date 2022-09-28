@@ -44,10 +44,10 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	RepoPath = "./.hvrt/repo.sqlite"
+	RepoPath = "./.hvrt/repo.hvrt"
 	WorkTree = "."
 
-	rootCmd.PersistentFlags().StringVar(&RepoPath, "repo", RepoPath, "Path to repo (default is ./.hvrt/repo.sqlite)")
+	rootCmd.PersistentFlags().StringVar(&RepoPath, "repo", RepoPath, "Path to repo (default is ./.hvrt/repo.hvrt)")
 	rootCmd.PersistentFlags().StringVar(&WorkTree, "work-tree", WorkTree, "Path to work tree (default is .)")
 
 	// Cobra also supports local flags, which will only run

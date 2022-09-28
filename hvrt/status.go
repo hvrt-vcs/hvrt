@@ -25,12 +25,14 @@ func ParseIgnoreFile(ignore_file_path string) []string {
 	ignore_file, err := os.Open(ignore_file_path)
 	if err != nil {
 		return patterns
-	} else {
-		istat, ierr := ignore_file.Stat()
-		if ierr != nil || istat.IsDir() {
-			return patterns
-		}
 	}
+	defer ignore_file.Close()
+
+	istat, ierr := ignore_file.Stat()
+	if ierr != nil || istat.IsDir() {
+		return patterns
+	}
+
 	scanner := bufio.NewScanner(ignore_file)
 	for scanner.Scan() {
 		trimmed := strings.TrimSpace(scanner.Text())
@@ -145,27 +147,7 @@ func recurseWorktree(wt_root, cur_dir string, rstat *RepoStat, all_patterns []st
 func Status(repo_file, work_tree string) (RepoStat, error) {
 	abs_work_tree := panicAbs(work_tree)
 	real_work_tree := GetWorkTreeRoot(abs_work_tree)
-	// log.Println("work_tree =", work_tree)
-	// log.Println("abs_work_tree =", abs_work_tree)
-	// log.Println("real_work_tree =", real_work_tree)
-
 	stat := RepoStat{}
-	// fileSystem := os.DirFS(real_work_tree)
-	// log.Println(
-	// 	"values of variables at status call:",
-	// 	repo_file,
-	// 	work_tree,
-	// 	fileSystem,
-	// )
-
 	recurseWorktree(real_work_tree, real_work_tree, &stat, []string{".hvrt/"})
-
-	// fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	stat.ModPaths = append(stat.ModPaths, path)
-	// 	return nil
-	// })
 	return stat, nil
 }

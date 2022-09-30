@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	// "log"
+	"log"
 
 	"github.com/eestrada/hvrt/hvrt"
 	"github.com/spf13/cobra"
@@ -26,9 +26,21 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Print the status of the given repo and work tree.",
 	Run: func(cmd *cobra.Command, args []string) {
+		fhpchan := make(chan hvrt.FileHashPair)
 		stat, _ := hvrt.Status(RepoPath, WorkTree)
-		for i := range stat.ModPaths {
-			fmt.Println(hvrt.HashFile(stat.ModPaths[i]))
+		for _, mod_path := range stat.ModPaths {
+			go func(mod_path string) {
+				fhp, err := hvrt.HashFile(mod_path)
+				if err != nil {
+					log.Println("Encountered error:", err)
+					return
+				}
+				fhpchan <- fhp
+			}(mod_path)
+		}
+		for range stat.ModPaths {
+			pair := <-fhpchan
+			fmt.Println("pair from channel:", pair)
 		}
 	},
 }

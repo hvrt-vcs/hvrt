@@ -19,6 +19,7 @@ func init() {
 }
 
 type FileHashPair struct {
+	HashAlgo string
 	HexDigest string
 	FilePath  string
 }
@@ -34,7 +35,7 @@ func HashFile(file_path string) (FileHashPair, error) {
 	io.Copy(hash, source_file)
 	digest := hash.Sum([]byte{})
 	hex_digest := hex.EncodeToString(digest)
-	return FileHashPair{HexDigest: hex_digest, FilePath: file_path}, nil
+	return FileHashPair{HashAlgo: "sha3-256", HexDigest: hex_digest, FilePath: file_path}, nil
 }
 
 func ParseIgnoreFile(ignore_file_path string) []string {

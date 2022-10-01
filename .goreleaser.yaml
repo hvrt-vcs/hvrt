@@ -19,21 +19,17 @@ builds:
       # We choose the lowest possible versions of all archs to ensure as broad
       # of support as possible.
       - darwin_amd64_v1
-      # - darwin_amd64_v4
       - darwin_arm64
       - freebsd_amd64_v1
-      # - freebsd_amd64_v4
+      - freebsd_arm64
       - linux_386_softfloat
-      # - linux_386_sse2
       - linux_amd64_v1
-      # - linux_amd64_v4
       - linux_arm_5
       - linux_arm_6
       - linux_arm_7
       - linux_arm64
       - linux_riscv64
       - windows_amd64_v1
-      # - windows_amd64_v4
       - windows_arm64
 archives:
   - replacements:

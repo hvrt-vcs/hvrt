@@ -19,7 +19,7 @@ func init() {
 }
 
 type FileHashPair struct {
-	HashAlgo string
+	HashAlgo  string
 	HexDigest string
 	FilePath  string
 }

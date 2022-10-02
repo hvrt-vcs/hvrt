@@ -7,7 +7,7 @@ import (
 
 // content is our static web server content.
 //go:embed sql
-var sql_files embed.FS
+var SQLFiles embed.FS
 
 // init sets initial values for variables used in the package.
 func init() {

@@ -4,8 +4,8 @@
 CREATE TABLE "vcs_version" (
 	"id"	INTEGER,
 	"version"	TEXT NOT NULL, -- semantic version
-	"created_at" TEXT DEFAULT CURRENT_TIMESTAMP,
-	"modified_at" TEXT DEFAULT CURRENT_TIMESTAMP,
+	"created_at" INTEGER DEFAULT unixepoch(CURRENT_TIMESTAMP),
+	"modified_at" INTEGER DEFAULT unixepoch(CURRENT_TIMESTAMP),
 	PRIMARY KEY("id" AUTOINCREMENT)
 )
 
@@ -15,9 +15,26 @@ CREATE TABLE "tags" (
 	"annotation"	TEXT,
 	"is_hidden" BOOLEAN NOT NULL DEFAULT FALSE,
 	"is_branch" BOOLEAN NOT NULL DEFAULT FALSE,
-	"created_at" TEXT DEFAULT CURRENT_TIMESTAMP,
+	"created_at" INTEGER DEFAULT unixepoch(CURRENT_TIMESTAMP),
 	PRIMARY KEY("id" AUTOINCREMENT)
 )
+
+-- It is theoretically possible to have a single tree shared between multiple
+-- commits. This can happen under the following conditions: the file IDs and
+-- associated blob IDs are identical (since these are the only values hashed to
+-- generate the tree ID). The values are sorted by the file ID path, then hashed
+-- on file ID hash (as a UTF8 hex string) and blob ID hash (as a UTF8 hex
+-- string), in that order.
+CREATE TABLE "trees" (
+	"id"	INTEGER,
+	"hash_algo"	TEXT NOT NULL,
+	"hash"	TEXT NOT NULL,
+	UNIQUE("hash_algo", "hash")
+	PRIMARY KEY("id" AUTOINCREMENT)
+)
+
+CREATE INDEX tree_hash_algos_idx ON trees("hash_algo");
+CREATE INDEX tree_hashes_idx ON trees("hash");
 
 CREATE TABLE "commits" (
 	"id"	INTEGER,
@@ -78,8 +95,8 @@ CREATE TABLE "bundles" (
 	"id"	INTEGER,
 	"name"	TEXT NOT NULL,
 	"message"	TEXT,
-	"created_at" TEXT DEFAULT CURRENT_TIMESTAMP,
-	"modified_at" TEXT DEFAULT CURRENT_TIMESTAMP,
+	"created_at" INTEGER DEFAULT unixepoch(CURRENT_TIMESTAMP),
+	"modified_at" INTEGER DEFAULT unixepoch(CURRENT_TIMESTAMP),
 	UNIQUE("name")
 	PRIMARY KEY("id" AUTOINCREMENT)
 )
@@ -88,7 +105,7 @@ CREATE TABLE "bundle_commits" (
 	"id"	INTEGER,
 	"bundle_id"	INTEGER NOT NULL,
 	"commit_id"	INTEGER NOT NULL,
-	"created_at" TEXT DEFAULT CURRENT_TIMESTAMP,
+	"created_at" INTEGER DEFAULT unixepoch(CURRENT_TIMESTAMP),
 	PRIMARY KEY("id" AUTOINCREMENT)
 
 	-- A commit should never be part of more than one bundle.
@@ -99,20 +116,6 @@ CREATE TABLE "bundle_commits" (
 
 CREATE INDEX bundle_commits_bundle_id_idx ON bundle_commits("bundle_id");
 
--- It is theoretically possible to have a single tree shared between multiple
--- commits. This can happen under the following conditions: the file IDs and
--- associated blob IDs are identical (since these are the only values hashed to
--- generate the tree ID). The values are sorted by the file ID path, then hashed
--- on file ID hash (as a UTF8 hex string) and blob ID hash (as a UTF8 hex
--- string), in that order.
-CREATE TABLE "trees" (
-	"id"	INTEGER,
-	"hash_algo"	TEXT NOT NULL,
-	"hash"	TEXT NOT NULL,
-	UNIQUE("hash_algo", "hash")
-	PRIMARY KEY("id" AUTOINCREMENT)
-)
-
 CREATE TABLE "file_ids" (
 	"id"	INTEGER,
 	"hash_algo"	TEXT NOT NULL,
@@ -121,6 +124,21 @@ CREATE TABLE "file_ids" (
 	UNIQUE("hash_algo", "hash")
 	PRIMARY KEY("id" AUTOINCREMENT)
 )
+
+-- If a given file_id has no parents, it was created "ex nihilo".
+CREATE TABLE "file_id_parents" (
+	"id"	INTEGER,
+	"file_id"	INTEGER NOT NULL,
+	"parent_id"	INTEGER NOT NULL,
+	"order"	INTEGER NOT NULL,
+	UNIQUE("file_id", "parent_id")
+	PRIMARY KEY("id" AUTOINCREMENT)
+	FOREIGN KEY ("file_id") REFERENCES "file_ids" ("id")
+	FOREIGN KEY ("parent_id") REFERENCES "file_ids" ("id")
+)
+
+CREATE INDEX file_id_parents_file_id_idx ON file_id_parents("file_id");
+CREATE INDEX file_id_parents_parent_id_idx ON file_id_parents("parent_id");
 
 CREATE TABLE "blobs" (
 	"id"	INTEGER,
@@ -146,21 +164,6 @@ CREATE TABLE "tree_members" (
 CREATE INDEX tree_members_tree_id_idx ON tree_members("tree_id");
 CREATE INDEX tree_members_file_id_idx ON tree_members("file_id");
 CREATE INDEX tree_members_blob_id_idx ON tree_members("blob_id");
-
--- If a given file_id has no parents, it was created "ex nihilo".
-CREATE TABLE "file_id_parents" (
-	"id"	INTEGER,
-	"file_id"	INTEGER NOT NULL,
-	"parent_id"	INTEGER NOT NULL,
-	"order"	INTEGER NOT NULL,
-	UNIQUE("file_id", "parent_id")
-	PRIMARY KEY("id" AUTOINCREMENT)
-	FOREIGN KEY ("file_id") REFERENCES "file_ids" ("id")
-	FOREIGN KEY ("parent_id") REFERENCES "file_ids" ("id")
-)
-
-CREATE INDEX file_id_parents_file_id_idx ON file_id_parents("file_id");
-CREATE INDEX file_id_parents_parent_id_idx ON file_id_parents("parent_id");
 
 -- Each blob chunk is compressed individually, so that we can decompress them
 -- individually later when streaming them.

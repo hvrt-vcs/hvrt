@@ -1,21 +1,23 @@
 -- It is an error if there is more than one entry in this table. We do not
 -- directly insert the version value in this init script so that we avoid
 -- updating the script with every release of the software.
-CREATE TABLE "vcs_version" (
-	"id"	INTEGER,
-	"version"	TEXT NOT NULL, -- semantic version
-	"created_at" INTEGER DEFAULT strftime('%s','now'),
-	"modified_at" INTEGER DEFAULT strftime('%s','now'),
-	PRIMARY KEY("id" AUTOINCREMENT)
-)
+CREATE TABLE vcs_version (
+  "id"	INTEGER,
+
+  --  -- semantic version
+	"version"	TEXT NOT NULL,
+	"created_at" INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	"modified_at" INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY ("id" AUTOINCREMENT)
+);
 
 CREATE TABLE "tags" (
 	"name"	TEXT NOT NULL,
 	"annotation"	TEXT,
 	"is_hidden" BOOLEAN NOT NULL DEFAULT FALSE,
 	"is_branch" BOOLEAN NOT NULL DEFAULT FALSE,
-	"created_at" INTEGER DEFAULT strftime('%s','now'),
-	PRIMARY KEY("name")
+	"created_at" INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY ("name")
 )
 
 
@@ -92,8 +94,8 @@ CREATE TABLE "bundles" (
 	-- Do bundles really _need_ a name? perhaps it isn't necessary to make it NOT NULL and UNIQUE.
 	"name"	TEXT NOT NULL,
 	"message"	TEXT,
-	"created_at" INTEGER DEFAULT strftime('%s','now'),
-	"modified_at" INTEGER DEFAULT strftime('%s','now'),
+	"created_at" INTEGER DEFAULT CURRENT_TIMESTAMP,
+	"modified_at" INTEGER DEFAULT CURRENT_TIMESTAMP,
 	UNIQUE ("name")
 	PRIMARY KEY ("id" AUTOINCREMENT)
 )
@@ -103,7 +105,7 @@ CREATE TABLE "bundle_commits" (
 	"bundle_id"	INTEGER NOT NULL,
 	"commit_hash"	TEXT NOT NULL,
 	"commit_hash_algo"	TEXT NOT NULL,
-	"created_at" INTEGER DEFAULT strftime('%s','now'),
+	"created_at" INTEGER DEFAULT CURRENT_TIMESTAMP,
 
 	-- A commit should never be part of more than one bundle, so make that the primary key.
 	PRIMARY KEY ("commit_hash", "commit_hash_algo")

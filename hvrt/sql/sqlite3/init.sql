@@ -174,6 +174,16 @@ CREATE TABLE blobs (
 	PRIMARY KEY ("hash", "hash_algo")
 );
 
+CREATE TABLE unversioned_files (
+	"path"	TEXT NOT NULL,
+	"blob_hash"	TEXT NOT NULL,
+	"blob_hash_algo"	TEXT NOT NULL,
+	"created_at" INTEGER DEFAULT CURRENT_TIMESTAMP,
+
+	PRIMARY KEY ("path")
+	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE
+);
+
 CREATE TABLE tree_members (
 	"tree_hash"	TEXT NOT NULL,
 	"tree_hash_algo"	TEXT NOT NULL,

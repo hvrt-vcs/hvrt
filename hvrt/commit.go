@@ -6,7 +6,5 @@ import (
 // _ "modernc.org/sqlite"
 )
 
-
-// init sets initial values for variables used in the package.
 func init() {
 }

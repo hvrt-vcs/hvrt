@@ -1,5 +1,5 @@
 -- It is an error if there is more than one entry in this table. We do not
--- directly insert the version value in this init script so that we avoid
+-- directly hardcode the version value into this init script so that we avoid
 -- updating the script with every release of the software.
 CREATE TABLE vcs_version (
 	"id"	INTEGER,
@@ -10,6 +10,9 @@ CREATE TABLE vcs_version (
 	"modified_at" INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY ("id" AUTOINCREMENT)
 );
+
+-- Insert the version as a parameter value when we run this init script.
+INSERT INTO vcs_version ("version") VALUES ($1);
 
 CREATE TABLE tags (
 	"name"	TEXT NOT NULL,
@@ -116,42 +119,45 @@ CREATE INDEX commit_parents_parent_id_idx ON commit_parents("parent_hash", "pare
 -- Bundles can be used in place of squashing to preserve commit history. They
 -- are ephemeral metadata that is not hashed into the merkle tree.
 CREATE TABLE bundles (
-	"id"	INTEGER,
+	-- The hash of a bundle is the hash of all it's child commit hashes. In what
+	-- order should they be hashed? Sorted by hash value before hashing?
+	"hash"	TEXT NOT NULL,
+	"hash_algo"	TEXT NOT NULL,
 
-	-- Do bundles really _need_ a name? perhaps it isn't necessary to make it NOT NULL and UNIQUE.
-	"name"	TEXT NOT NULL,
+	-- Should the above hash include the message and the time? I think probably
+	-- yes.
 	"message"	TEXT,
-	"created_at" INTEGER DEFAULT CURRENT_TIMESTAMP,
-	"modified_at" INTEGER DEFAULT CURRENT_TIMESTAMP,
-	UNIQUE ("name")
-	PRIMARY KEY ("id" AUTOINCREMENT)
+	"time" INTEGER DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY ("hash", "hash_algo")
 );
 
 CREATE TABLE bundle_commits (
-	"id"	INTEGER,
-	"bundle_id"	INTEGER NOT NULL,
+	"bundle_hash"	TEXT NOT NULL,
+	"bundle_hash_algo"	TEXT NOT NULL,
+
 	"commit_hash"	TEXT NOT NULL,
 	"commit_hash_algo"	TEXT NOT NULL,
-	"created_at" INTEGER DEFAULT CURRENT_TIMESTAMP,
 
 	-- A commit should never be part of more than one bundle, so make that the primary key.
 	PRIMARY KEY ("commit_hash", "commit_hash_algo")
 	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT
-	FOREIGN KEY ("bundle_id") REFERENCES "bundles" ("id") ON DELETE CASCADE
+	FOREIGN KEY ("bundle_hash", "bundle_hash_algo") REFERENCES "bundles" ("hash", "hash_algo") ON DELETE CASCADE
 );
 
-CREATE INDEX bundle_commits_bundle_id_idx ON bundle_commits("bundle_id");
+CREATE INDEX bundle_commits_hash_idx ON bundle_commits("bundle_hash", "bundle_hash_algo");
 
 CREATE TABLE file_ids (
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
 	"path"	TEXT NOT NULL,
-	PRIMARY KEY("hash", "hash_algo")
+	PRIMARY KEY ("hash", "hash_algo")
 
 	-- ALthough the `UNIQUE` constraint below is not needed internally to this
 	-- table, it is required for the `tree_members` table to ensure that two
-	-- separate file IDs with the same path value are not added to a single tree.
-	-- See the constraints on the `tree_members` table for more details.
+	-- separate file IDs with the same path value are not added to a single tree
+	-- AND that the `("hash", "hash_algo", "path")` tuple in `tree_members`
+	-- actually corresponds to a real entry in this table. See the constraints on
+	-- the `tree_members` table for more details.
 	UNIQUE ("hash", "hash_algo", "path")
 );
 
@@ -211,11 +217,11 @@ CREATE TABLE blob_chunks (
 	"blob_hash"	TEXT NOT NULL,
 	"blob_hash_algo"	TEXT NOT NULL,
 
-	-- there is no simple constraint to check that start and end byte indices
+	-- There is no simple constraint to check that start and end byte indices
 	-- don't overlap between sibling blob chunks, so this will likely need to be
 	-- checked by a more complicated expression in the SQL code at the time of
 	-- insertion. Or just have a consistency check that can be run lazily
-	-- "offline".
+	-- "offline" after insertion.
 
 	-- The benefit of using start and end indices is that we can change the chunk
 	-- size in the configuration and we don't need to rebuild previous entries in
@@ -225,7 +231,7 @@ CREATE TABLE blob_chunks (
 	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
 	"data"	BLOB NOT NULL,
 	PRIMARY KEY ("blob_hash", "blob_hash_algo", "start_byte")
-	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE RESTRICT
+	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE
 );
 
 CREATE INDEX blb_chnks_blob_idx ON blob_chunks("blob_hash", "blob_hash_algo");

@@ -1,15 +1,14 @@
 package hvrt
 
 import (
-  "embed"
-// "modernc.org/sqlite"
+	"embed"
+	// "modernc.org/sqlite"
 )
 
-// content is our static web server content.
+// SQL files for all operations for all supported DB dialects
+//
 //go:embed sql
 var SQLFiles embed.FS
 
-// init sets initial values for variables used in the package.
 func init() {
-  // fmt.Println(sql_files)
 }

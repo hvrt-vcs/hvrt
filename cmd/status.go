@@ -27,7 +27,7 @@ var statusCmd = &cobra.Command{
 	Short: "Print the status of the given repo and work tree.",
 	Run: func(cmd *cobra.Command, args []string) {
 		fhpchan := make(chan hvrt.FileHashPair)
-		stat, _ := hvrt.Status(RepoPath, WorkTree)
+		stat, _ := hvrt.Status(rootFlags.RepoPath, rootFlags.WorkTree)
 		for _, mod_path := range stat.ModPaths {
 			go func(mod_path string) {
 				fhp, err := hvrt.HashFile(mod_path)

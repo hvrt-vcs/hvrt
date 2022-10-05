@@ -37,18 +37,21 @@ func Execute() {
 	}
 }
 
-var RepoPath string
-var WorkTree string
+var rootFlags = struct {
+	RepoPath string
+	WorkTree string
+}{
+	RepoPath: "./.hvrt/repo.hvrt",
+	WorkTree: ".",
+}
 
 func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	RepoPath = "./.hvrt/repo.hvrt"
-	WorkTree = "."
 
-	rootCmd.PersistentFlags().StringVar(&RepoPath, "repo", RepoPath, "Path to repo (default is ./.hvrt/repo.hvrt)")
-	rootCmd.PersistentFlags().StringVar(&WorkTree, "work-tree", WorkTree, "Path to work tree (default is .)")
+	rootCmd.PersistentFlags().StringVar(&rootFlags.RepoPath, "repo", rootFlags.RepoPath, "Path to repo")
+	rootCmd.PersistentFlags().StringVar(&rootFlags.WorkTree, "work-tree", rootFlags.WorkTree, "Path to work tree")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

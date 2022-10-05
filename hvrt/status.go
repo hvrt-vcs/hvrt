@@ -116,8 +116,7 @@ type RepoStat struct {
 }
 
 func MatchesIgnore(root, path string, de fs.DirEntry, patterns []string) bool {
-	for i := range patterns {
-		pat := patterns[i]
+	for _, pat := range patterns {
 		if strings.HasSuffix(pat, "/") {
 			if !de.IsDir() {
 				continue
@@ -157,7 +156,8 @@ func recurseWorktree(wt_root, cur_dir string, rstat *RepoStat, all_patterns []st
 		if entry.IsDir() {
 			recurseWorktree(wt_root, filepath.Join(cur_dir, entry.Name()), rstat, loc_patterns)
 		} else {
-			rstat.ModPaths = append(rstat.ModPaths, full_path)
+			rel, _ := filepath.Rel(wt_root, full_path)
+			rstat.ModPaths = append(rstat.ModPaths, rel)
 		}
 	}
 }

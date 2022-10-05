@@ -38,28 +38,56 @@ CREATE TABLE commits (
 	"time"	INTEGER NOT NULL, -- seconds since the unix epoch in UTC
 
 	-- "tz_offset" is used to shift "time" by the given UTC offset (mostly for
-	-- display purposes). A `NULL` offset is considered "localtime"; for sorting
-	-- purposes "localtime" is treated as UTC (since we have no way of knowing
-	-- what it actually is).
-	"tz_offset"	INTEGER,  -- Should this be taken into account for hashing?
+	-- display purposes).
+
+	-- Should TZ offset be taken into account for hashing?
+	"tz_offset_hours"	INTEGER CHECK("tz_offset_hours" BETWEEN -12 AND 12) NOT NULL,
+	"tz_offset_minutes"	INTEGER CHECK("tz_offset_minutes" BETWEEN 0 AND 59) NOT NULL,
 
 	"message"	TEXT NOT NULL,
 	"committer"	TEXT NOT NULL,
 	"author"	TEXT NOT NULL,
 	"tree_hash"	TEXT NOT NULL,
 	"tree_hash_algo"	TEXT NOT NULL,
-	PRIMARY KEY("hash", "hash_algo")
+	PRIMARY KEY ("hash", "hash_algo")
 	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT
 );
 
 CREATE INDEX commit_times_idx ON commits("time");
+
+CREATE TABLE commit_annotations (
+	"id" INTEGER,
+	"commit_hash"	TEXT NOT NULL,
+	"commit_hash_algo"	TEXT NOT NULL,
+	"annotation_committer"	TEXT NOT NULL,
+	"annotation_author"	TEXT NOT NULL,
+	-- Latest annotation "wins". Previous annotations are listed as "Previous edits".
+	"created_at" INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+	-- Start Annotatable fields
+	"time"	INTEGER NOT NULL, -- seconds since the unix epoch in UTC
+	"tz_offset_hours"	INTEGER CHECK("tz_offset_hours" BETWEEN -12 AND 12) NOT NULL,
+	"tz_offset_minutes"	INTEGER CHECK("tz_offset_minutes" BETWEEN 0 AND 59) NOT NULL,
+
+	"message"	TEXT NOT NULL,
+	"committer"	TEXT NOT NULL,
+	"author"	TEXT NOT NULL,
+	-- End Annotatable fields
+
+	PRIMARY KEY ("id" AUTOINCREMENT)
+	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT
+);
+
+CREATE INDEX annotation_hashes_idx ON commit_annotations("commit_hash", "commit_hash_algo");
+CREATE INDEX annotation_time_idx ON commit_annotations("time");
+CREATE INDEX annotation_creation_idx ON commit_annotations("created_at");
 
 CREATE TABLE commit_tags (
 	-- associated branch names/ids are NOT considered when hashing commits
 	"commit_hash"	TEXT NOT NULL,
 	"commit_hash_algo"	TEXT NOT NULL,
 	"tag_name"	TEXT NOT NULL,
-	PRIMARY KEY("commit_hash", "commit_hash_algo", "tag_name")
+	PRIMARY KEY ("commit_hash", "commit_hash_algo", "tag_name")
 	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT
 	FOREIGN KEY ("tag_name") REFERENCES "tags" ("name") ON DELETE CASCADE
 );
@@ -77,7 +105,7 @@ CREATE TABLE commit_parents (
 	"parent_hash_algo"	TEXT NOT NULL,
 	"parent_type"	TEXT CHECK("parent_type" IN ('regular', 'merge', 'cherry_pick', 'replay', 'reorder')) NOT NULL,
 	"order"	INTEGER NOT NULL,
-	PRIMARY KEY("commit_hash", "commit_hash_algo", "parent_hash", "parent_hash_algo")
+	PRIMARY KEY ("commit_hash", "commit_hash_algo", "parent_hash", "parent_hash_algo")
 	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT
 	FOREIGN KEY ("parent_hash", "parent_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT
 );
@@ -186,7 +214,7 @@ CREATE TABLE blob_chunks (
 	"end_byte"	INTEGER NOT NULL,
 	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
 	"data"	BLOB NOT NULL,
-	PRIMARY KEY("blob_hash", "blob_hash_algo", "start_byte")
+	PRIMARY KEY ("blob_hash", "blob_hash_algo", "start_byte")
 	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE RESTRICT
 );
 

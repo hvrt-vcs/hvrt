@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"os"
 
@@ -17,6 +19,15 @@ var rootCmd = &cobra.Command{
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if rootFlags.ChangeDir != "" {
+			cderr := os.Chdir(rootFlags.ChangeDir)
+			if cderr != nil {
+				return errors.New(fmt.Sprintf("%s", cderr))
+			}
+		}
+		return nil
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -30,7 +41,6 @@ func Execute() {
 	}()
 	err := rootCmd.Execute()
 	if err != nil {
-		log.Printf("Encountered error: %s", err)
 		os.Exit(1)
 	} else {
 		os.Exit(0)
@@ -38,11 +48,13 @@ func Execute() {
 }
 
 var rootFlags = struct {
-	RepoPath string
-	WorkTree string
+	RepoPath  string
+	WorkTree  string
+	ChangeDir string
 }{
-	RepoPath: "./.hvrt/repo.hvrt",
-	WorkTree: ".",
+	RepoPath:  "./.hvrt/repo.hvrt",
+	WorkTree:  ".",
+	ChangeDir: "",
 }
 
 func init() {
@@ -52,6 +64,15 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&rootFlags.RepoPath, "repo", rootFlags.RepoPath, "Path to repo")
 	rootCmd.PersistentFlags().StringVar(&rootFlags.WorkTree, "work-tree", rootFlags.WorkTree, "Path to work tree")
+	rootCmd.PersistentFlags().StringVarP(
+		&rootFlags.ChangeDir,
+		"change-directory", "C",
+		rootFlags.ChangeDir,
+		`Run as if started in given path instead of the current working directory.
+This option affects options that expect path name like --repo and
+--work-tree in that their interpretations of the path names would be made
+relative to the working directory caused by the -C option.`,
+	)
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

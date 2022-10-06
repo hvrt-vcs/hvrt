@@ -11,6 +11,13 @@ import (
 	// "github.com/eestrada/hvrt/hvrt"
 )
 
+const (
+	ReturnSuccess         = 0
+	ReturnGenericError    = 1
+	ReturnArgumentError   = 2
+	ReturnUnexpectedError = 123
+)
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "hvrt",
@@ -23,6 +30,7 @@ var rootCmd = &cobra.Command{
 		if rootFlags.ChangeDir != "" {
 			cderr := os.Chdir(rootFlags.ChangeDir)
 			if cderr != nil {
+				returnCode = ReturnArgumentError
 				return errors.New(fmt.Sprintf("%s", cderr))
 			}
 		}
@@ -36,16 +44,22 @@ func Execute() {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Encountered unexpected error: %s", r)
-			os.Exit(123)
+			os.Exit(ReturnUnexpectedError)
 		}
 	}()
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(1)
+		if returnCode != 0 {
+			os.Exit(returnCode)
+		} else {
+			os.Exit(ReturnGenericError)
+		}
 	} else {
-		os.Exit(0)
+		os.Exit(ReturnSuccess)
 	}
 }
+
+var returnCode int
 
 var rootFlags = struct {
 	RepoPath  string
@@ -58,6 +72,9 @@ var rootFlags = struct {
 }
 
 func init() {
+	// Assume success
+	returnCode = ReturnSuccess
+
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.

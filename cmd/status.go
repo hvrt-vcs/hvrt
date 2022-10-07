@@ -24,7 +24,7 @@ func init() {
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Print the status of the given repo and work tree.",
+	Short: "Print the status of the given repository and work tree",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fhpchan := make(chan hvrt.FileHashPair)
 		stat, _ := hvrt.Status(rootFlags.RepoPath, rootFlags.WorkTree)

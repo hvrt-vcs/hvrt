@@ -6,13 +6,14 @@ CREATE TABLE vcs_version (
 
 	-- semantic version
 	"version"	TEXT NOT NULL,
-	"created_at" INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	"modified_at" INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	"created_at" INTEGER NOT NULL,
+	"modified_at" INTEGER NOT NULL,
 	PRIMARY KEY ("id" AUTOINCREMENT)
 );
 
 -- Insert the version as a parameter value when we run this init script.
-INSERT INTO vcs_version ("version") VALUES ($1);
+INSERT INTO vcs_version ("version", "created_at", "modified_at")
+	VALUES ($1, strftime("%s", CURRENT_TIMESTAMP), strftime("%s", CURRENT_TIMESTAMP));
 
 CREATE TABLE tags (
 	"name"	TEXT NOT NULL,

@@ -1,17 +1,22 @@
 package hvrt
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	_ "modernc.org/sqlite"
-	"net/url"
 	"os"
-	"context"
 	"path/filepath"
 )
 
 func Init(repo_file string) error {
-	initScript, err := SQLFiles.ReadFile("sql/sqlite3/init.sql")
+	dbtype := "sqlite"
+	script_path := fmt.Sprintf("sql/%s/init.sql", dbtype)
+	qparms := map[string]string{
+		"_foreign_keys":        "on",
+		"_case_sensitive_like": "on",
+	}
+	initScript, err := SQLFiles.ReadFile(script_path)
 	if err != nil {
 		return err
 	}
@@ -24,9 +29,7 @@ func Init(repo_file string) error {
 		return err
 	}
 
-	sql_db, err := sql.Open("sqlite",
-		fmt.Sprintf("%s?%s", repo_file, url.QueryEscape("_foreign_keys=1&_case_sensitive_like=1")),
-	)
+	sql_db, err := sql.Open(dbtype, SqliteDSN(repo_file, qparms))
 	if err != nil {
 		return err
 	}
@@ -44,4 +47,6 @@ func Init(repo_file string) error {
 		return err
 	}
 	return tx.Commit()
+
+	// TODO: create config.toml file.
 }

@@ -22,5 +22,6 @@ func SqliteDSN(path string, parms map[string]string) string {
 		qparms = append(qparms, fmt.Sprintf("%s=%s", key, val))
 	}
 	qstring := strings.Join(qparms, "&")
-	return fmt.Sprintf("%s?%s", path, url.QueryEscape(qstring))
+	dsn := fmt.Sprintf("%s?%s", path, url.QueryEscape(qstring))
+	return dsn
 }

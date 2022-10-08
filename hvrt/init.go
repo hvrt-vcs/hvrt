@@ -37,7 +37,7 @@ func Init(repo_file string) error {
 		return err
 	}
 
-	_, err = sql_db.Exec(initString, SemanticVersion)
+	_, err = tx.Exec(initString, SemanticVersion)
 	if err != nil {
 		// Ignore rollback errors, for now.
 		_ = tx.Rollback()

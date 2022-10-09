@@ -3,10 +3,12 @@ package hvrt
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
+	"regexp"
 )
 
 func Init(repo_file string) error {
@@ -44,6 +46,13 @@ func Init(repo_file string) error {
 	if err != nil {
 		// Ignore rollback errors, for now.
 		_ = tx.Rollback()
+		matched, _ := regexp.MatchString(
+			`table vcs_version already exists`,
+			err.Error(),
+		)
+		if matched {
+			err = errors.New("Repo already initialized")
+		}
 		return err
 	}
 	return tx.Commit()

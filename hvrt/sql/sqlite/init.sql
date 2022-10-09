@@ -1,6 +1,6 @@
 -- We do not directly hardcode the version value into this init script so that
 -- we avoid updating the script with every release of the software.
-CREATE TABLE IF NOT EXISTS vcs_version (
+CREATE TABLE vcs_version (
 	"id"	INTEGER,
 
 	"prev"	INTEGER REFERENCES vcs_version("id"),

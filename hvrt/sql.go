@@ -16,6 +16,12 @@ var SQLFiles embed.FS
 func init() {
 }
 
+var SqliteDefaultOpts = map[string]string{
+	"_foreign_keys":        "on",
+	"_case_sensitive_like": "on",
+	"mode":                 "rwc",
+}
+
 func SqliteDSN(path string, parms map[string]string) string {
 	qparms := []string{}
 	for key, val := range parms {
@@ -24,4 +30,12 @@ func SqliteDSN(path string, parms map[string]string) string {
 	qstring := strings.Join(qparms, "&")
 	dsn := fmt.Sprintf("%s?%s", path, url.QueryEscape(qstring))
 	return dsn
+}
+
+func CopyOps(ops map[string]string) map[string]string {
+	rmap := make(map[string]string)
+	for key, val := range ops {
+		rmap[key] = val
+	}
+	return rmap
 }

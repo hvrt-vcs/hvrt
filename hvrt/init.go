@@ -14,10 +14,7 @@ import (
 func Init(repo_file string) error {
 	dbtype := "sqlite"
 	script_path := fmt.Sprintf("sql/%s/init.sql", dbtype)
-	qparms := map[string]string{
-		"_foreign_keys":        "on",
-		"_case_sensitive_like": "on",
-	}
+	qparms := CopyOps(SqliteDefaultOpts)
 	initScript, err := SQLFiles.ReadFile(script_path)
 	if err != nil {
 		return err

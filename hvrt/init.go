@@ -13,7 +13,7 @@ import (
 
 func Init(repo_file string) error {
 	dbtype := "sqlite"
-	script_path := fmt.Sprintf("sql/%s/init.sql", dbtype)
+	script_path := fmt.Sprintf("sql/%s/repo/init.sql", dbtype)
 	qparms := CopyOps(SqliteDefaultOpts)
 	initScript, err := SQLFiles.ReadFile(script_path)
 	if err != nil {

@@ -29,5 +29,5 @@
   # infomation that is relavent.
 
   # Unlike git, no working tree state should "live" inside the repo area. This
-  # is part of what makes working with multiple work trees harder in git; it
+  # is part of what makes working with multiple work trees harder in git; git
   # assumes a single work tree workflow and things can get weird otherwise.

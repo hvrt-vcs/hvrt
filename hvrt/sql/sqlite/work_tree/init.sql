@@ -64,6 +64,12 @@ CREATE TABLE staged_to_remove (
 	"fid"	TEXT NOT NULL,
 	"fid_algo"	TEXT NOT NULL,
 	"path"	TEXT NOT NULL,
+
+	-- An explicit removal is one triggered by `hvrt rm` or `hvrt mv`. If the file
+	-- simply disappeared and its removal was recorded by running `hvrt add .` or
+	-- commiting, then it will not be considered an explicit removal. This will
+	-- effect how mv/cp/rm heuristics are determined.
+	"explicit"	BOOLEAN NOT NULL DEFAULT FALSE,
 	UNIQUE ("path")
 	PRIMARY KEY ("fid", "fid_algo")
 );

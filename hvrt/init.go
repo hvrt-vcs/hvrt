@@ -22,7 +22,7 @@ func prepError(tx_err error) error {
 	return tx_err
 }
 
-func InitWorkTree(work_tree string, inner_thunk Thunk) error {
+func InitWorkTree(work_tree string, inner_thunk ThunkErr) error {
 	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
 	work_tree_script_path := "sql/sqlite/work_tree/init.sql"
 	qparms := CopyOps(SqliteDefaultOpts)
@@ -68,7 +68,7 @@ func InitWorkTree(work_tree string, inner_thunk Thunk) error {
 	return wt_tx.Commit()
 }
 
-func InitLocal(repo_file string, inner_thunk Thunk) error {
+func InitLocal(repo_file string, inner_thunk ThunkErr) error {
 	dbtype := "sqlite"
 	repo_script_path := fmt.Sprintf("sql/%s/repo/init.sql", dbtype)
 

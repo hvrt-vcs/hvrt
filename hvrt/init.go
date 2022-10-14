@@ -116,10 +116,9 @@ func InitLocal(repo_file string, inner_thunk ThunkErr) error {
 }
 
 func InitLocalAll(repo_file, work_tree string) error {
-	return InitLocal(repo_file, func() error {
-		return InitWorkTree(work_tree, func() error {
-			// add creation of toml config here as the deepest layer
-			return nil
-		})
-	})
+	return InitLocal(
+		repo_file,
+		// add creation of toml config here as the deepest layer
+		func() error { return InitWorkTree(work_tree, NilThunkErr) },
+	)
 }

@@ -5,6 +5,8 @@ import (
 	"strconv"
 )
 
+type Thunk func() error
+
 var _DEBUG int
 
 const (

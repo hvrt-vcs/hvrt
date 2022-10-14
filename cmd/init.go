@@ -23,7 +23,7 @@ var initCmd = &cobra.Command{
 	working tree and initializing the repository internally to it (like git).`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		err := hvrt.InitLocal(rootFlags.RepoPath, rootFlags.WorkTree)
+		err := hvrt.InitLocalAll(rootFlags.RepoPath, rootFlags.WorkTree)
 		if err != nil {
 			return err
 		} else {

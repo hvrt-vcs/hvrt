@@ -22,7 +22,7 @@ func prepError(tx_err error) error {
 	return tx_err
 }
 
-func InitWorkTree(work_tree string) error {
+func InitWorkTree(work_tree string, inner_thunk Thunk) error {
 	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
 	work_tree_script_path := "sql/sqlite/work_tree/init.sql"
 	qparms := CopyOps(SqliteDefaultOpts)
@@ -58,10 +58,17 @@ func InitWorkTree(work_tree string) error {
 		_ = wt_tx.Rollback()
 		return prepError(err)
 	}
+
+	err = inner_thunk()
+	if err != nil {
+		// Ignore rollback errors, for now.
+		_ = wt_tx.Rollback()
+		return prepError(err)
+	}
 	return wt_tx.Commit()
 }
 
-func InitLocal(repo_file, work_tree string) error {
+func InitLocal(repo_file string, inner_thunk Thunk) error {
 	dbtype := "sqlite"
 	repo_script_path := fmt.Sprintf("sql/%s/repo/init.sql", dbtype)
 
@@ -97,7 +104,7 @@ func InitLocal(repo_file, work_tree string) error {
 		return prepError(err)
 	}
 
-	err = InitWorkTree(work_tree)
+	err = inner_thunk()
 	if err != nil {
 		// Ignore rollback errors, for now.
 		_ = repo_tx.Rollback()
@@ -106,4 +113,13 @@ func InitLocal(repo_file, work_tree string) error {
 	return repo_tx.Commit()
 
 	// TODO: create config.toml file.
+}
+
+func InitLocalAll(repo_file, work_tree string) error {
+	return InitLocal(repo_file, func() error {
+		return InitWorkTree(work_tree, func() error {
+			// add creation of toml config here as the deepest layer
+			return nil
+		})
+	})
 }

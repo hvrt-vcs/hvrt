@@ -7,6 +7,10 @@ import (
 
 var _DEBUG int
 
+const (
+	WorkTreeConfigDir = ".hvrt"
+)
+
 // init sets initial values for variables used in the package.
 func init() {
 	if val, present := os.LookupEnv("HVRT_DEBUG"); present && val != "" {

@@ -16,6 +16,44 @@ CREATE TABLE vcs_version (
 INSERT INTO vcs_version ("id", "version", "created_at", "modified_at")
 	VALUES (1, $1, strftime("%s", CURRENT_TIMESTAMP), strftime("%s", CURRENT_TIMESTAMP));
 
+-- XXX: The `blobs` and `blob_chunks` tables should be identical to the same
+-- tables in the repo so that when we create commits from the stage, all that we
+-- need to do is slurp data directly from here and dump it directly into the
+-- repo, no extra processing required.
+CREATE TABLE blobs (
+	"hash"	TEXT NOT NULL,
+	"hash_algo"	TEXT NOT NULL,
+	"byte_length"	INTEGER NOT NULL,
+	PRIMARY KEY ("hash", "hash_algo")
+);
+
+-- Each blob chunk is compressed individually, so that we can decompress them
+-- individually later when streaming them.
+CREATE TABLE blob_chunks (
+	"blob_hash"	TEXT NOT NULL,
+	"blob_hash_algo"	TEXT NOT NULL,
+
+	-- There is no simple constraint to check that start and end byte indices
+	-- don't overlap between sibling blob chunks, so this will likely need to be
+	-- checked by a more complicated expression in the SQL code at the time of
+	-- insertion. Or just have a consistency check that can be run lazily
+	-- "offline" after insertion.
+
+	-- The benefit of using start and end indices is that we can change the chunk
+	-- size in the configuration and we don't need to rebuild previous entries in
+	-- the database for the logic to keep working correctly.
+	"start_byte"	INTEGER NOT NULL,
+	"end_byte"	INTEGER NOT NULL,
+	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
+	"data"	BLOB NOT NULL,
+	PRIMARY KEY ("blob_hash", "blob_hash_algo", "start_byte")
+	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE INDEX blb_chnks_blob_idx ON blob_chunks("blob_hash", "blob_hash_algo");
+CREATE INDEX blb_chnks_start_byte_idx ON blob_chunks("start_byte");
+CREATE INDEX blb_chnks_end_byte_idx ON blob_chunks("end_byte");
+
 CREATE TABLE staged_to_add (
 	-- The data for this is just kept in a subdirectory of the worktree config
 	-- area. Since the work tree state is ephemeral, it isn't a problem that we
@@ -34,7 +72,10 @@ CREATE TABLE staged_to_add (
 	"added_at" INTEGER NOT NULL,
 
 	PRIMARY KEY ("path")
+	FOREIGN KEY ("hash", "hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
+
+CREATE INDEX staged_to_add_blob_idx ON staged_to_add("hash", "hash_algo");
 
 -- File id parents. Can have one, several, or none.
 CREATE TABLE staged_to_add_parents (
@@ -87,11 +128,12 @@ CREATE TABLE head_commit (
 -- users. I guess we just generally discourage detached heads, but still allow
 -- them for the sake of flexibility and for compatiblity with git.
 
--- Should only have one entry at any given time.
 CREATE TABLE current_tag (
+	-- Should only have one entry at any given time?
 	"name"	TEXT NOT NULL,
-	"annotation"	TEXT,
-	"is_hidden" BOOLEAN NOT NULL DEFAULT FALSE,
-	"is_branch" BOOLEAN NOT NULL DEFAULT FALSE,
+	"is_branch" BOOLEAN NOT NULL,
 	PRIMARY KEY ("name")
 );
+
+-- Insert default branch when we run this init script.
+INSERT INTO current_tag ("name", "is_branch") VALUES ($2, TRUE);

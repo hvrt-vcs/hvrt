@@ -1,5 +1,3 @@
--- We do not directly hardcode the version value into this init script so that
--- we avoid updating the script with every release of the software.
 CREATE TABLE vcs_version (
 	"id"	INTEGER,
 
@@ -12,6 +10,9 @@ CREATE TABLE vcs_version (
 	PRIMARY KEY ("id" AUTOINCREMENT)
 );
 
+-- We do not directly hardcode the version value into this init script so that
+-- we avoid updating the script with every release of the software.
+
 -- Insert the version as a parameter value when we run this init script.
 INSERT INTO vcs_version ("id", "version", "created_at", "modified_at")
 	VALUES (1, $1, strftime("%s", CURRENT_TIMESTAMP), strftime("%s", CURRENT_TIMESTAMP));
@@ -19,11 +20,20 @@ INSERT INTO vcs_version ("id", "version", "created_at", "modified_at")
 CREATE TABLE tags (
 	"name"	TEXT NOT NULL,
 	"annotation"	TEXT,
+
+	-- only one should be flagged true as default branch. Use a trigger or
+	-- constraint of some sort to ensure that this is the case.
+	"is_default" BOOLEAN NOT NULL DEFAULT FALSE,
 	"is_hidden" BOOLEAN NOT NULL DEFAULT FALSE,
-	"is_branch" BOOLEAN NOT NULL DEFAULT FALSE,
-	"created_at" INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	"is_branch" BOOLEAN NOT NULL,
+	"created_at" INTEGER NOT NULL,
+	UNIQUE ("is_default")
 	PRIMARY KEY ("name")
 );
+
+-- Insert default branch when we run this init script.
+INSERT INTO tags ("name", "is_default", "is_branch", "created_at")
+	VALUES ($2, TRUE, TRUE, strftime("%s", CURRENT_TIMESTAMP));
 
 -- It is theoretically possible to have a single tree shared between multiple
 -- commits. This can happen under the following conditions: the file IDs and
@@ -100,9 +110,10 @@ CREATE TABLE commit_tags (
 CREATE INDEX tag_commits_idx ON commit_tags("commit_hash", "commit_hash_algo");
 CREATE INDEX commit_tags_idx ON commit_tags("tag_name");
 
+CREATE TABLE commit_parents (
 -- If a given commit has no parents, it is a root commit.
 -- If a given commit points to parent that does not exist, it is because of a shallow checkout.
-CREATE TABLE commit_parents (
+
 	"id"	INTEGER,
 	"commit_hash"	TEXT NOT NULL,
 	"commit_hash_algo"	TEXT NOT NULL,
@@ -118,11 +129,13 @@ CREATE TABLE commit_parents (
 CREATE INDEX commit_parents_commit_id_idx ON commit_parents("commit_hash", "commit_hash_algo");
 CREATE INDEX commit_parents_parent_id_idx ON commit_parents("parent_hash", "parent_hash_algo");
 
--- Bundles can be used in place of squashing to preserve commit history. They
--- are ephemeral metadata that is not hashed into the merkle tree.
 CREATE TABLE bundles (
+	-- Bundles can be used in place of squashing to preserve commit history. They
+	-- are ephemeral metadata that is not hashed into the merkle tree.
+
 	-- The hash of a bundle is the hash of all it's child commit hashes. In what
-	-- order should they be hashed? Sorted by hash value before hashing?
+	-- order should they be hashed? Sorted by hash value before hashing? It needs
+	-- to be deterministic.
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
 
@@ -163,8 +176,8 @@ CREATE TABLE file_ids (
 	UNIQUE ("hash", "hash_algo", "path")
 );
 
--- If a given file_id has no parents, it was created "ex nihilo".
 CREATE TABLE file_id_parents (
+-- If a given file_id has no parents, it was created "ex nihilo".
 	"file_id_hash"	TEXT NOT NULL,
 	"file_id_hash_algo"	TEXT NOT NULL,
 	"parent_hash"	TEXT NOT NULL,
@@ -213,8 +226,6 @@ CREATE INDEX tmemb_file_id_hashes_idx ON tree_members("file_id_hash");
 CREATE INDEX tmemb_paths_idx ON tree_members("path");
 CREATE INDEX tmemb_blobs_idx ON tree_members("blob_hash", "blob_hash_algo");
 
--- Each blob chunk is compressed individually, so that we can decompress them
--- individually later when streaming them.
 CREATE TABLE blob_chunks (
 	"blob_hash"	TEXT NOT NULL,
 	"blob_hash_algo"	TEXT NOT NULL,
@@ -230,6 +241,9 @@ CREATE TABLE blob_chunks (
 	-- the database for the logic to keep working correctly.
 	"start_byte"	INTEGER NOT NULL,
 	"end_byte"	INTEGER NOT NULL,
+
+	-- Each blob chunk is compressed individually, so that we can decompress them
+	-- individually later when streaming them.
 	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
 	"data"	BLOB NOT NULL,
 	PRIMARY KEY ("blob_hash", "blob_hash_algo", "start_byte")

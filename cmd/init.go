@@ -8,9 +8,11 @@ import (
 )
 
 var initFlags = struct {
-	Bare bool
+	Bare          bool
+	DefaultBranch string
 }{
-	Bare: false,
+	Bare:          false,
+	DefaultBranch: "trunk",
 }
 
 // initCmd represents the init command
@@ -23,7 +25,7 @@ var initCmd = &cobra.Command{
 	working tree and initializing the repository internally to it (like git).`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		err := hvrt.InitLocalAll(rootFlags.RepoPath, rootFlags.WorkTree)
+		err := hvrt.InitLocalAll(rootFlags.RepoPath, rootFlags.WorkTree, initFlags.DefaultBranch)
 		if err != nil {
 			return err
 		} else {
@@ -44,4 +46,5 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	initCmd.Flags().BoolVarP(&initFlags.Bare, "bare", "b", false, "Do not initialize a work tree")
+	initCmd.Flags().StringVarP(&initFlags.DefaultBranch, "default-branch", "d", initFlags.DefaultBranch, "default branch to use when initializing repo")
 }

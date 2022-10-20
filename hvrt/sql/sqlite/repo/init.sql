@@ -55,8 +55,10 @@ CREATE TABLE commits (
 	-- "tz_offset" is used to shift "time" by the given UTC offset (mostly for
 	-- display purposes).
 
-	-- Should TZ offset be taken into account for hashing?
+	-- Should TZ offset be taken into account for hashing? I want to say no, but I
+	-- think git takes it into account, so maybe yes?
 	"tz_offset_hours"	INTEGER CHECK("tz_offset_hours" BETWEEN -12 AND 12) NOT NULL,
+	-- offset minutes "inherits" the numerical sign of offset hours
 	"tz_offset_minutes"	INTEGER CHECK("tz_offset_minutes" BETWEEN 0 AND 59) NOT NULL,
 
 	"message"	TEXT NOT NULL,
@@ -153,7 +155,8 @@ CREATE TABLE bundle_commits (
 	"commit_hash"	TEXT NOT NULL,
 	"commit_hash_algo"	TEXT NOT NULL,
 
-	-- A commit should never be part of more than one bundle, so make that the primary key.
+	-- A commit should never be part of more than one bundle, so make that the
+	-- primary key.
 	PRIMARY KEY ("commit_hash", "commit_hash_algo")
 	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 	FOREIGN KEY ("bundle_hash", "bundle_hash_algo") REFERENCES "bundles" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED

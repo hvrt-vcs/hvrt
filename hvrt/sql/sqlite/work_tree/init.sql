@@ -115,11 +115,13 @@ CREATE TABLE staged_to_remove (
 	PRIMARY KEY ("fid", "fid_algo")
 );
 
--- Should only have one entry at any given time.
 CREATE TABLE head_commit (
+-- Should only have one entry at any given time. Ensure this by always
+-- attempting to insert with an `id` value of `1`.
+	"id"	INTEGER NOT NULL,
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
-	PRIMARY KEY ("hash", "hash_algo")
+	PRIMARY KEY ("id")
 );
 
 -- Should a "detached head" state be possible, like in git? Or do all commits
@@ -129,11 +131,13 @@ CREATE TABLE head_commit (
 -- them for the sake of flexibility and for compatiblity with git.
 
 CREATE TABLE current_tag (
-	-- Should only have one entry at any given time?
+	-- Should only have one entry at any given time? Ensure this by always
+	-- attempting to insert with an `id` value of `1`.
+	"id"	INTEGER NOT NULL,
 	"name"	TEXT NOT NULL,
 	"is_branch" BOOLEAN NOT NULL,
-	PRIMARY KEY ("name")
+	PRIMARY KEY ("id")
 );
 
 -- Insert default branch when we run this init script.
-INSERT INTO current_tag ("name", "is_branch") VALUES ($2, TRUE);
+INSERT INTO current_tag ("id", "name", "is_branch") VALUES (1, $2, TRUE);

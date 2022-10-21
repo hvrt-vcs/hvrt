@@ -65,10 +65,12 @@ var rootFlags = struct {
 	RepoPath  string
 	WorkTree  string
 	ChangeDir string
+	Unsafe    bool
 }{
 	RepoPath:  "./.hvrt/repo.hvrt",
 	WorkTree:  ".",
 	ChangeDir: "",
+	Unsafe:    false,
 }
 
 func init() {
@@ -79,6 +81,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
+	rootCmd.PersistentFlags().BoolVar(&rootFlags.Unsafe, "unsafe", rootFlags.Unsafe, "Allow unsafe operations to proceed")
 	rootCmd.PersistentFlags().StringVar(&rootFlags.RepoPath, "repo", rootFlags.RepoPath, "Path to repo")
 	rootCmd.PersistentFlags().StringVar(&rootFlags.WorkTree, "work-tree", rootFlags.WorkTree, "Path to work tree")
 	rootCmd.PersistentFlags().StringVarP(
@@ -86,7 +89,7 @@ func init() {
 		"change-directory", "C",
 		rootFlags.ChangeDir,
 		`Run as if started in given path instead of the current working directory.
-This option affects options that expect path name like --repo and
+This option affects options that expect a path name like --repo and
 --work-tree in that their interpretations of the path names would be made
 relative to the working directory caused by the -C option.`,
 	)

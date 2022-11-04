@@ -1,5 +1,13 @@
 # Havarti
 
+### WIP:
+I have opened up havarti publicly in an incomplete, non-working state. 
+I am starting a new job and thought it best to avoid any potential conficts
+of interest by allowing this work to be done out in the open. Consequently,
+Havarti will have lots of rough edges for a while, and I apologize. You are
+welcome to contribute to get it to a usable state if Havarti's goals align
+with your own.
+
 ## What do you do when you take a snapshot? You say "Cheese!"
 
 #### Havarti is a Hybrid VCS that works both distributed and/or centralized.

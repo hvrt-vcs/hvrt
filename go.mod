@@ -3,6 +3,7 @@ module github.com/eestrada/hvrt
 go 1.19
 
 require (
+	github.com/klauspost/compress v1.15.11
 	github.com/spf13/cobra v1.5.0
 	golang.org/x/crypto v0.0.0-20220926161630-eccd6366d1be
 	modernc.org/sqlite v1.19.1
@@ -12,7 +13,6 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/klauspost/compress v1.15.11 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect

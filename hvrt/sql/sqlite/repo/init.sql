@@ -50,53 +50,57 @@ CREATE TABLE trees (
 CREATE TABLE commits (
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
-	"time"	INTEGER NOT NULL, -- seconds since the unix epoch in UTC
 
-	-- "tz_offset" is used to shift "time" by the given UTC offset (mostly for
-	-- display purposes).
-
-	-- Should TZ offset be taken into account for hashing? I want to say no, but I
-	-- think git takes it into account, so maybe yes?
-	"tz_offset_hours"	INTEGER CHECK("tz_offset_hours" BETWEEN -12 AND 12) NOT NULL,
-	-- offset minutes "inherits" the numerical sign of offset hours
-	"tz_offset_minutes"	INTEGER CHECK("tz_offset_minutes" BETWEEN 0 AND 59) NOT NULL,
-
-	"message"	TEXT NOT NULL,
-	"committer"	TEXT NOT NULL,
-	"author"	TEXT NOT NULL,
+	-- The tree hash and algo cannot be header entries since we need referential
+	-- integrity of DB entries.
 	"tree_hash"	TEXT NOT NULL,
 	"tree_hash_algo"	TEXT NOT NULL,
 	PRIMARY KEY ("hash", "hash_algo")
 	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
-CREATE INDEX commit_times_idx ON commits("time");
+CREATE TABLE commit_headers (
+	"commit_hash"	TEXT NOT NULL,
+	"commit_hash_algo"	TEXT NOT NULL,
+
+	-- Some key headers to expect:
+	-- * time: whole seconds since the unix epoch in UTC
+	-- * tz_offset_hours: used to shift "time" by the given UTC offset (mostly for display purposes). Between -12 and 12
+	-- * tz_offset_minutes: "inherits" the numerical sign of offset hours. Between 0 and 59.
+	-- * message: Commit message
+	-- * author: who authored the commit
+	-- * committer: usually same as author
+	"key"	TEXT NOT NULL,
+	"value"	TEXT NOT NULL,
+
+	-- Other headers for signing and whatnot can easily be added later.
+
+	PRIMARY KEY ("commit_hash", "commit_hash_algo", "key")
+	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE INDEX commit_headers_idx ON commit_headers ("key", "value");
 
 CREATE TABLE commit_annotations (
+	-- annotations are NOT considered when hashing commits
+
 	"id" INTEGER,
 	"commit_hash"	TEXT NOT NULL,
 	"commit_hash_algo"	TEXT NOT NULL,
-	"annotation_committer"	TEXT NOT NULL,
-	"annotation_author"	TEXT NOT NULL,
+
 	-- Latest annotation "wins". Previous annotations are listed as "Previous edits".
-	"created_at" INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	"created_at" INTEGER NOT NULL,
 
-	-- Start Annotatable fields
-	"time"	INTEGER NOT NULL, -- seconds since the unix epoch in UTC
-	"tz_offset_hours"	INTEGER CHECK("tz_offset_hours" BETWEEN -12 AND 12) NOT NULL,
-	"tz_offset_minutes"	INTEGER CHECK("tz_offset_minutes" BETWEEN 0 AND 59) NOT NULL,
-
-	"message"	TEXT NOT NULL,
-	"committer"	TEXT NOT NULL,
-	"author"	TEXT NOT NULL,
-	-- End Annotatable fields
+	-- Can be any key/value pair, not just ones previously specified on commit.
+	-- Perhaps this is the best place to put signatures for commits?
+	"key"	TEXT NOT NULL,
+	"value"	TEXT NOT NULL,
 
 	PRIMARY KEY ("id" AUTOINCREMENT)
-	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE INDEX annotation_hashes_idx ON commit_annotations("commit_hash", "commit_hash_algo");
-CREATE INDEX annotation_time_idx ON commit_annotations("time");
 CREATE INDEX annotation_creation_idx ON commit_annotations("created_at");
 
 CREATE TABLE commit_tags (
@@ -114,7 +118,7 @@ CREATE INDEX commit_tags_idx ON commit_tags("tag_name");
 
 CREATE TABLE commit_parents (
 -- If a given commit has no parents, it is a root commit.
--- If a given commit points to parent that does not exist, it is because of a shallow checkout.
+-- If a given commit points to parent that does not exist, it is because of a shallow clone.
 
 	"id"	INTEGER,
 	"commit_hash"	TEXT NOT NULL,
@@ -124,7 +128,10 @@ CREATE TABLE commit_parents (
 	"parent_type"	TEXT CHECK("parent_type" IN ('regular', 'merge', 'cherry_pick', 'replay', 'reorder')) NOT NULL,
 	"order"	INTEGER NOT NULL,
 	PRIMARY KEY ("commit_hash", "commit_hash_algo", "parent_hash", "parent_hash_algo")
-	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+
+	-- two parents should not be able to be put into the same location in the order.
+	UNIQUE ("commit_hash", "commit_hash_algo", "order")
+	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 	FOREIGN KEY ("parent_hash", "parent_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -141,12 +148,29 @@ CREATE TABLE bundles (
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
 
-	-- Should the above hash include the message and the time? I think probably
-	-- yes.
-	"message"	TEXT,
-	"time" INTEGER DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY ("hash", "hash_algo")
 );
+
+CREATE TABLE bundle_annotations (
+	-- Bundles don't strictly need headers since they aren't part of the merkle
+	-- tree, so we can probably just get away with only having annotation headers
+	-- that are created "after-the-fact".
+	"id" INTEGER,
+	"bundle_hash"	TEXT NOT NULL,
+	"bundle_hash_algo"	TEXT NOT NULL,
+
+	-- Latest annotation "wins". Previous annotations are listed as "Previous edits".
+	"created_at" INTEGER NOT NULL,
+
+	-- Use similar header values to commits.
+	"key"	TEXT NOT NULL,
+	"value"	TEXT NOT NULL,
+
+	PRIMARY KEY ("id")
+	FOREIGN KEY ("bundle_hash", "bundle_hash_algo") REFERENCES "bundles" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE INDEX bundle_annotations_hash_idx ON bundle_annotations("bundle_hash", "bundle_hash_algo");
 
 CREATE TABLE bundle_commits (
 	"bundle_hash"	TEXT NOT NULL,
@@ -229,9 +253,23 @@ CREATE INDEX tmemb_file_id_hashes_idx ON tree_members("file_id_hash");
 CREATE INDEX tmemb_paths_idx ON tree_members("path");
 CREATE INDEX tmemb_blobs_idx ON tree_members("blob_hash", "blob_hash_algo");
 
+CREATE TABLE chunks (
+	"hash"	TEXT NOT NULL,
+	"hash_algo"	TEXT NOT NULL,
+
+	-- Each chunk is compressed individually, so that we can decompress them
+	-- individually later when streaming them.
+	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
+	"data"	BLOB NOT NULL,
+	PRIMARY KEY ("hash", "hash_algo")
+);
+
 CREATE TABLE blob_chunks (
 	"blob_hash"	TEXT NOT NULL,
 	"blob_hash_algo"	TEXT NOT NULL,
+
+	"chunk_hash"	TEXT NOT NULL,
+	"chunk_hash_algo"	TEXT NOT NULL,
 
 	-- There is no simple constraint to check that start and end byte indices
 	-- don't overlap between sibling blob chunks, so this will likely need to be
@@ -245,14 +283,17 @@ CREATE TABLE blob_chunks (
 	"start_byte"	INTEGER NOT NULL,
 	"end_byte"	INTEGER NOT NULL,
 
-	-- Each blob chunk is compressed individually, so that we can decompress them
-	-- individually later when streaming them.
-	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
-	"data"	BLOB NOT NULL,
-	PRIMARY KEY ("blob_hash", "blob_hash_algo", "start_byte")
+	PRIMARY KEY ("blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte")
+
+	-- When a blob is deleted, its association with any chunks should be severed.
 	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+
+	-- If connections to existing blobs exist, chunks cannot be deleted. They
+	-- should be garbage collected in an offline process or secondary step.
+	FOREIGN KEY ("chunk_hash", "chunk_hash_algo") REFERENCES "chunks" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE INDEX blb_chnks_blob_idx ON blob_chunks("blob_hash", "blob_hash_algo");
+CREATE INDEX blb_chnks_chunk_idx ON blob_chunks("chunk_hash", "chunk_hash_algo");
 CREATE INDEX blb_chnks_start_byte_idx ON blob_chunks("start_byte");
 CREATE INDEX blb_chnks_end_byte_idx ON blob_chunks("end_byte");

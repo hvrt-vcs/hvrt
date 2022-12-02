@@ -3,10 +3,12 @@ package hvrt
 import (
 	"context"
 	"database/sql"
+
 	// "errors"
 	// "fmt"
 	"github.com/klauspost/compress/zstd"
 	_ "modernc.org/sqlite"
+
 	// "os"
 	"path/filepath"
 	// "regexp"
@@ -40,7 +42,7 @@ func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 	encoder, _ := zstd.NewWriter(nil)
 
 	bytes_blob := []byte("Some random bit of data.")
-	enc_blob := encoder.EncodeAll(bytes_blob, make([]byte, 0, 0))
+	enc_blob := encoder.EncodeAll(bytes_blob, make([]byte, 0))
 
 	_, err = wt_tx.Exec(blob_chunk_string,
 		"deadbeef",      // blob_hash

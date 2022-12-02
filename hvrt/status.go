@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"encoding/hex"
 	"errors"
-	"golang.org/x/crypto/sha3"
 	"io"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/crypto/sha3"
 	// "modernc.org/sqlite"
 )
 
@@ -27,7 +28,7 @@ type FileHashPair struct {
 func HashFile(file_path string) (FileHashPair, error) {
 	source_file, err := os.Open(file_path)
 	if err != nil {
-		return FileHashPair{}, errors.New("Could not open source file.")
+		return FileHashPair{}, errors.New("could not open source file")
 	}
 	defer source_file.Close()
 

@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	_ "modernc.org/sqlite"
 )
 
 func prepError(tx_err error) error {
@@ -17,7 +18,7 @@ func prepError(tx_err error) error {
 		tx_err.Error(),
 	)
 	if matched {
-		tx_err = errors.New("Repo already initialized")
+		tx_err = errors.New("repo already initialized")
 	}
 	return tx_err
 }

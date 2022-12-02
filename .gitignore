@@ -20,3 +20,6 @@ go.work
 
 dist/
 .hvrt/
+
+# Jetbrains editors
+.idea/

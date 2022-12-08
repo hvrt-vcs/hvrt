@@ -80,7 +80,14 @@ func init() {
 	// will be global for your application.
 
 	rootCmd.PersistentFlags().BoolVar(&rootFlags.Unsafe, "unsafe", rootFlags.Unsafe, "Allow unsafe operations to proceed")
-	rootCmd.PersistentFlags().StringVar(&rootFlags.RepoPath, "repo", rootFlags.RepoPath, "Path to repo")
+	rootCmd.PersistentFlags().StringVar(
+		&rootFlags.RepoPath,
+		"repo",
+		rootFlags.RepoPath,
+		`Path to repo. Unlike git and some other VCS tools, hvrt does not need
+the repo data to live inside a main worktree. This allows multiple worktrees to
+easily exist in parallel.`,
+	)
 	rootCmd.PersistentFlags().StringVar(&rootFlags.WorkTree, "work-tree", rootFlags.WorkTree, "Path to work tree")
 	rootCmd.PersistentFlags().StringVarP(
 		&rootFlags.ChangeDir,

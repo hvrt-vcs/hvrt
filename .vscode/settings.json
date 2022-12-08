@@ -1,5 +1,7 @@
 {
 	"go.lintOnSave": "workspace",
 	"go.lintTool": "golangci-lint",
-	"go.formatTool": "default"
+	"go.formatTool": "default",
+	"git.autofetch": true,
+	"git.autofetchPeriod": 600
 }

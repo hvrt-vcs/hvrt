@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"errors"
-	"fmt"
 	"log"
 	"os"
 
@@ -31,7 +29,7 @@ var rootCmd = &cobra.Command{
 			cderr := os.Chdir(rootFlags.ChangeDir)
 			if cderr != nil {
 				returnCode = ReturnArgumentError
-				return errors.New(fmt.Sprintf("%s", cderr))
+				return cderr
 			}
 		}
 		return nil

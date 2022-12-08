@@ -1,0 +1,9 @@
+{
+	"recommendations": [
+		"eamodio.gitlens",
+		"golang.go",
+		"gruntfuggly.todo-tree",
+		"tamasfe.even-better-toml",
+		"thinker.sort-json"
+	]
+}

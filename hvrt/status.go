@@ -33,7 +33,11 @@ func HashFile(file_path string) (FileHashPair, error) {
 	defer source_file.Close()
 
 	hash := sha3.New256()
-	io.Copy(hash, source_file)
+	_, err = io.Copy(hash, source_file)
+	if err != nil {
+		return FileHashPair{}, err
+	}
+
 	digest := hash.Sum([]byte{})
 	hex_digest := hex.EncodeToString(digest)
 	return FileHashPair{HashAlgo: "sha3-256", HexDigest: hex_digest, FilePath: file_path}, nil

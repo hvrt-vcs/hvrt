@@ -88,8 +88,8 @@ func init() {
 		rootFlags.ChangeDir,
 		`Run as if started in given path instead of the current working directory.
 This option affects options that expect a path name like --repo and
---work-tree in that their interpretations of the path names would be made
-relative to the working directory caused by the -C option.`,
+--work-tree because their interpretations of the path names will be made
+relative to the working directory specified by the -C option.`,
 	)
 
 	// Cobra also supports local flags, which will only run

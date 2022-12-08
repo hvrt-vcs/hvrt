@@ -3,6 +3,7 @@
 		"eamodio.gitlens",
 		"golang.go",
 		"gruntfuggly.todo-tree",
+		"ms-vscode-remote.remote-wsl",
 		"tamasfe.even-better-toml",
 		"thinker.sort-json"
 	]

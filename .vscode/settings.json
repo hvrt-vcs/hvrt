@@ -3,5 +3,6 @@
 	"go.lintTool": "golangci-lint",
 	"go.formatTool": "default",
 	"git.autofetch": true,
-	"git.autofetchPeriod": 600
+	"git.autofetchPeriod": 600,
+	"problems.sortOrder": "position"
 }

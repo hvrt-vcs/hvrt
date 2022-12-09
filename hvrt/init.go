@@ -12,6 +12,18 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const (
+	initConfigTemplate = `[worktree]
+	# type of "sqlite" means the repo exists as a sqlite file on disk.
+	repo.type = "sqlite"
+
+	# If not otherwise specified, the repo sqlite file is created inside the
+	# primary worktree and is referenced relative to it. When the repo lives
+	# inside the worktree, the worktree will refuse deletion if requested.
+	repo.uri = "file://${WORKTREE}/.hvrt/repo.hvrt"
+`
+)
+
 func prepError(tx_err error) error {
 	matched, _ := regexp.MatchString(
 		`table vcs_version already exists`,
@@ -21,6 +33,32 @@ func prepError(tx_err error) error {
 		tx_err = errors.New("repo already initialized")
 	}
 	return tx_err
+}
+
+func InitWorkTreeConfig(work_tree string, inner_thunk ThunkErr) error {
+	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "config.toml")
+
+	f, err := os.OpenFile(work_tree_file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.Write([]byte(initConfigTemplate))
+	if err != nil {
+		f.Close()
+		os.Remove(work_tree_file)
+		return err
+	}
+
+	err = inner_thunk()
+	if err != nil {
+		f.Close()
+		os.Remove(work_tree_file)
+		return err
+	}
+
+	return nil
 }
 
 func InitWorkTree(work_tree, default_branch string, inner_thunk ThunkErr) error {
@@ -112,15 +150,23 @@ func InitLocal(repo_file, default_branch string, inner_thunk ThunkErr) error {
 		return prepError(err)
 	}
 	return repo_tx.Commit()
-
-	// TODO: create config.toml file.
 }
 
 func InitLocalAll(repo_file, work_tree, default_branch string) error {
 	return InitLocal(
 		repo_file,
 		default_branch,
-		// add creation of toml config here as the deepest layer
-		func() error { return InitWorkTree(work_tree, default_branch, NilThunkErr) },
+		func() error {
+			return InitWorkTree(
+				work_tree,
+				default_branch,
+				func() error {
+					return InitWorkTreeConfig(
+						work_tree,
+						NilThunkErr,
+					)
+				},
+			)
+		},
 	)
 }

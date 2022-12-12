@@ -9,27 +9,30 @@ import (
 	"testing"
 )
 
-// TODO: move boiler plate test init into a function with the signature: func (t *testing.T) (string, Thunk) {}
-// The Thunk is the cleanup function that should be immediatly deferred and the
-// string is the temp directory. Function is allowed to panic.
-
-func TestInitLocalAllCreatesRepoDB(t *testing.T) {
-	testDir, err := os.MkdirTemp("", "*-testing")
+func setup(t *testing.T) (string, string, string, Thunk) {
+	workTree, err := os.MkdirTemp("", "*-testing")
 	if err != nil {
 		t.Fatalf(`Failed to create dummy test directory: %v`, err)
 	}
-	defer os.RemoveAll(testDir) // clean up
-	log.Printf("Created temp directory: %s", testDir)
+	cleanupFunc := func() { os.RemoveAll(workTree) }
+	log.Printf("Created temp directory: %s", workTree)
 
-	repoFile := filepath.Join(testDir, ".hvrt/repo.hvrt")
+	repoFile := filepath.Join(workTree, ".hvrt/repo.hvrt")
 	log.Printf("creating repo file: %s", repoFile)
-	workTree := testDir
 	defaultBranch := "trunk"
 
 	err = InitLocalAll(repoFile, workTree, defaultBranch)
 	if err != nil {
+		cleanupFunc()
 		t.Fatalf(`Failed to init dummy repo due to error: %v`, err)
 	}
+
+	return workTree, repoFile, defaultBranch, cleanupFunc
+}
+
+func TestInitLocalAllCreatesRepoDB(t *testing.T) {
+	_, repoFile, _, cleanupFunc := setup(t)
+	defer cleanupFunc()
 
 	if _, err := os.Stat(repoFile); err == nil {
 		log.Printf("repo file exists: %s", repoFile)
@@ -42,23 +45,10 @@ func TestInitLocalAllCreatesRepoDB(t *testing.T) {
 }
 
 func TestInitLocalAllCreatesWorktreeDB(t *testing.T) {
-	testDir, err := os.MkdirTemp("", "*-testing")
-	if err != nil {
-		t.Fatalf(`Failed to create dummy test directory: %v`, err)
-	}
-	defer os.RemoveAll(testDir) // clean up
-	log.Printf("Created temp directory: %s", testDir)
+	workTree, _, _, cleanupFunc := setup(t)
+	defer cleanupFunc()
 
-	repoFile := filepath.Join(testDir, ".hvrt/repo.hvrt")
-	log.Printf("creating repo file: %s", repoFile)
-	workTree := testDir
-	defaultBranch := "trunk"
-
-	err = InitLocalAll(repoFile, workTree, defaultBranch)
-	if err != nil {
-		t.Fatalf(`Failed to init dummy repo due to error: %v`, err)
-	}
-	worktreeDB := filepath.Join(testDir, ".hvrt/work_tree_state.sqlite")
+	worktreeDB := filepath.Join(workTree, ".hvrt/work_tree_state.sqlite")
 
 	if _, err := os.Stat(worktreeDB); err == nil {
 		log.Printf("worktree database file exists: %s", worktreeDB)
@@ -71,23 +61,10 @@ func TestInitLocalAllCreatesWorktreeDB(t *testing.T) {
 }
 
 func TestInitLocalAllCreatesWorktreeConfig(t *testing.T) {
-	testDir, err := os.MkdirTemp("", "*-testing")
-	if err != nil {
-		t.Fatalf(`Failed to create dummy test directory: %v`, err)
-	}
-	defer os.RemoveAll(testDir) // clean up
-	log.Printf("Created temp directory: %s", testDir)
+	workTree, _, _, cleanupFunc := setup(t)
+	defer cleanupFunc()
 
-	repoFile := filepath.Join(testDir, ".hvrt/repo.hvrt")
-	log.Printf("creating repo file: %s", repoFile)
-	workTree := testDir
-	defaultBranch := "trunk"
-	// filepath.Join(testDir, "worktree")
-	err = InitLocalAll(repoFile, workTree, defaultBranch)
-	if err != nil {
-		t.Fatalf(`Failed to init dummy repo due to error: %v`, err)
-	}
-	configFile := filepath.Join(testDir, ".hvrt/config.toml")
+	configFile := filepath.Join(workTree, ".hvrt/config.toml")
 
 	if _, err := os.Stat(configFile); err == nil {
 		log.Printf("worktree config file exists: %s", configFile)

@@ -3,6 +3,8 @@ package hvrt
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"os"
 
 	// "errors"
 	// "fmt"
@@ -16,7 +18,8 @@ import (
 
 func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
-	blob_chunk_script_path := "sql/sqlite/work_tree/blob_chunk.sql"
+	fmt.Println(work_tree_file)
+	blob_chunk_script_path := "sql/sqlite/work_tree/add/blob_chunk.sql"
 	qparms := CopyOps(SqliteDefaultOpts)
 
 	blob_chunk_script, err := SQLFiles.ReadFile(blob_chunk_script_path)
@@ -41,7 +44,13 @@ func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 
 	encoder, _ := zstd.NewWriter(nil)
 
-	bytes_blob := []byte("Some random bit of data.")
+	full_file_path := filepath.Join(work_tree, file_path)
+	bytes_blob, err := os.ReadFile(full_file_path)
+	if err != nil {
+		// Ignore rollback errors, for now.
+		_ = wt_tx.Rollback()
+		return err
+	}
 	enc_blob := encoder.EncodeAll(bytes_blob, make([]byte, 0))
 
 	_, err = wt_tx.Exec(blob_chunk_string,

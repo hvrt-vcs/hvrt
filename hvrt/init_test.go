@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func setup(t *testing.T) (string, string, string, Thunk) {
+func setupInitTests(t *testing.T) (string, string, string, Thunk) {
 	workTree, err := os.MkdirTemp("", "*-testing")
 	if err != nil {
 		t.Fatalf(`Failed to create dummy test directory: %v`, err)
@@ -31,7 +31,7 @@ func setup(t *testing.T) (string, string, string, Thunk) {
 }
 
 func TestInitLocalAllCreatesRepoDB(t *testing.T) {
-	_, repoFile, _, cleanupFunc := setup(t)
+	_, repoFile, _, cleanupFunc := setupInitTests(t)
 	defer cleanupFunc()
 
 	if _, err := os.Stat(repoFile); err == nil {
@@ -45,7 +45,7 @@ func TestInitLocalAllCreatesRepoDB(t *testing.T) {
 }
 
 func TestInitLocalAllCreatesWorktreeDB(t *testing.T) {
-	workTree, _, _, cleanupFunc := setup(t)
+	workTree, _, _, cleanupFunc := setupInitTests(t)
 	defer cleanupFunc()
 
 	worktreeDB := filepath.Join(workTree, ".hvrt/work_tree_state.sqlite")
@@ -61,7 +61,7 @@ func TestInitLocalAllCreatesWorktreeDB(t *testing.T) {
 }
 
 func TestInitLocalAllCreatesWorktreeConfig(t *testing.T) {
-	workTree, _, _, cleanupFunc := setup(t)
+	workTree, _, _, cleanupFunc := setupInitTests(t)
 	defer cleanupFunc()
 
 	configFile := filepath.Join(workTree, ".hvrt/config.toml")

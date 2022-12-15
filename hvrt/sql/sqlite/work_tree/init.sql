@@ -27,11 +27,23 @@ CREATE TABLE blobs (
 	PRIMARY KEY ("hash", "hash_algo")
 );
 
--- Each blob chunk is compressed individually, so that we can decompress them
--- individually later when streaming them.
+CREATE TABLE chunks (
+	"hash"	TEXT NOT NULL,
+	"hash_algo"	TEXT NOT NULL,
+
+	-- Each chunk is compressed individually, so that we can decompress them
+	-- individually later when streaming them.
+	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
+	"data"	BLOB NOT NULL,
+	PRIMARY KEY ("hash", "hash_algo")
+);
+
 CREATE TABLE blob_chunks (
 	"blob_hash"	TEXT NOT NULL,
 	"blob_hash_algo"	TEXT NOT NULL,
+
+	"chunk_hash"	TEXT NOT NULL,
+	"chunk_hash_algo"	TEXT NOT NULL,
 
 	-- There is no simple constraint to check that start and end byte indices
 	-- don't overlap between sibling blob chunks, so this will likely need to be
@@ -44,38 +56,39 @@ CREATE TABLE blob_chunks (
 	-- the database for the logic to keep working correctly.
 	"start_byte"	INTEGER NOT NULL,
 	"end_byte"	INTEGER NOT NULL,
-	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
-	"data"	BLOB NOT NULL,
-	PRIMARY KEY ("blob_hash", "blob_hash_algo", "start_byte")
+
+	PRIMARY KEY ("blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte")
+
+	-- When a blob is deleted, its association with any chunks should be severed.
 	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+
+	-- If connections to existing blobs exist, chunks cannot be deleted. They
+	-- should be garbage collected in an offline process or secondary step.
+	FOREIGN KEY ("chunk_hash", "chunk_hash_algo") REFERENCES "chunks" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE INDEX blb_chnks_blob_idx ON blob_chunks("blob_hash", "blob_hash_algo");
+CREATE INDEX blb_chnks_chunk_idx ON blob_chunks("chunk_hash", "chunk_hash_algo");
 CREATE INDEX blb_chnks_start_byte_idx ON blob_chunks("start_byte");
 CREATE INDEX blb_chnks_end_byte_idx ON blob_chunks("end_byte");
 
 CREATE TABLE staged_to_add (
-	-- The data for this is just kept in a subdirectory of the worktree config
-	-- area. Since the work tree state is ephemeral, it isn't a problem that we
-	-- keep it outside of the database for the worktree state. This way, we don't
-	-- need to duplicate the logic for blobs and blob chunks that we need in the
-	-- main repo database. For simplicity, we can just store blobs as their hash
-	-- value, not a shadow path (all we care about is the contents anyway). Added
-	-- files can be compared to the file state using timestamp, size, and/or hash
-	-- value.
+	-- How do we differentiate between a "new" file that hasn't been seen before
+	-- and a pre-exising file that has been modified? Do we need another table 
+	-- or can we use contextual data to tell the difference?
 	"path"	TEXT NOT NULL,
-	"hash"	TEXT NOT NULL,
-	"hash_algo"	TEXT NOT NULL,
+	"blob_hash"	TEXT NOT NULL,
+	"blob_hash_algo"	TEXT NOT NULL,
 	"size" INTEGER NOT NULL,
 
-	-- timestamp
+	-- timestamp to compare to file system timestamp when they differ
 	"added_at" INTEGER NOT NULL,
 
 	PRIMARY KEY ("path")
-	FOREIGN KEY ("hash", "hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
-CREATE INDEX staged_to_add_blob_idx ON staged_to_add("hash", "hash_algo");
+CREATE INDEX staged_to_add_blob_idx ON staged_to_add("blob_hash", "blob_hash_algo");
 
 -- File id parents. Can have one, several, or none.
 CREATE TABLE staged_to_add_parents (
@@ -84,9 +97,13 @@ CREATE TABLE staged_to_add_parents (
 	"fid_algo"	TEXT NOT NULL,
 	"order"	INTEGER NOT NULL,
 	PRIMARY KEY ("path", "fid", "fid_algo")
+
+	-- Two parent id values cannot inhabit the same location in the order
+	UNIQUE ("path", "order")
 	FOREIGN KEY ("path") REFERENCES "staged_to_add" ("path") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
+CREATE TABLE staged_to_remove (
 -- It is possible to both add and remove the file at the same path within the
 -- same commit. This would indicate that the file is being moved or copied from
 -- another file (or being recreated from scratch). However, this situation would
@@ -98,10 +115,10 @@ CREATE TABLE staged_to_add_parents (
 -- the next commit. However, if they removed the file, did `hvrt add .` then
 -- added a new file and again did `hvrt add .` it would see it as both a remove
 -- and an add and that might not be what the user wants; they could simply be
--- trying to be thorough and be add frequently as they get ready to commit, not
+-- trying to be thorough and be adding frequently as they get ready to commit, not
 -- thinking about the implications of what that means. This might require more
 -- thought as we dig into the implementation of this feature.
-CREATE TABLE staged_to_remove (
+
 	"fid"	TEXT NOT NULL,
 	"fid_algo"	TEXT NOT NULL,
 	"path"	TEXT NOT NULL,

@@ -8,7 +8,11 @@ import (
 
 	// "errors"
 	// "fmt"
+	"encoding/hex"
+
 	"github.com/klauspost/compress/zstd"
+	"golang.org/x/crypto/sha3"
+
 	_ "modernc.org/sqlite"
 
 	// "os"
@@ -26,7 +30,7 @@ func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 	if err != nil {
 		return err
 	}
-	blob_chunk_string := string(blob_chunk_script)
+	blob_chunk_sql := string(blob_chunk_script)
 
 	// work tree state is always sqlite
 	wt_db, err := sql.Open("sqlite", SqliteDSN(work_tree_file, qparms))
@@ -40,8 +44,7 @@ func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 		return err
 	}
 
-	// ("blob_hash", "blob_hash_algo", "start_byte", "end_byte", "compression_algo", "data")
-
+	// TODO: iterate thru file, creating and inserting chunks one at a time.
 	encoder, _ := zstd.NewWriter(nil)
 
 	full_file_path := filepath.Join(work_tree, file_path)
@@ -53,14 +56,28 @@ func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 	}
 	enc_blob := encoder.EncodeAll(bytes_blob, make([]byte, 0))
 
-	_, err = wt_tx.Exec(blob_chunk_string,
-		"deadbeef",      // blob_hash
-		"sha3-256",      // blob_hash_algo
-		0,               // start_byte
-		len(bytes_blob), // end_byte
-		"zstd",          // compression_algo
-		enc_blob,        // data
+	hash := sha3.New256()
+	_, err = hash.Write(bytes_blob)
+	if err != nil {
+		return err
+	}
+	digest := hash.Sum([]byte{})
+	hex_digest := hex.EncodeToString(digest)
+
+	_, err = wt_tx.Exec(blob_chunk_sql,
+		hex_digest,      // 1. blob_hash
+		"sha3-256",      // 2. blob_hash_algo
+		hex_digest,      // 3. chunk_hash
+		"sha3-256",      // 4. chunk_hash_algo
+		0,               // 5. start_byte
+		len(bytes_blob), // 6. end_byte
+		"zstd",          // 7. compression_algo
+		enc_blob,        // 8. data
 	)
+
+	// TODO: insert blob hash for entire file, as well as file path at the end
+	// before committing transaction.
+
 	if err != nil {
 		// Ignore rollback errors, for now.
 		_ = wt_tx.Rollback()

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	_ "modernc.org/sqlite"
+	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 const (
@@ -80,7 +80,7 @@ func InitWorkTree(work_tree, default_branch string, inner_thunk ThunkErr) error 
 	}
 
 	// work tree state is always sqlite
-	wt_db, err := sql.Open("sqlite", SqliteDSN(work_tree_file, qparms))
+	wt_db, err := sql.Open(sqliteshim.ShimName, SqliteDSN(work_tree_file, qparms))
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,10 @@ func InitWorkTree(work_tree, default_branch string, inner_thunk ThunkErr) error 
 }
 
 func InitLocal(repo_file, default_branch string, inner_thunk ThunkErr) error {
-	dbtype := "sqlite"
+	db_driver_name, dbtype := sqliteshim.ShimName, "sqlite"
+	// FIXME: Add a mapping of driver names to databases, so that we don't need
+	// to hardcode driver names into the SQL FS baked into the executable in
+	// order to cleanly pick up the correct SQL files to execute at runtime.
 	repo_script_path := fmt.Sprintf("sql/%s/repo/init.sql", dbtype)
 
 	qparms := CopyOps(SqliteDefaultOpts)
@@ -125,7 +128,7 @@ func InitLocal(repo_file, default_branch string, inner_thunk ThunkErr) error {
 		return err
 	}
 
-	repo_db, err := sql.Open(dbtype, SqliteDSN(repo_file, qparms))
+	repo_db, err := sql.Open(db_driver_name, SqliteDSN(repo_file, qparms))
 	if err != nil {
 		return err
 	}

@@ -4,5 +4,6 @@
 	"go.formatTool": "default",
 	"git.autofetch": true,
 	"git.autofetchPeriod": 600,
-	"problems.sortOrder": "position"
+	"problems.sortOrder": "position",
+	"editor.formatOnSave": false
 }

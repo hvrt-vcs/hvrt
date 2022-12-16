@@ -3,7 +3,7 @@ package hvrt
 import (
 // "github.com/klauspost/compress/zstd"
 // "database/sql"
-// _ "modernc.org/sqlite"
+// "github.com/uptrace/bun/driver/sqliteshim"
 )
 
 func init() {

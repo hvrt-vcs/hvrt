@@ -13,7 +13,11 @@ builds:
     main: ./
     binary: hvrt
     targets:
-      # Based on supported platforms of SQLite module we depend on:
+      # Although we use "github.com/uptrace/bun/driver/sqliteshim" and can
+      # support many more targets than those listed below, we only automatically
+      # build for systems supported by "modernc.org/sqlite" to avoid dealing
+      # with CGO when using goreleaser.
+      # See supported platforms of "modernc.org/sqlite" here:
       #   https://pkg.go.dev/modernc.org/sqlite#hdr-Supported_platforms_and_architectures
 
       # We choose the lowest possible versions of all archs to ensure as broad
@@ -46,7 +50,7 @@ archives:
       plan9: Plan9
       solaris: Solaris
       windows: Windows
-      386: "i386"
+      "386": "i386"
       amd64: x86_64
 
     # Can be used to change the archive formats for specific GOOSs.

@@ -5,13 +5,20 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	// "modernc.org/sqlite"
+
+	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 // SQL files for all operations for all supported DB dialects
 //
 //go:embed sql
 var SQLFiles embed.FS
+
+var SQLDialectToDrivers = map[string]string{
+	"sqlite": sqliteshim.ShimName,
+	// "postgresql": "postgresql",
+	// "mysql":      "mysql",
+}
 
 func init() {
 }

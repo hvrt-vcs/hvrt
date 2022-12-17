@@ -13,8 +13,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/crypto/sha3"
 
-	"github.com/uptrace/bun/driver/sqliteshim"
-
 	// "os"
 	"path/filepath"
 	// "regexp"
@@ -33,7 +31,7 @@ func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 	blob_chunk_sql := string(blob_chunk_script)
 
 	// work tree state is always sqlite
-	wt_db, err := sql.Open(sqliteshim.ShimName, SqliteDSN(work_tree_file, qparms))
+	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
 	if err != nil {
 		return err
 	}

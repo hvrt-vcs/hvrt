@@ -8,7 +8,6 @@ import (
 	// "errors"
 	// "fmt"
 	// "github.com/klauspost/compress/zstd"
-	"github.com/uptrace/bun/driver/sqliteshim"
 
 	// "os"
 
@@ -60,7 +59,7 @@ func TestAddFileToWorktreeDB(t *testing.T) {
 
 	// work tree state is always sqlite
 	qparms := CopyOps(SqliteDefaultOpts)
-	wt_db, err := sql.Open(sqliteshim.ShimName, SqliteDSN(work_tree_file, qparms))
+	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
 	if err != nil {
 		t.Fatalf(`Failed to add dummy file due to error: %v`, err)
 	}

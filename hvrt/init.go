@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 const (
@@ -80,7 +78,7 @@ func InitWorkTree(work_tree, default_branch string, inner_thunk ThunkErr) error 
 	}
 
 	// work tree state is always sqlite
-	wt_db, err := sql.Open(sqliteshim.ShimName, SqliteDSN(work_tree_file, qparms))
+	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
 	if err != nil {
 		return err
 	}
@@ -108,7 +106,7 @@ func InitWorkTree(work_tree, default_branch string, inner_thunk ThunkErr) error 
 }
 
 func InitLocal(repo_file, default_branch string, inner_thunk ThunkErr) error {
-	db_driver_name, dbtype := sqliteshim.ShimName, "sqlite"
+	dbtype := "sqlite"
 	// FIXME: Add a mapping of driver names to databases, so that we don't need
 	// to hardcode driver names into the SQL FS baked into the executable in
 	// order to cleanly pick up the correct SQL files to execute at runtime.
@@ -128,7 +126,7 @@ func InitLocal(repo_file, default_branch string, inner_thunk ThunkErr) error {
 		return err
 	}
 
-	repo_db, err := sql.Open(db_driver_name, SqliteDSN(repo_file, qparms))
+	repo_db, err := sql.Open(SQLDialectToDrivers[dbtype], SqliteDSN(repo_file, qparms))
 	if err != nil {
 		return err
 	}

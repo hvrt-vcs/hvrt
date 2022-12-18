@@ -43,7 +43,7 @@ func setupAddTests(t *testing.T) (string, string, string, Thunk) {
 		t.Fatalf(`Failed to add dummy file due to error: %v`, err)
 	}
 
-	err = AddFile(workTree, "dummy_file.txt", NilThunkErr)
+	err = AddFiles(workTree, []string{"dummy_file.txt"})
 	if err != nil {
 		t.Fatalf(`Failed to add dummy file due to error: %v`, err)
 	}

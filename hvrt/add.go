@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 
-	// "errors"
 	// "fmt"
 	"encoding/hex"
 
@@ -19,10 +18,9 @@ import (
 	// "regexp"
 )
 
-func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
+func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
 	fmt.Println(work_tree_file)
-	qparms := CopyOps(SqliteDefaultOpts)
 
 	blob_chunk_script_path := "sql/sqlite/work_tree/add/blob_chunk.sql"
 	blob_chunk_script_bytes, err := SQLFiles.ReadFile(blob_chunk_script_path)
@@ -31,19 +29,12 @@ func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 	}
 	blob_chunk_script := string(blob_chunk_script_bytes)
 
-	// blob_script_path := "sql/sqlite/work_tree/add/blob.sql"
-	// blob_script_bytes, err := SQLFiles.ReadFile(blob_script_path)
-	// if err != nil {
-	// 	return err
-	// }
-	// blob_script := string(blob_script_bytes)
-
-	// work tree state is always sqlite
-	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
+	blob_script_path := "sql/sqlite/work_tree/add/blob.sql"
+	blob_script_bytes, err := SQLFiles.ReadFile(blob_script_path)
 	if err != nil {
 		return err
 	}
-	defer wt_db.Close()
+	blob_script := string(blob_script_bytes)
 
 	full_file_path := filepath.Join(work_tree, file_path)
 	file_reader, err := os.Open(full_file_path)
@@ -62,41 +53,50 @@ func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 	file_hex_digest := hex.EncodeToString(file_digest)
 	hash.Reset()
 
+	fstat, err := file_reader.Stat()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(blob_script, file_hex_digest, "sha3-256", fstat.Size())
+	if err != nil {
+		return err
+	}
+
 	// rewind file to beginning
 	_, err = file_reader.Seek(0, 0)
 	if err != nil {
 		return err
 	}
 
-	wt_tx, err := wt_db.BeginTx(context.Background(), nil)
+	chunk_stmt, err := tx.Prepare(blob_chunk_script)
 	if err != nil {
-		return err
-	}
-
-	chunk_stmt, err := wt_tx.Prepare(blob_chunk_script)
-	if err != nil {
-		_ = wt_tx.Rollback()
 		return err
 	}
 
 	encoder, _ := zstd.NewWriter(nil)
 	// 64KiB
+	// TODO: pull this chunk size from config
 	chunk_bytes := make([]byte, 1024*64)
 	var cur_byte uint64 = 0
 	for {
-		num, read_err := file_reader.Read(chunk_bytes)
-		if read_err != nil && read_err != io.EOF {
-			_ = wt_tx.Rollback()
-			return err
+		num, err := file_reader.Read(chunk_bytes)
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return err
+			}
 		}
 
 		_, err = hash.Write(chunk_bytes[:num])
 		if err != nil {
-			_ = wt_tx.Rollback()
 			return err
 		}
 
 		chunk_hex_digest := hex.EncodeToString(hash.Sum([]byte{}))
+		hash.Reset()
+
 		enc_blob := encoder.EncodeAll(chunk_bytes[:num], make([]byte, 0))
 
 		_, err = chunk_stmt.Exec(
@@ -110,21 +110,61 @@ func AddFile(work_tree, file_path string, inner_thunk ThunkErr) error {
 			enc_blob,         // 8. data
 		)
 
-		cur_byte += uint64(num)
-
-		if read_err == io.EOF {
-			break
+		if err != nil {
+			return err
 		}
+
+		cur_byte += uint64(num)
 	}
 
 	// TODO: insert blob hash for entire file, as well as file path at the end
 	// before committing transaction.
 
-	err = inner_thunk()
+	return nil
+}
+
+func AddFiles(work_tree string, file_paths []string) error {
+	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
+	fmt.Println(work_tree_file)
+	qparms := CopyOps(SqliteDefaultOpts)
+
+	// The default mode is "rwc", which will create the file if it doesn't
+	// already exist. This is NOT what we want. We want to fail loudly if the
+	// file does not exist already.
+	qparms["mode"] = "rw"
+
+	// work tree state is always sqlite
+	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
 	if err != nil {
-		// Ignore rollback errors, for now.
-		_ = wt_tx.Rollback()
-		return prepError(err)
+		return err
 	}
+	defer wt_db.Close()
+
+	// sqlite will not throw an error regarding a DB files not exising until we
+	// actually attempt to interact with the database, so we need to explicitly
+	// check whether it exists. We do this after opening the database connection
+	// to avoid a race condition where someone else could either create/delete
+	// the file between our existence check and the opening of the connection.
+	_, err = os.Stat(work_tree_file)
+	if err != nil {
+		return err
+	}
+
+	wt_tx, err := wt_db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+
+	for _, add_path := range file_paths {
+		err = AddFile(work_tree, add_path, wt_tx)
+		if err != nil {
+			tx_err := wt_tx.Rollback()
+			if tx_err != nil {
+				fmt.Println("Error rolling back transaction:", tx_err)
+			}
+			return err
+		}
+	}
+
 	return wt_tx.Commit()
 }

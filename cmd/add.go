@@ -1,8 +1,7 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/eestrada/hvrt/hvrt"
 	"github.com/spf13/cobra"
 )
 
@@ -15,8 +14,8 @@ running the add subcommand, previously untracked files are staged for the next
 commit. This command will run recursively when given a directory instead of a
 path to an individual file. Rules in .hvrtignore are followed unless '--force'
 is supplied.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("add called")
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return hvrt.AddFiles(rootFlags.WorkTree, args)
 	},
 }
 

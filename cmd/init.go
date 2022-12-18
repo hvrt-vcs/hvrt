@@ -47,4 +47,8 @@ func init() {
 	// is called directly, e.g.:
 	initCmd.Flags().BoolVarP(&initFlags.Bare, "bare", "b", false, "Do not initialize a work tree")
 	initCmd.Flags().StringVarP(&initFlags.DefaultBranch, "default-branch", "d", initFlags.DefaultBranch, "default branch to use when initializing repo")
+
+	// init command never takes positional args
+	initCmd.Args = cobra.NoArgs
+
 }

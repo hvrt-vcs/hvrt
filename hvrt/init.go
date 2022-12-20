@@ -3,6 +3,7 @@ package hvrt
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -10,17 +11,8 @@ import (
 	"regexp"
 )
 
-const (
-	initConfigTemplate = `[worktree]
-	# type of "sqlite" means the repo exists as a sqlite file on disk.
-	repo.type = "sqlite"
-
-	# If not otherwise specified, the repo sqlite file is created inside the
-	# primary worktree and is referenced relative to it. When the repo lives
-	# inside the worktree, the worktree will refuse deletion if requested.
-	repo.uri = "file://${WORKTREE}/.hvrt/repo.hvrt"
-`
-)
+//go:embed default.toml
+var initConfigTemplate string
 
 func prepError(tx_err error) error {
 	matched, _ := regexp.MatchString(
@@ -42,7 +34,7 @@ func InitWorkTreeConfig(work_tree string, inner_thunk ThunkErr) error {
 	}
 	defer f.Close()
 
-	_, err = f.Write([]byte(initConfigTemplate))
+	_, err = f.WriteString(initConfigTemplate)
 	if err != nil {
 		f.Close()
 		os.Remove(work_tree_file)

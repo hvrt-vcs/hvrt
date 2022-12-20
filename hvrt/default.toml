@@ -1,0 +1,8 @@
+[worktree]
+	# type of "sqlite" means the repo exists as a sqlite file on disk.
+	repo.type = "sqlite"
+
+	# If not otherwise specified, the repo sqlite file is created inside the
+	# primary worktree and is referenced relative to it. When the repo lives
+	# inside the worktree, the worktree will refuse deletion if requested.
+	repo.uri = "file://${WORKTREE}/.hvrt/repo.hvrt"

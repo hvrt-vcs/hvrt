@@ -5,6 +5,9 @@
 		"gruntfuggly.todo-tree",
 		"ms-vscode-remote.remote-wsl",
 		"tamasfe.even-better-toml",
-		"thinker.sort-json"
+		"thinker.sort-json",
+		"stkb.rewrap",
+		"qwtel.sqlite-viewer",
+		"mhutchie.git-graph"
 	]
 }

@@ -3,7 +3,7 @@ package cmd
 import (
 	// "fmt"
 
-	"github.com/eestrada/hvrt/hvrt"
+	"github.com/hvrt-vcs/hvrt/hvrt"
 	"github.com/spf13/cobra"
 )
 

@@ -18,6 +18,12 @@ import (
 	// "regexp"
 )
 
+// FIXME: pass prepared statements as a map or something, so that they can be
+// bound to the transaction and be reused/cached across multiple calls to the
+// singular `AddFile` function, instead of being prepared again each time the
+// function is called. Reusing prepared statements this way, we should see a big
+// performance increase, which will make a difference when we are adding lots of
+// files within a single transaction.
 func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
 	fmt.Println(work_tree_file)
@@ -35,6 +41,13 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 		return err
 	}
 	blob_script := string(blob_script_bytes)
+
+	file_script_path := "sql/sqlite/work_tree/add/file.sql"
+	file_script_bytes, err := SQLFiles.ReadFile(file_script_path)
+	if err != nil {
+		return err
+	}
+	file_script := string(file_script_bytes)
 
 	full_file_path := filepath.Join(work_tree, file_path)
 	file_reader, err := os.Open(full_file_path)
@@ -63,6 +76,13 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 		return err
 	}
 
+	// TODO: normalize the path with forward slashes, etc.
+	// We only want the path relative to the repo worktree
+	_, err = tx.Exec(file_script, file_path, file_hex_digest, "sha3-256", fstat.Size())
+	if err != nil {
+		return err
+	}
+
 	// rewind file to beginning
 	_, err = file_reader.Seek(0, 0)
 	if err != nil {
@@ -75,8 +95,9 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 	}
 
 	encoder, _ := zstd.NewWriter(nil)
-	// 64KiB
+
 	// TODO: pull this chunk size from config
+	// 64KiB
 	chunk_bytes := make([]byte, 1024*64)
 	var cur_byte uint64 = 0
 	for {

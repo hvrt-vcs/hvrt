@@ -4,7 +4,7 @@ import (
 	"fmt"
 	// "log"
 
-	"github.com/eestrada/hvrt/hvrt"
+	"github.com/hvrt-vcs/hvrt/hvrt"
 	"github.com/spf13/cobra"
 )
 

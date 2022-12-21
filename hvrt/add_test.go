@@ -73,16 +73,20 @@ func TestAddFileToWorktreeDB(t *testing.T) {
 
 	var path, hash, hash_algo string
 	var size, created_at int
+	var found_something bool = false
 
-	//  Should fail, but we aren't iterating thru any rows for some reason.
 	for rows.Next() {
+		found_something = true
 		err := rows.Scan(&path, &hash, &hash_algo, &size, &created_at)
 		if err != nil {
 			t.Fatalf(`Failed to retrieve SQL row due to error: %v`, err)
-		} else if path == "dummy_file.txt" {
+		} else if path != "dummy_file.txt" {
 			t.Fatalf(`Row is not "dummy_file.txt" %v`, path)
 		}
-		log.Println(path, hash, hash_algo, size, created_at)
+		log.Println("sqlite worktree DB row:", path, hash, hash_algo, size, created_at)
 	}
-	t.Fatalf(`We aren't iterating thru any rows: %v`, rows)
+
+	if !found_something {
+		t.Fatalf(`We aren't iterating thru any rows: %v`, rows)
+	}
 }

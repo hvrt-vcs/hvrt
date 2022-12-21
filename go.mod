@@ -1,4 +1,4 @@
-module github.com/eestrada/hvrt
+module github.com/hvrt-vcs/hvrt
 
 go 1.19
 

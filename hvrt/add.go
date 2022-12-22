@@ -1,10 +1,11 @@
 package hvrt
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
-	"fmt"
 	"io"
+	"log"
 	"os"
 
 	// "fmt"
@@ -25,9 +26,6 @@ import (
 // performance increase, which will make a difference when we are adding lots of
 // files within a single transaction.
 func AddFile(work_tree, file_path string, tx *sql.Tx) error {
-	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
-	fmt.Println(work_tree_file)
-
 	blob_chunk_script_path := "sql/sqlite/work_tree/add/blob_chunk.sql"
 	blob_chunk_script_bytes, err := SQLFiles.ReadFile(blob_chunk_script_path)
 	if err != nil {
@@ -62,8 +60,7 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 		return err
 	}
 
-	file_digest := hash.Sum([]byte{})
-	file_hex_digest := hex.EncodeToString(file_digest)
+	file_hex_digest := hex.EncodeToString(hash.Sum([]byte{}))
 	hash.Reset()
 
 	fstat, err := file_reader.Stat()
@@ -83,42 +80,45 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 		return err
 	}
 
-	// rewind file to beginning
-	_, err = file_reader.Seek(0, 0)
-	if err != nil {
-		return err
-	}
-
 	chunk_stmt, err := tx.Prepare(blob_chunk_script)
 	if err != nil {
 		return err
 	}
 
-	encoder, _ := zstd.NewWriter(nil)
+	// rewind file to beginning
+	if _, err = file_reader.Seek(0, 0); err != nil {
+		return err
+	}
 
 	// TODO: pull this chunk size from config
-	// 64KiB
-	chunk_bytes := make([]byte, 1024*64)
-	var cur_byte uint64 = 0
-	for {
-		num, err := file_reader.Read(chunk_bytes)
-		if err != nil {
-			if err == io.EOF {
-				break
-			} else {
-				return err
-			}
-		}
+	// 8KiB
+	chunk_size := int64(1024 * 8)
+	chunk_bytes := make([]byte, 0, chunk_size)
+	buffer := bytes.NewBuffer(chunk_bytes)
+	compressor, err := zstd.NewWriter(buffer)
+	if err != nil {
+		return err
+	}
+	defer compressor.Close()
 
-		_, err = hash.Write(chunk_bytes[:num])
+	var cur_byte int64 = 0
+	for {
+		hash.Reset()
+		buffer.Reset()
+		compressor.Reset(buffer)
+		multi_writer := io.MultiWriter(hash, compressor)
+		section_reader := io.NewSectionReader(file_reader, cur_byte, chunk_size)
+		num, err := io.Copy(multi_writer, section_reader)
 		if err != nil {
 			return err
 		}
 
 		chunk_hex_digest := hex.EncodeToString(hash.Sum([]byte{}))
-		hash.Reset()
 
-		enc_blob := encoder.EncodeAll(chunk_bytes[:num], make([]byte, 0))
+		if err = compressor.Close(); err != nil {
+			return err
+		}
+		enc_blob := buffer.Bytes()
 
 		_, err = chunk_stmt.Exec(
 			file_hex_digest,  // 1. blob_hash
@@ -126,7 +126,7 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 			chunk_hex_digest, // 3. chunk_hash
 			"sha3-256",       // 4. chunk_hash_algo
 			cur_byte,         // 5. start_byte
-			num,              // 6. end_byte
+			cur_byte+num,     // 6. end_byte
 			"zstd",           // 7. compression_algo
 			enc_blob,         // 8. data
 		)
@@ -135,18 +135,18 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 			return err
 		}
 
-		cur_byte += uint64(num)
-	}
+		cur_byte += num + 1
 
-	// TODO: insert blob hash for entire file, as well as file path at the end
-	// before committing transaction.
+		if cur_byte > fstat.Size() {
+			break
+		}
+	}
 
 	return nil
 }
 
 func AddFiles(work_tree string, file_paths []string) error {
 	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
-	fmt.Println(work_tree_file)
 	qparms := CopyOps(SqliteDefaultOpts)
 
 	// The default mode is "rwc", which will create the file if it doesn't
@@ -161,11 +161,11 @@ func AddFiles(work_tree string, file_paths []string) error {
 	}
 	defer wt_db.Close()
 
-	// sqlite will not throw an error regarding a DB files not exising until we
+	// sqlite will not throw an error regarding a DB file not exising until we
 	// actually attempt to interact with the database, so we need to explicitly
 	// check whether it exists. We do this after opening the database connection
-	// to avoid a race condition where someone else could either create/delete
-	// the file between our existence check and the opening of the connection.
+	// to avoid a race condition where someone else could delete the file
+	// between our existence check and the opening of the connection.
 	_, err = os.Stat(work_tree_file)
 	if err != nil {
 		return err
@@ -176,12 +176,15 @@ func AddFiles(work_tree string, file_paths []string) error {
 		return err
 	}
 
+	// FIXME: if passed paths are directories, we need to iterate thru those
+	// directories and pass the child files of the directories, not the
+	// directories themselves.
 	for _, add_path := range file_paths {
 		err = AddFile(work_tree, add_path, wt_tx)
 		if err != nil {
 			tx_err := wt_tx.Rollback()
 			if tx_err != nil {
-				fmt.Println("Error rolling back transaction:", tx_err)
+				log.Println("Error rolling back transaction:", tx_err)
 			}
 			return err
 		}

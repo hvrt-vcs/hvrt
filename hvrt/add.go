@@ -101,24 +101,26 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 	}
 	defer compressor.Close()
 
-	var cur_byte int64 = 0
-	for {
+	for cur_byte, num := int64(0), int64(0); cur_byte < fstat.Size(); cur_byte += num {
 		hash.Reset()
 		buffer.Reset()
 		compressor.Reset(buffer)
 		multi_writer := io.MultiWriter(hash, compressor)
 		section_reader := io.NewSectionReader(file_reader, cur_byte, chunk_size)
-		num, err := io.Copy(multi_writer, section_reader)
-		if err != nil {
+
+		if num, err = io.Copy(multi_writer, section_reader); err != nil {
 			return err
 		}
 
-		chunk_hex_digest := hex.EncodeToString(hash.Sum([]byte{}))
-
+		// For now, we always compress chunks, even when leaving them
+		// uncompressed would take up slightly less space. This greatly
+		// simplifies the logic.
 		if err = compressor.Close(); err != nil {
 			return err
 		}
 		enc_blob := buffer.Bytes()
+
+		chunk_hex_digest := hex.EncodeToString(hash.Sum([]byte{}))
 
 		_, err = chunk_stmt.Exec(
 			file_hex_digest,  // 1. blob_hash
@@ -133,12 +135,6 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 
 		if err != nil {
 			return err
-		}
-
-		cur_byte += num + 1
-
-		if cur_byte > fstat.Size() {
-			break
 		}
 	}
 

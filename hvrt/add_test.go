@@ -19,7 +19,7 @@ import (
 	"testing"
 )
 
-func setupAddTests(t *testing.T) (string, string, string, Thunk) {
+func setupAddTests(t *testing.T, filename string, contents []byte) (string, string, string, Thunk) {
 	workTree, err := os.MkdirTemp("", "*-testing")
 	if err != nil {
 		t.Fatalf(`Failed to create dummy test directory: %v`, err)
@@ -37,13 +37,13 @@ func setupAddTests(t *testing.T) (string, string, string, Thunk) {
 		t.Fatalf(`Failed to init dummy repo due to error: %v`, err)
 	}
 
-	dummyFile := filepath.Join(workTree, "dummy_file.txt")
-	err = os.WriteFile(dummyFile, []byte("Blah blah blah"), fs.FileMode(0777))
+	dummyFile := filepath.Join(workTree, filename)
+	err = os.WriteFile(dummyFile, contents, fs.FileMode(0777))
 	if err != nil {
 		t.Fatalf(`Failed to add dummy file due to error: %v`, err)
 	}
 
-	err = AddFiles(workTree, []string{"dummy_file.txt"})
+	err = AddFiles(workTree, []string{filename})
 	if err != nil {
 		t.Fatalf(`Failed to add dummy file due to error: %v`, err)
 	}
@@ -54,7 +54,9 @@ func setupAddTests(t *testing.T) (string, string, string, Thunk) {
 }
 
 func TestAddFileToWorktreeDB(t *testing.T) {
-	_, work_tree_file, _, cleanupFunc := setupAddTests(t)
+	filename := "dummy_file.txt"
+	contents := []byte("blah blah blah")
+	_, work_tree_file, _, cleanupFunc := setupAddTests(t, filename, contents)
 	defer cleanupFunc()
 
 	// work tree state is always sqlite
@@ -80,8 +82,8 @@ func TestAddFileToWorktreeDB(t *testing.T) {
 		err := rows.Scan(&path, &hash, &hash_algo, &size, &created_at)
 		if err != nil {
 			t.Fatalf(`Failed to retrieve SQL row due to error: %v`, err)
-		} else if path != "dummy_file.txt" {
-			t.Fatalf(`Row is not "dummy_file.txt" %v`, path)
+		} else if path != filename {
+			t.Fatalf(`Row is not "%v": "%v"`, filename, path)
 		}
 		log.Println("sqlite worktree DB row:", path, hash, hash_algo, size, created_at)
 	}
@@ -89,4 +91,49 @@ func TestAddFileToWorktreeDB(t *testing.T) {
 	if !found_something {
 		t.Fatalf(`We aren't iterating thru any rows: %v`, rows)
 	}
+}
+
+func TestAddEmptyFileToWorktreeDB(t *testing.T) {
+	filename := "empty.txt"
+	contents := []byte("")
+	_, work_tree_file, _, cleanupFunc := setupAddTests(t, filename, contents)
+	defer cleanupFunc()
+
+	// work tree state is always sqlite
+	qparms := CopyOps(SqliteDefaultOpts)
+	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
+	if err != nil {
+		t.Fatalf(`Failed to add dummy file due to error: %v`, err)
+	}
+	defer wt_db.Close()
+
+	rows, err := wt_db.Query("SELECT * from staged_to_add")
+	if err != nil {
+		t.Fatalf(`Failed to retrieve SQL rows due to error: %v`, err)
+	}
+	defer rows.Close()
+
+	var path, hash, hash_algo string
+	var size, created_at int
+	var found_something bool = false
+
+	for rows.Next() {
+		found_something = true
+		err := rows.Scan(&path, &hash, &hash_algo, &size, &created_at)
+		if err != nil {
+			t.Fatalf(`Failed to retrieve SQL row due to error: %v`, err)
+		} else if path != filename {
+			t.Fatalf(`Row is not "%v": "%v"`, filename, path)
+		} else if size != 0 {
+			t.Fatalf(`File "%v" is not zero bytes long`, filename)
+		}
+		log.Println("sqlite worktree DB row:", path, hash, hash_algo, size, created_at)
+	}
+
+	if !found_something {
+		t.Fatalf(`We aren't iterating thru any rows: %v`, rows)
+	}
+
+	// TODO: check that no chunks were written to the database. A zero sized
+	// file should have no chunks.
 }

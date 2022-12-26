@@ -24,7 +24,7 @@ CREATE TABLE blobs (
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
 	"byte_length"	INTEGER NOT NULL,
-	PRIMARY KEY ("hash", "hash_algo")
+	PRIMARY KEY ("hash", "hash_algo") ON CONFLICT IGNORE
 );
 
 CREATE TABLE chunks (
@@ -35,7 +35,7 @@ CREATE TABLE chunks (
 	-- individually later when streaming them.
 	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
 	"data"	BLOB NOT NULL,
-	PRIMARY KEY ("hash", "hash_algo")
+	PRIMARY KEY ("hash", "hash_algo") ON CONFLICT IGNORE
 );
 
 CREATE TABLE blob_chunks (
@@ -84,7 +84,7 @@ CREATE TABLE staged_to_add (
 	-- timestamp to compare to file system timestamp when they differ
 	"added_at" INTEGER NOT NULL,
 
-	PRIMARY KEY ("path")
+	PRIMARY KEY ("path") ON CONFLICT REPLACE
 	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -128,8 +128,8 @@ CREATE TABLE staged_to_remove (
 	-- commiting, then it will not be considered an explicit removal. This will
 	-- effect how mv/cp/rm heuristics are determined.
 	"explicit"	BOOLEAN NOT NULL DEFAULT FALSE,
-	UNIQUE ("path")
-	PRIMARY KEY ("fid", "fid_algo")
+	UNIQUE ("path") ON CONFLICT REPLACE
+	PRIMARY KEY ("fid", "fid_algo") ON CONFLICT REPLACE
 );
 
 CREATE TABLE head_commit (

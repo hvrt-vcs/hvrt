@@ -93,6 +93,7 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 	// TODO: pull this chunk size from config
 	// 8KiB
 	chunk_size := int64(1024 * 8)
+	// chunk_size := int64(1) // For testing
 	chunk_bytes := make([]byte, 0, chunk_size)
 	buffer := bytes.NewBuffer(chunk_bytes)
 	compressor, err := zstd.NewWriter(buffer)
@@ -108,6 +109,16 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 		multi_writer := io.MultiWriter(hash, compressor)
 		section_reader := io.NewSectionReader(file_reader, cur_byte, chunk_size)
 
+		// `num`` should never be less than `1``. First, the for loop condition
+		// above should make reading a zero length file impossible. Second, if
+		// the `io.Copy` function doesn't fully copy the file (which we already
+		// established should be at least `1` byte in length), then an error
+		// should be returned here and we immediately return from the function
+		// with an error. Thus we can safely subtract a value of `1` from the DB
+		// insertion below for this chunk. This ensures that there is not
+		// overlap between this chunk and the one following it. It also means
+		// that byte ranges are inclusive, not exclusive, of the `end_byte`
+		// index value.
 		if num, err = io.Copy(multi_writer, section_reader); err != nil {
 			return err
 		}
@@ -128,7 +139,7 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 			chunk_hex_digest, // 3. chunk_hash
 			"sha3-256",       // 4. chunk_hash_algo
 			cur_byte,         // 5. start_byte
-			cur_byte+num,     // 6. end_byte
+			cur_byte+num-1,   // 6. end_byte
 			"zstd",           // 7. compression_algo
 			enc_blob,         // 8. data
 		)
@@ -136,6 +147,18 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 		if err != nil {
 			return err
 		}
+
+		// TODO: figure out if we can take care of all this via constraints, or
+		// if we need to do some error inspection based on how constraints are
+		// violated.
+
+		// if err != nil {
+		// 	// ignore constraint errors
+		// 	sqlite_err := err.(*sqlite.Error)
+		// 	if sqlite_err.Code() != sqlite3.SQLITE_CONSTRAINT {
+		// 		return err
+		// 	}
+		// }
 	}
 
 	return nil

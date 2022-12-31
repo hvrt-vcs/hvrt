@@ -90,21 +90,28 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 		return err
 	}
 
+	// Save time/space with a reused digest slice. See the following link for
+	// clarification: https://yourbasic.org/golang/clear-slice/
+	digest_bytes := make([]byte, 0)
+
 	// TODO: pull this chunk size from config
 	// 8KiB
 	chunk_size := int64(1024 * 8)
 	// chunk_size := int64(1) // For testing
-	chunk_bytes := make([]byte, 0, chunk_size)
-	buffer := bytes.NewBuffer(chunk_bytes)
+
+	buffer := bytes.NewBuffer(make([]byte, 0, chunk_size))
 	compressor, err := zstd.NewWriter(buffer)
 	if err != nil {
 		return err
 	}
-	defer compressor.Close()
 
 	for cur_byte, num := int64(0), int64(0); cur_byte < fstat.Size(); cur_byte += num {
-		hash.Reset()
+		// Retain underlying capacity from previous loop iteration, but set
+		// length to zero.
+		digest_bytes = digest_bytes[:0]
 		buffer.Reset()
+
+		hash.Reset()
 		compressor.Reset(buffer)
 		multi_writer := io.MultiWriter(hash, compressor)
 		section_reader := io.NewSectionReader(file_reader, cur_byte, chunk_size)
@@ -131,7 +138,7 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 		}
 		enc_blob := buffer.Bytes()
 
-		chunk_hex_digest := hex.EncodeToString(hash.Sum([]byte{}))
+		chunk_hex_digest := hex.EncodeToString(hash.Sum(digest_bytes))
 
 		_, err = chunk_stmt.Exec(
 			file_hex_digest,  // 1. blob_hash

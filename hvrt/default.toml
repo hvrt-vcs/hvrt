@@ -4,5 +4,9 @@
 
 	# If not otherwise specified, the repo sqlite file is created inside the
 	# primary worktree and is referenced relative to it. When the repo lives
-	# inside the worktree, the worktree will refuse deletion if requested.
+	# inside the worktree, the worktree will refuse deletion if requested,
+	# unless the `--force` flag is passed. We always use a well formed URI, even
+	# for local files. We replace the variable `${WORKTREE}` with the absolute
+	# path to the worktree, using forward slashes even on MS Windows. See link:
+	# https://en.wikipedia.org/wiki/File_URI_scheme
 	repo.uri = "file://${WORKTREE}/.hvrt/repo.hvrt"

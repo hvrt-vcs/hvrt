@@ -99,9 +99,6 @@ func InitWorkTree(work_tree, default_branch string, inner_thunk ThunkErr) error 
 
 func InitLocal(repo_file, default_branch string, inner_thunk ThunkErr) error {
 	dbtype := "sqlite"
-	// FIXME: Add a mapping of driver names to databases, so that we don't need
-	// to hardcode driver names into the SQL FS baked into the executable in
-	// order to cleanly pick up the correct SQL files to execute at runtime.
 	repo_script_path := fmt.Sprintf("sql/%s/repo/init.sql", dbtype)
 
 	qparms := CopyOps(SqliteDefaultOpts)

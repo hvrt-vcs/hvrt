@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -26,6 +27,11 @@ import (
 // performance increase, which will make a difference when we are adding lots of
 // files within a single transaction.
 func AddFile(work_tree, file_path string, tx *sql.Tx) error {
+	// We only want the path relative to the repo worktree.
+	if filepath.IsAbs(file_path) {
+		return fmt.Errorf(`file path is not relative: "%v"`, file_path)
+	}
+
 	blob_chunk_script_path := "sql/sqlite/work_tree/add/blob_chunk.sql"
 	blob_chunk_script_bytes, err := SQLFiles.ReadFile(blob_chunk_script_path)
 	if err != nil {
@@ -73,9 +79,8 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 		return err
 	}
 
-	// TODO: normalize the path with forward slashes, etc.
-	// We only want the path relative to the repo worktree
-	_, err = tx.Exec(file_script, file_path, file_hex_digest, "sha3-256", fstat.Size())
+	// To be cross platform, we normalize the path with forward slashes.
+	_, err = tx.Exec(file_script, filepath.ToSlash(file_path), file_hex_digest, "sha3-256", fstat.Size())
 	if err != nil {
 		return err
 	}

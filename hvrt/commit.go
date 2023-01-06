@@ -19,5 +19,11 @@ func Commit(work_tree, message, author, committer string) error {
 	}
 	defer wt_db.Close()
 
+	lr_db, err := GetExistingLocalRepoDB(work_tree)
+	if err != nil {
+		return err
+	}
+	defer lr_db.Close()
+
 	return nil
 }

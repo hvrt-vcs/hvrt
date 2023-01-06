@@ -52,7 +52,7 @@ func InitWorkTreeConfig(work_tree string, inner_thunk ThunkErr) error {
 }
 
 func InitWorkTree(work_tree, default_branch string, inner_thunk ThunkErr) error {
-	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
+	work_tree_file := GetWorktreeDBPath(work_tree)
 	work_tree_script_path := "sql/sqlite/work_tree/init.sql"
 	qparms := CopyOps(SqliteDefaultOpts)
 

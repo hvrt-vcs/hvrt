@@ -180,30 +180,11 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 }
 
 func AddFiles(work_tree string, file_paths []string) error {
-	work_tree_file := filepath.Join(work_tree, WorkTreeConfigDir, "work_tree_state.sqlite")
-	qparms := CopyOps(SqliteDefaultOpts)
-
-	// The default mode is "rwc", which will create the file if it doesn't
-	// already exist. This is NOT what we want. We want to fail loudly if the
-	// file does not exist already.
-	qparms["mode"] = "rw"
-
-	// work tree state is always sqlite
-	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
+	wt_db, err := GetExistingWorktreeDB(work_tree)
 	if err != nil {
 		return err
 	}
 	defer wt_db.Close()
-
-	// sqlite will not throw an error regarding a DB file not exising until we
-	// actually attempt to interact with the database, so we need to explicitly
-	// check whether it exists. We do this after opening the database connection
-	// to avoid a race condition where someone else could delete the file
-	// between our existence check and the opening of the connection.
-	_, err = os.Stat(work_tree_file)
-	if err != nil {
-		return err
-	}
 
 	wt_tx, err := wt_db.BeginTx(context.Background(), nil)
 	if err != nil {

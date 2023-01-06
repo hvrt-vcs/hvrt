@@ -1,9 +1,12 @@
 package hvrt
 
 import (
+	"database/sql"
 	"embed"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/uptrace/bun/driver/sqliteshim"
@@ -19,6 +22,8 @@ var SQLDialectToDrivers = map[string]string{
 	// "postgresql": "postgresql",
 	// "mysql":      "mysql",
 }
+
+var WorkTreeDBName = "work_tree_state.sqlite"
 
 func init() {
 }
@@ -45,4 +50,36 @@ func CopyOps(ops map[string]string) map[string]string {
 		rmap[key] = val
 	}
 	return rmap
+}
+
+func GetWorktreeDBPath(work_tree string) string {
+	return filepath.Join(work_tree, WorkTreeConfigDir, WorkTreeDBName)
+}
+
+func GetExistingWorktreeDB(work_tree string) (*sql.DB, error) {
+	work_tree_file := GetWorktreeDBPath(work_tree)
+	qparms := CopyOps(SqliteDefaultOpts)
+
+	// The default mode is "rwc", which will create the file if it doesn't
+	// already exist. This is NOT what we want. We want to fail loudly if the
+	// file does not exist already.
+	qparms["mode"] = "rw"
+
+	// work tree state is always sqlite
+	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
+	if err != nil {
+		return nil, err
+	}
+
+	// sqlite will not throw an error regarding a DB file not exising until we
+	// actually attempt to interact with the database, so we need to explicitly
+	// check whether it exists. We do this after opening the database connection
+	// to avoid a race condition where someone else could delete the file
+	// between our existence check and the opening of the connection.
+	if _, err = os.Stat(work_tree_file); err != nil {
+		wt_db.Close()
+		return nil, err
+	}
+
+	return wt_db, nil
 }

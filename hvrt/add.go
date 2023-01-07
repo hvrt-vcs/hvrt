@@ -29,10 +29,9 @@ import (
 // performance increase, which will make a difference when we are adding lots of
 // files within a single transaction.
 func AddFile(work_tree, file_path string, tx *sql.Tx) error {
-	// FIXME: alternatively, check that absolute paths point to files within
-	// worktree.
-
-	// We only want the path relative to the repo worktree.
+	// `AddFiles`` should already have cleaned incoming paths to make sure that
+	// they are all relative, but in case this is called directly, we still need
+	// to check.
 	if filepath.IsAbs(file_path) {
 		return fmt.Errorf(`file path is not relative: "%v"`, file_path)
 	}

@@ -6,8 +6,10 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
+	"strings"
 
 	// "fmt"
 	"encoding/hex"
@@ -179,8 +181,78 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 	return nil
 }
 
+func appendRelPath(paths []string, work_tree, maybe_child string) ([]string, error) {
+	rel_path, err := filepath.Rel(work_tree, maybe_child)
+	if err != nil {
+		return paths, err
+	}
+	if strings.HasPrefix(rel_path, "..") || filepath.IsAbs(rel_path) {
+		return paths, fmt.Errorf(`path "%v" outside work tree "%v"`, maybe_child, work_tree)
+	}
+	paths = append(paths, rel_path)
+
+	return paths, nil
+}
+
+func cleanPaths(work_tree string, file_paths []string) (abs_work_tree string, rel_file_paths []string, ret_err error) {
+	abs_wt, err := filepath.Abs(work_tree)
+	if err != nil {
+		return "", nil, err
+	}
+	return_paths := make([]string, 0, len(file_paths))
+
+	for _, p := range file_paths {
+		abs_p, err := filepath.Abs(p)
+		if err != nil {
+			return abs_wt, return_paths, err
+		}
+
+		p_stat, err := os.Stat(abs_p)
+		if err != nil {
+			return abs_wt, return_paths, err
+		}
+
+		// TODO: add .hvrtignore logic in here, along with respecting the
+		// `force` flag to override it.
+		if !p_stat.IsDir() {
+			return_paths, err = appendRelPath(return_paths, abs_wt, abs_p)
+			if err != nil {
+				return abs_wt, return_paths, err
+			}
+		} else {
+			err = filepath.WalkDir(abs_p,
+				func(path string, d fs.DirEntry, err error) error {
+					// If we hit errors walking the hierarchy, just print them
+					// and keep moving forward.
+					if err != nil {
+						log.Println(err)
+					}
+
+					if !d.IsDir() {
+						return_paths, err = appendRelPath(return_paths, abs_wt, path)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				},
+			)
+			if err != nil {
+				return abs_wt, return_paths, err
+			}
+		}
+	}
+
+	return abs_wt, return_paths, nil
+}
+
 func AddFiles(work_tree string, file_paths []string) error {
-	wt_db, err := GetExistingWorktreeDB(work_tree)
+	abs_work_tree, rel_file_paths, err := cleanPaths(work_tree, file_paths)
+	if err != nil {
+		return err
+	}
+
+	wt_db, err := GetExistingWorktreeDB(abs_work_tree)
 	if err != nil {
 		return err
 	}
@@ -191,11 +263,8 @@ func AddFiles(work_tree string, file_paths []string) error {
 		return err
 	}
 
-	// FIXME: if passed paths are directories, we need to iterate thru those
-	// directories and pass the child files of the directories, not the
-	// directories themselves.
-	for _, add_path := range file_paths {
-		err = AddFile(work_tree, add_path, wt_tx)
+	for _, add_path := range rel_file_paths {
+		err = AddFile(abs_work_tree, add_path, wt_tx)
 		if err != nil {
 			tx_err := wt_tx.Rollback()
 			if tx_err != nil {

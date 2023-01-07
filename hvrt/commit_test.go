@@ -20,12 +20,27 @@ import (
 )
 
 func setupCommitTests(t *testing.T, filename string, contents []byte) (string, string, string, Thunk) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf(`Failed to init dummy repo due to error: %v`, err)
+	}
+
 	workTree, err := os.MkdirTemp("", "*-testing")
 	if err != nil {
 		t.Fatalf(`Failed to create dummy test directory: %v`, err)
 	}
-	cleanupFunc := func() { os.RemoveAll(workTree) }
 	log.Printf("Created temp directory: %s", workTree)
+
+	err = os.Chdir(workTree)
+	if err != nil {
+		os.RemoveAll(workTree)
+		t.Fatalf(`Failed to init dummy repo due to error: %v`, err)
+	}
+
+	cleanupFunc := func() {
+		_ = os.Chdir(cwd)
+		os.RemoveAll(workTree)
+	}
 
 	repoFile := filepath.Join(workTree, WorkTreeConfigDir, "repo.hvrt")
 	log.Printf("creating repo file: %s", repoFile)
@@ -38,13 +53,16 @@ func setupCommitTests(t *testing.T, filename string, contents []byte) (string, s
 	}
 
 	dummyFile := filepath.Join(workTree, filename)
+	log.Printf("creating dummy file: %s", dummyFile)
 	err = os.WriteFile(dummyFile, contents, fs.FileMode(0777))
 	if err != nil {
+		cleanupFunc()
 		t.Fatalf(`Failed to add dummy file due to error: %v`, err)
 	}
 
 	err = AddFiles(workTree, []string{filename})
 	if err != nil {
+		cleanupFunc()
 		t.Fatalf(`Failed to add dummy file due to error: %v`, err)
 	}
 

@@ -1,4 +1,4 @@
-package hvrt
+package file_ignore
 
 import (
 	"bufio"
@@ -13,8 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/hvrt-vcs/hvrt/file_ignore"
 
 	"golang.org/x/crypto/sha3"
 	// "modernc.org/sqlite"
@@ -86,7 +84,9 @@ func ParseIgnoreFile(ignore_file_path string) (map[string]bool, map[string]bool,
 		trimmed := strings.TrimSpace(scanner.Text())
 		matches_dir_only := false
 		local_only := false
-		if trimmed == "" && strings.HasPrefix(trimmed, "#") {
+
+		// Ignore empty or commented lines
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 
@@ -107,9 +107,7 @@ func ParseIgnoreFile(ignore_file_path string) (map[string]bool, map[string]bool,
 		patterns = append(patterns, trimmed)
 
 	}
-	if _DEBUG != 0 && len(patterns) > 0 {
-		log.Println("Found some patterns:", patterns)
-	}
+	log.Println("Found some patterns:", patterns)
 	return local_patterns, global_patterns, nil
 }
 
@@ -119,6 +117,26 @@ func getParentdir(dir string) string {
 	} else {
 		return filepath.Dir(dir)
 	}
+}
+
+func ParentDirs(worktree_root, fpath string) []string {
+	return_paths := make([]string, 0)
+	worktree_root = filepath.Clean(fpath)
+	fpath = filepath.Clean(fpath)
+
+	if IsRoot(fpath) || worktree_root == fpath {
+		return_paths = append(return_paths, fpath)
+		return return_paths
+	}
+
+	cur_dir := filepath.Dir(fpath)
+	for ; !IsRoot(cur_dir) && cur_dir != worktree_root; cur_dir = filepath.Dir(fpath) {
+		return_paths = append(return_paths, cur_dir)
+	}
+	// add worktree_root
+	return_paths = append(return_paths, cur_dir)
+
+	return return_paths
 }
 
 func panicAbs(maybe_rel_path string) string {
@@ -218,63 +236,61 @@ func walkWorktree(path string, d fs.DirEntry, walkDirFn, walkDirFnIgnore fs.Walk
 	return nil
 }
 
-type statDirEntry struct {
-	info fs.FileInfo
+type WalkDirFunc func(worktree_root, path string, d fs.DirEntry, err error) error
+
+type IgnorePatterns map[string]bool
+type PatternPairs struct {
+	Local  IgnorePatterns
+	Global IgnorePatterns
 }
 
-func (d *statDirEntry) Name() string               { return d.info.Name() }
-func (d *statDirEntry) IsDir() bool                { return d.info.IsDir() }
-func (d *statDirEntry) Type() fs.FileMode          { return d.info.Mode().Type() }
-func (d *statDirEntry) Info() (fs.FileInfo, error) { return d.info, nil }
-
-// Modeled after WalkDir, but ignores ignorable files.
-func WalkWorktree(root string, fn, fn_ignore fs.WalkDirFunc) error {
-	return file_ignore.WalkWorktree(root, nil, nil)
+func IsRoot(fpath string) bool {
+	return strings.HasSuffix(filepath.Dir(fpath), string(filepath.Separator))
 }
 
-func recurseWorktree(wt_root, cur_dir string, rstat *RepoStat, all_patterns map[string]bool) {
-	loc_patterns, global_patterns, _ := ParseIgnoreFile(filepath.Join(cur_dir, ".hvrtignore"))
+func Parent() {
 
-	for pat, match_as_dir := range global_patterns {
-		all_patterns[pat] = match_as_dir
-	}
+}
 
-	local_plus_global := make(map[string]bool, 0)
-	for pat, match_as_dir := range all_patterns {
-		local_plus_global[pat] = match_as_dir
-	}
-	for pat, match_as_dir := range loc_patterns {
-		local_plus_global[pat] = match_as_dir
-	}
+// Similar to `filepath.WalkDir`, but calls a different func for ignored files.
+func WalkWorktree(worktree_root string, fn, fn_ignore WalkDirFunc) error {
+	ignore_files := make(map[string]PatternPairs)
 
-	dir_entries, err := os.ReadDir(cur_dir)
-	if err != nil {
-		return
-	}
+	return filepath.WalkDir(
+		worktree_root,
+		func(fpath string, d fs.DirEntry, err error) error {
+			normalized := filepath.ToSlash(filepath.Clean(fpath))
+			is_ignored := false
 
-	for _, entry := range dir_entries {
-		full_path := filepath.Join(cur_dir, entry.Name())
-		if MatchesIgnore(cur_dir, full_path, entry, local_plus_global) {
-			if _DEBUG != 0 {
-				log.Println("Ignored file:", full_path)
+			// root can never be ignored.
+			if !IsRoot(fpath) {
+				ignore_dir := filepath.ToSlash(filepath.Dir(fpath))
+				for _, par_dir := range ParentDirs(worktree_root, filepath.FromSlash(ignore_dir)) {
+					ignore_dir = filepath.ToSlash(par_dir)
+					patterns, present := ignore_files[ignore_dir]
+
+					// FIXME: this does not account for deeply nested ignores. For example: `my/deeply/hidden/dir/*.ext`
+					if present {
+						if MatchesIgnore(par_dir, fpath, d, patterns.Local) || MatchesIgnore(par_dir, fpath, d, patterns.Global) {
+							is_ignored = true
+							break
+						}
+					}
+				}
 			}
-			continue
-		}
-		if entry.IsDir() {
-			recurseWorktree(wt_root, filepath.Join(cur_dir, entry.Name()), rstat, all_patterns)
-		} else {
-			rel, _ := filepath.Rel(wt_root, full_path)
-			rstat.ModPaths = append(rstat.ModPaths, rel)
-		}
-	}
-}
 
-func Status(repo_file, work_tree string) (RepoStat, error) {
-	abs_work_tree := panicAbs(work_tree)
-	real_work_tree := GetWorkTreeRoot(abs_work_tree)
-	stat := RepoStat{}
-	ignore_patterns := make(map[string]bool, 0)
-	ignore_patterns[".hvrt"] = false
-	recurseWorktree(real_work_tree, real_work_tree, &stat, ignore_patterns)
-	return stat, nil
+			if is_ignored {
+				return fn_ignore(worktree_root, fpath, d, err)
+			} else {
+				if d.IsDir() {
+					local_patterns, global_patterns, parse_err := ParseIgnoreFile(filepath.Join(fpath, ".hvrtignore"))
+					if parse_err == nil {
+						ignore_files[normalized] = PatternPairs{Local: local_patterns, Global: global_patterns}
+					}
+				}
+
+				return fn(worktree_root, fpath, d, err)
+			}
+		},
+	)
 }

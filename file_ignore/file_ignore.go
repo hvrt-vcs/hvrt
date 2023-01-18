@@ -63,6 +63,8 @@ func FnMatch(name, pat string) (bool, error) {
 	return FnMatchCase(name, pat)
 }
 
+// TODO: more closely match gitignore rules. For example, inverse rules starting
+// with `!`, etc. See URL: https://git-scm.com/docs/gitignore
 func ParseIgnoreFile(ignore_file_path string) (*PatternPairs, error) {
 	ignore_file, err := os.Open(ignore_file_path)
 	if err != nil {

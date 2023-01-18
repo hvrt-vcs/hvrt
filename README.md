@@ -1,6 +1,6 @@
 # Havarti
 
-The primary repo for this project is hosted on
+The primary repo for this project is currently hosted on
 [Github](https://github.com/hvrt-vcs/hvrt). Issues and pull requests can be
 created there.
 

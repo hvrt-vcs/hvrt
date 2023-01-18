@@ -41,7 +41,7 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Encountered unexpected error: %s", r)
+			log.Printf("unexpected error: %v", r)
 			os.Exit(ReturnUnexpectedError)
 		}
 	}()

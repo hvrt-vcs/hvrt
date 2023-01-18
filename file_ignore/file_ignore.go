@@ -63,22 +63,21 @@ func FnMatch(name, pat string) (bool, error) {
 	return FnMatchCase(name, pat)
 }
 
-func ParseIgnoreFile(ignore_file_path string) (map[string]bool, map[string]bool, error) {
-	local_patterns, global_patterns := make(map[string]bool, 0), make(map[string]bool, 0)
-	patterns := make([]string, 0)
+func ParseIgnoreFile(ignore_file_path string) (*PatternPairs, error) {
 	ignore_file, err := os.Open(ignore_file_path)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer ignore_file.Close()
 
 	istat, ierr := ignore_file.Stat()
 	if ierr != nil {
-		return nil, nil, err
+		return nil, err
 	} else if istat.IsDir() {
-		return nil, nil, fmt.Errorf(`ignore file %v is a directory`, ignore_file_path)
+		return nil, fmt.Errorf(`ignore file %v is a directory`, ignore_file_path)
 	}
 
+	local_patterns, global_patterns := make(map[string]bool, 0), make(map[string]bool, 0)
 	scanner := bufio.NewScanner(ignore_file)
 	for scanner.Scan() {
 		trimmed := strings.TrimSpace(scanner.Text())
@@ -104,11 +103,9 @@ func ParseIgnoreFile(ignore_file_path string) (map[string]bool, map[string]bool,
 		} else {
 			global_patterns[trimmed] = matches_dir_only
 		}
-		patterns = append(patterns, trimmed)
-
 	}
-	log.Println("Found some patterns:", patterns)
-	return local_patterns, global_patterns, nil
+
+	return &PatternPairs{Local: local_patterns, Global: global_patterns}, nil
 }
 
 func getParentdir(dir string) string {
@@ -139,22 +136,12 @@ func ParentDirs(worktree_root, fpath string) []string {
 	return return_paths
 }
 
-func panicAbs(maybe_rel_path string) string {
-	if maybe_rel_path == "" {
-		maybe_rel_path = "."
-	}
-
-	abs_path, err := filepath.Abs(maybe_rel_path)
+func GetWorkTreeRoot(start_dir string) (string, error) {
+	abs_path, err := filepath.Abs(start_dir)
 	if err != nil {
-		panic("Cannot determine absolute path of given work tree.")
-	} else {
-		return abs_path
+		return "", err
 	}
-}
 
-// FIXME: instead of raising panic, return error.
-func GetWorkTreeRoot(start_dir string) string {
-	abs_path := panicAbs(start_dir)
 	cur_dir := abs_path
 	for cur_dir != "" {
 		// log.Println(cur_dir)
@@ -167,13 +154,13 @@ func GetWorkTreeRoot(start_dir string) string {
 			}
 		} else {
 			if wt_dir_finfo.IsDir() {
-				return cur_dir
+				return cur_dir, nil
 			} else {
 				cur_dir = getParentdir(cur_dir)
 			}
 		}
 	}
-	panic("Could not find hvrt work tree in given directory or parent directories.")
+	return "", fmt.Errorf("could not find hvrt work tree in given directory or parent directories: %v", start_dir)
 }
 
 type RepoStat struct {
@@ -184,16 +171,19 @@ type RepoStat struct {
 }
 
 func MatchesIgnore(root, fpath string, de fs.DirEntry, patterns map[string]bool) bool {
+	name, err := filepath.Rel(root, fpath)
+	if err != nil {
+		log.Panicln(err)
+	}
+
 	for pat, match_as_dir := range patterns {
 		if match_as_dir && !de.IsDir() {
 			continue
 		} else {
-			match, err := FnMatch(pat, de.Name())
-			if err != nil {
-				log.Println("Skipping malformed ignore pattern:", pat)
+			if match, err := FnMatch(pat, name); err != nil {
+				log.Printf("skipping malformed ignore pattern: %v", pat)
 				continue
-			}
-			if match {
+			} else if match {
 				return true
 			}
 		}
@@ -201,44 +191,17 @@ func MatchesIgnore(root, fpath string, de fs.DirEntry, patterns map[string]bool)
 	return false
 }
 
-// walkWorktree recursively descends path, calling walkDirFn.
-func walkWorktree(path string, d fs.DirEntry, walkDirFn, walkDirFnIgnore fs.WalkDirFunc) error {
-	if err := walkDirFn(path, d, nil); err != nil || !d.IsDir() {
-		if err == filepath.SkipDir && d.IsDir() {
-			// Successfully skipped directory.
-			err = nil
-		}
-		return err
-	}
+type WalkDirFunc func(worktree_root, fpath string, d fs.DirEntry, err error) error
 
-	// FIXME: doesn't prevent recursing into symbolic links
-	dirs, err := fs.ReadDir(os.DirFS(path), ".")
-	if err != nil {
-		// Second call, to report ReadDir error.
-		err = walkDirFn(path, d, err)
-		if err != nil {
-			if err == filepath.SkipDir && d.IsDir() {
-				err = nil
-			}
-			return err
-		}
-	}
-
-	for _, d1 := range dirs {
-		path1 := filepath.Join(path, d1.Name())
-		if err := walkWorktree(path1, d1, walkDirFn, walkDirFnIgnore); err != nil {
-			if err == filepath.SkipDir {
-				break
-			}
-			return err
-		}
-	}
-	return nil
-}
-
-type WalkDirFunc func(worktree_root, path string, d fs.DirEntry, err error) error
-
+// The string key in the map represents the shell style glob pattern. The bool
+// value represents whether the pattern is meant to match for dirs only (i.e.
+// the pattern was specified with a trailing slash in the ignore file).
 type IgnorePatterns map[string]bool
+
+// The only difference between `Global` and `Local` is that `Local` should only
+// match files from the root of the directory where the ignore patterns file was
+// specified. `Global` patterns should match at all levels at and below where
+// they are specified.
 type PatternPairs struct {
 	Local  IgnorePatterns
 	Global IgnorePatterns
@@ -250,6 +213,14 @@ func IsRoot(fpath string) bool {
 
 func Parent() {
 
+}
+
+func DefaultIgnoreFunc(worktree_root, fpath string, d fs.DirEntry, err error) error {
+	if d.IsDir() {
+		return fs.SkipDir
+	} else {
+		return nil
+	}
 }
 
 // Similar to `filepath.WalkDir`, but calls a different func for ignored files.
@@ -283,9 +254,9 @@ func WalkWorktree(worktree_root string, fn, fn_ignore WalkDirFunc) error {
 				return fn_ignore(worktree_root, fpath, d, err)
 			} else {
 				if d.IsDir() {
-					local_patterns, global_patterns, parse_err := ParseIgnoreFile(filepath.Join(fpath, ".hvrtignore"))
-					if parse_err == nil {
-						ignore_files[normalized] = PatternPairs{Local: local_patterns, Global: global_patterns}
+					pattern_pairs, parse_err := ParseIgnoreFile(filepath.Join(fpath, ".hvrtignore"))
+					if parse_err == nil && pattern_pairs != nil {
+						ignore_files[normalized] = *pattern_pairs
 					}
 				}
 

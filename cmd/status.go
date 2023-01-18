@@ -27,7 +27,13 @@ var statusCmd = &cobra.Command{
 	Short: "Print the status of the given repository and work tree",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fhpchan := make(chan hvrt.FileHashPair)
-		stat, _ := hvrt.Status(rootFlags.RepoPath, rootFlags.WorkTree)
+		stat, err := hvrt.Status(rootFlags.RepoPath, rootFlags.WorkTree)
+		if err != nil {
+			return err
+		} else if stat == nil {
+			return fmt.Errorf("received nil stat value")
+		}
+
 		for _, mod_path := range stat.ModPaths {
 			go func(mod_path string) {
 				fhp, err := hvrt.HashFile(mod_path)

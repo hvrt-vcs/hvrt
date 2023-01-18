@@ -269,12 +269,25 @@ func recurseWorktree(wt_root, cur_dir string, rstat *RepoStat, all_patterns map[
 	}
 }
 
-func Status(repo_file, work_tree string) (RepoStat, error) {
-	abs_work_tree := panicAbs(work_tree)
-	real_work_tree := GetWorkTreeRoot(abs_work_tree)
-	stat := RepoStat{}
-	ignore_patterns := make(map[string]bool, 0)
-	ignore_patterns[".hvrt"] = false
-	recurseWorktree(real_work_tree, real_work_tree, &stat, ignore_patterns)
+func Status(repo_file, work_tree string) (*RepoStat, error) {
+	real_work_tree, err := file_ignore.GetWorkTreeRoot(work_tree)
+	if err != nil {
+		return nil, err
+	}
+	stat := &RepoStat{}
+	err = file_ignore.WalkWorktree(
+		real_work_tree,
+		func(worktree_root, fpath string, d fs.DirEntry, err error) error {
+			if !d.IsDir() {
+				rel, _ := filepath.Rel(worktree_root, fpath)
+				stat.ModPaths = append(stat.ModPaths, rel)
+			}
+			return nil
+		},
+		file_ignore.DefaultIgnoreFunc,
+	)
+	if err != nil {
+		return nil, err
+	}
 	return stat, nil
 }

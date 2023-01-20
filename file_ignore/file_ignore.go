@@ -2,10 +2,8 @@ package file_ignore
 
 import (
 	"bufio"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -14,7 +12,7 @@ import (
 	"runtime"
 	"strings"
 
-	"golang.org/x/crypto/sha3"
+	"github.com/bmatcuk/doublestar/v4"
 	// "modernc.org/sqlite"
 )
 
@@ -22,35 +20,20 @@ import (
 func init() {
 }
 
-type FileHashPair struct {
-	HashAlgo  string
-	HexDigest string
-	FilePath  string
-}
-
-func HashFile(file_path string) (FileHashPair, error) {
-	source_file, err := os.Open(file_path)
-	if err != nil {
-		return FileHashPair{}, errors.New("could not open source file")
-	}
-	defer source_file.Close()
-
-	hash := sha3.New256()
-	_, err = io.Copy(hash, source_file)
-	if err != nil {
-		return FileHashPair{}, err
-	}
-
-	digest := hash.Sum([]byte{})
-	hex_digest := hex.EncodeToString(digest)
-	return FileHashPair{HashAlgo: "sha3-256", HexDigest: hex_digest, FilePath: file_path}, nil
+type IgnorePattern struct {
+	IgnoreRoot      string
+	OriginalPattern string
+	Pattern         string
+	AsDir           bool
+	Rooted          bool
+	Negated         bool
 }
 
 func FnMatchCase(name, pat string) (bool, error) {
 	name = filepath.ToSlash(name)
 
-	// path.Match identically across Windows and POSIX systems.
-	return path.Match(pat, name)
+	// doublestar.Match identically across Windows and POSIX systems.
+	return doublestar.Match(pat, name)
 }
 
 func FnMatch(name, pat string) (bool, error) {
@@ -65,7 +48,7 @@ func FnMatch(name, pat string) (bool, error) {
 
 // TODO: more closely match gitignore rules. For example, inverse rules starting
 // with `!`, etc. See URL: https://git-scm.com/docs/gitignore
-func ParseIgnoreFile(ignore_file_path string) (*PatternPairs, error) {
+func ParseIgnoreFile(ignore_file_path string) ([]IgnorePattern, error) {
 	ignore_file, err := os.Open(ignore_file_path)
 	if err != nil {
 		return nil, err
@@ -79,35 +62,54 @@ func ParseIgnoreFile(ignore_file_path string) (*PatternPairs, error) {
 		return nil, fmt.Errorf(`ignore file %v is a directory`, ignore_file_path)
 	}
 
-	local_patterns, global_patterns := make(map[string]bool, 0), make(map[string]bool, 0)
+	ignore_root := filepath.ToSlash(path.Dir(ignore_file_path))
+	patterns := make([]IgnorePattern, 0)
 	scanner := bufio.NewScanner(ignore_file)
 	for scanner.Scan() {
-		trimmed := strings.TrimSpace(scanner.Text())
-		matches_dir_only := false
-		local_only := false
+		original_text := scanner.Text()
+		trimmed := strings.TrimRight(original_text, " \t\n\r\v\f")
 
 		// Ignore empty or commented lines
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 
-		if strings.HasPrefix(trimmed, "/") {
-			local_only = true
-			trimmed = strings.TrimPrefix(trimmed, "/")
-		}
-		if strings.HasSuffix(trimmed, "/") {
-			matches_dir_only = true
-			trimmed = strings.TrimSuffix(trimmed, "/")
+		// If there is an escape character at the end, the whitespace needs to be preserved
+		if strings.HasSuffix(trimmed, "\\") && len(trimmed) < len(original_text) {
+			trimmed = original_text
 		}
 
-		if local_only {
-			local_patterns[trimmed] = matches_dir_only
-		} else {
-			global_patterns[trimmed] = matches_dir_only
+		cur_pat := IgnorePattern{
+			IgnoreRoot:      ignore_root,
+			OriginalPattern: original_text,
+			Pattern:         trimmed,
+			AsDir:           false,
+			Rooted:          false,
+			Negated:         false,
+		}
+
+		// There is a slash in the path somewhere other than the end
+		if strings.ContainsRune(strings.TrimRight(cur_pat.Pattern, "/"), '/') {
+			cur_pat.Rooted = true
+			cur_pat.Pattern = strings.TrimLeft(cur_pat.Pattern, "/")
+		}
+
+		if strings.HasSuffix(cur_pat.Pattern, "/") {
+			cur_pat.AsDir = true
+			cur_pat.Pattern = strings.TrimRight(cur_pat.Pattern, "/")
+		}
+
+		if strings.HasPrefix(cur_pat.Pattern, "!") {
+			cur_pat.Negated = true
+			cur_pat.Pattern = strings.TrimPrefix(cur_pat.Pattern, "!")
+		}
+
+		if doublestar.ValidatePattern(cur_pat.Pattern) {
+			patterns = append(patterns, cur_pat)
 		}
 	}
 
-	return &PatternPairs{Local: local_patterns, Global: global_patterns}, nil
+	return patterns, nil
 }
 
 func getParentdir(dir string) string {
@@ -120,7 +122,7 @@ func getParentdir(dir string) string {
 
 func ParentDirs(worktree_root, fpath string) []string {
 	return_paths := make([]string, 0)
-	worktree_root = filepath.Clean(fpath)
+	worktree_root = filepath.Clean(worktree_root)
 	fpath = filepath.Clean(fpath)
 
 	if IsRoot(fpath) || worktree_root == fpath {
@@ -134,6 +136,11 @@ func ParentDirs(worktree_root, fpath string) []string {
 	}
 	// add worktree_root
 	return_paths = append(return_paths, cur_dir)
+
+	// reverse
+	for i, j := 0, len(return_paths)-1; i < j; i, j = i+1, j-1 {
+		return_paths[i], return_paths[j] = return_paths[j], return_paths[i]
+	}
 
 	return return_paths
 }
@@ -172,42 +179,40 @@ type RepoStat struct {
 	UnkPaths []string
 }
 
-func MatchesIgnore(root, fpath string, de fs.DirEntry, patterns map[string]bool) bool {
-	name, err := filepath.Rel(root, fpath)
-	if err != nil {
-		log.Panicln(err)
-	}
+func MatchesIgnore(root, fpath string, de fs.DirEntry, patterns []IgnorePattern) bool {
+	ignore := false
+	err := error(nil)
 
-	for pat, match_as_dir := range patterns {
-		if match_as_dir && !de.IsDir() {
+	for _, pat := range patterns {
+		if pat.AsDir && !de.IsDir() {
 			continue
 		} else {
-			if match, err := FnMatch(pat, name); err != nil {
+			name := de.Name()
+			if pat.Rooted {
+				name, err = filepath.Rel(pat.IgnoreRoot, fpath)
+				if err != nil {
+					log.Printf("Could not make path relative: %v", err)
+					continue
+				}
+				name = filepath.ToSlash(name)
+			}
+
+			if match, err := FnMatch(pat.Pattern, name); err != nil {
 				log.Printf("skipping malformed ignore pattern: %v", pat)
 				continue
 			} else if match {
-				return true
+				if pat.Negated {
+					ignore = false
+				} else {
+					ignore = true
+				}
 			}
 		}
 	}
-	return false
+	return ignore
 }
 
 type WalkDirFunc func(worktree_root, fpath string, d fs.DirEntry, err error) error
-
-// The string key in the map represents the shell style glob pattern. The bool
-// value represents whether the pattern is meant to match for dirs only (i.e.
-// the pattern was specified with a trailing slash in the ignore file).
-type IgnorePatterns map[string]bool
-
-// The only difference between `Global` and `Local` is that `Local` should only
-// match files from the root of the directory where the ignore patterns file was
-// specified. `Global` patterns should match at all levels at and below where
-// they are specified.
-type PatternPairs struct {
-	Local  IgnorePatterns
-	Global IgnorePatterns
-}
 
 func IsRoot(fpath string) bool {
 	return strings.HasSuffix(filepath.Dir(fpath), string(filepath.Separator))
@@ -217,6 +222,7 @@ func Parent() {
 
 }
 
+// Skip ignored directories. Do nothing with ignored files.
 func DefaultIgnoreFunc(worktree_root, fpath string, d fs.DirEntry, err error) error {
 	if d.IsDir() {
 		return fs.SkipDir
@@ -227,7 +233,7 @@ func DefaultIgnoreFunc(worktree_root, fpath string, d fs.DirEntry, err error) er
 
 // Similar to `filepath.WalkDir`, but calls a different func for ignored files.
 func WalkWorktree(worktree_root string, fn, fn_ignore WalkDirFunc) error {
-	ignore_files := make(map[string]PatternPairs)
+	ignore_files := make(map[string][]IgnorePattern)
 
 	return filepath.WalkDir(
 		worktree_root,
@@ -244,7 +250,7 @@ func WalkWorktree(worktree_root string, fn, fn_ignore WalkDirFunc) error {
 
 					// FIXME: this does not account for deeply nested ignores. For example: `my/deeply/hidden/dir/*.ext`
 					if present {
-						if MatchesIgnore(par_dir, fpath, d, patterns.Local) || MatchesIgnore(par_dir, fpath, d, patterns.Global) {
+						if MatchesIgnore(par_dir, fpath, d, patterns) {
 							is_ignored = true
 							break
 						}
@@ -257,8 +263,8 @@ func WalkWorktree(worktree_root string, fn, fn_ignore WalkDirFunc) error {
 			} else {
 				if d.IsDir() {
 					pattern_pairs, parse_err := ParseIgnoreFile(filepath.Join(fpath, ".hvrtignore"))
-					if parse_err == nil && pattern_pairs != nil {
-						ignore_files[normalized] = *pattern_pairs
+					if parse_err == nil && len(pattern_pairs) > 0 {
+						ignore_files[normalized] = pattern_pairs
 					}
 				}
 

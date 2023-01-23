@@ -62,7 +62,7 @@ func ParseIgnoreFile(ignore_file_path string) ([]IgnorePattern, error) {
 		return nil, fmt.Errorf(`ignore file %v is a directory`, ignore_file_path)
 	}
 
-	ignore_root := filepath.ToSlash(path.Dir(ignore_file_path))
+	ignore_root := path.Dir(ignore_file_path)
 	patterns := make([]IgnorePattern, 0)
 	scanner := bufio.NewScanner(ignore_file)
 	for scanner.Scan() {
@@ -172,44 +172,83 @@ func GetWorkTreeRoot(start_dir string) (string, error) {
 	return "", fmt.Errorf("could not find hvrt work tree in given directory or parent directories: %v", start_dir)
 }
 
-type RepoStat struct {
-	DelPaths []string
-	ModPaths []string
-	NewPaths []string
-	UnkPaths []string
+type IgnoreCache struct {
+	ignore_patterns map[string][]IgnorePattern
+	worktree_root   string
 }
 
-func MatchesIgnore(root, fpath string, de fs.DirEntry, patterns []IgnorePattern) bool {
-	ignore := false
-	err := error(nil)
+func NewIgnoreCache(worktree_root string) *IgnoreCache {
+	ignore_patterns := make(map[string][]IgnorePattern, 0)
+	ic := IgnoreCache{ignore_patterns: ignore_patterns, worktree_root: worktree_root}
+	return &ic
+}
 
-	for _, pat := range patterns {
-		if pat.AsDir && !de.IsDir() {
-			continue
-		} else {
-			name := de.Name()
-			if pat.Rooted {
-				name, err = filepath.Rel(pat.IgnoreRoot, fpath)
-				if err != nil {
-					log.Printf("Could not make path relative: %v", err)
-					continue
-				}
-				name = filepath.ToSlash(name)
+func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
+	var err error
+	var ignore *bool
+	true_bool, false_bool := new(bool), new(bool)
+	*true_bool = true
+	*false_bool = false
+
+	normalized := filepath.ToSlash(filepath.Clean(fpath))
+
+	// root can never be ignored.
+	if IsRoot(fpath) {
+		return false
+	}
+
+	for _, par_dir := range ParentDirs(ic.worktree_root, filepath.Dir(fpath)) {
+		ignore_dir := filepath.ToSlash(par_dir)
+		patterns, present := ic.ignore_patterns[ignore_dir]
+
+		if !present {
+			pattern_pairs, parse_err := ParseIgnoreFile(filepath.Join(par_dir, ".hvrtignore"))
+			if parse_err == nil && len(pattern_pairs) > 0 {
+				ic.ignore_patterns[normalized] = pattern_pairs
+				present = true
+				patterns = pattern_pairs
 			}
+		}
 
-			if match, err := FnMatch(pat.Pattern, name); err != nil {
-				log.Printf("skipping malformed ignore pattern: %v", pat)
-				continue
-			} else if match {
-				if pat.Negated {
-					ignore = false
+		if present {
+			for _, pat := range patterns {
+				// If we already matched for ignore, don't keep checking unless it is a negated pattern.
+				// Don't check dir matches against non-dir paths.
+				if (ignore == true_bool && !pat.Negated) || (pat.AsDir && !de.IsDir()) {
+					continue
 				} else {
-					ignore = true
+					var name string
+					if pat.Rooted {
+						name, err = filepath.Rel(pat.IgnoreRoot, fpath)
+						if err != nil {
+							log.Printf("Could not make path relative: %v", err)
+							continue
+						}
+						name = filepath.ToSlash(name)
+					} else {
+						name = de.Name()
+					}
+
+					if match, err := FnMatch(pat.Pattern, name); err != nil {
+						log.Printf("skipping malformed ignore pattern: %v", pat)
+						continue
+					} else if match {
+						if pat.Negated {
+							ignore = false_bool
+						} else {
+							ignore = true_bool
+						}
+					}
 				}
 			}
 		}
 	}
-	return ignore
+
+	if ignore != nil {
+		return *ignore
+	} else {
+		return false
+	}
 }
 
 type WalkDirFunc func(worktree_root, fpath string, d fs.DirEntry, err error) error
@@ -233,41 +272,14 @@ func DefaultIgnoreFunc(worktree_root, fpath string, d fs.DirEntry, err error) er
 
 // Similar to `filepath.WalkDir`, but calls a different func for ignored files.
 func WalkWorktree(worktree_root string, fn, fn_ignore WalkDirFunc) error {
-	ignore_files := make(map[string][]IgnorePattern)
+	ignore_cache := NewIgnoreCache(worktree_root)
 
 	return filepath.WalkDir(
 		worktree_root,
 		func(fpath string, d fs.DirEntry, err error) error {
-			normalized := filepath.ToSlash(filepath.Clean(fpath))
-			is_ignored := false
-
-			// root can never be ignored.
-			if !IsRoot(fpath) {
-				ignore_dir := filepath.ToSlash(filepath.Dir(fpath))
-				for _, par_dir := range ParentDirs(worktree_root, filepath.FromSlash(ignore_dir)) {
-					ignore_dir = filepath.ToSlash(par_dir)
-					patterns, present := ignore_files[ignore_dir]
-
-					// FIXME: this does not account for deeply nested ignores. For example: `my/deeply/hidden/dir/*.ext`
-					if present {
-						if MatchesIgnore(par_dir, fpath, d, patterns) {
-							is_ignored = true
-							break
-						}
-					}
-				}
-			}
-
-			if is_ignored {
+			if ignore_cache.MatchesIgnore(fpath, d) {
 				return fn_ignore(worktree_root, fpath, d, err)
 			} else {
-				if d.IsDir() {
-					pattern_pairs, parse_err := ParseIgnoreFile(filepath.Join(fpath, ".hvrtignore"))
-					if parse_err == nil && len(pattern_pairs) > 0 {
-						ignore_files[normalized] = pattern_pairs
-					}
-				}
-
 				return fn(worktree_root, fpath, d, err)
 			}
 		},

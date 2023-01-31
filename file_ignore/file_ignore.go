@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -18,6 +17,9 @@ import (
 
 // init sets initial values for variables used in the package.
 func init() {
+	true_bool, false_bool = new(bool), new(bool)
+	*true_bool = true
+	*false_bool = false
 }
 
 type IgnorePattern struct {
@@ -49,11 +51,15 @@ func FnMatch(name, pat string) (bool, error) {
 // TODO: more closely match gitignore rules. For example, inverse rules starting
 // with `!`, etc. See URL: https://git-scm.com/docs/gitignore
 func ParseIgnoreFile(ignore_file_path string) ([]IgnorePattern, error) {
+	log.Printf("attempting to parse ignore file %v", ignore_file_path)
+
 	ignore_file, err := os.Open(ignore_file_path)
 	if err != nil {
+		log.Printf("failed to parse ignore file %v", ignore_file_path)
 		return nil, err
 	}
 	defer ignore_file.Close()
+	log.Printf("opened ignore file %v", ignore_file_path)
 
 	istat, ierr := ignore_file.Stat()
 	if ierr != nil {
@@ -62,7 +68,8 @@ func ParseIgnoreFile(ignore_file_path string) ([]IgnorePattern, error) {
 		return nil, fmt.Errorf(`ignore file %v is a directory`, ignore_file_path)
 	}
 
-	ignore_root := path.Dir(ignore_file_path)
+	ignore_root := filepath.Dir(ignore_file_path)
+	log.Printf("ignore root %v", ignore_root)
 	patterns := make([]IgnorePattern, 0)
 	scanner := bufio.NewScanner(ignore_file)
 	for scanner.Scan() {
@@ -109,6 +116,8 @@ func ParseIgnoreFile(ignore_file_path string) ([]IgnorePattern, error) {
 		}
 	}
 
+	log.Printf("parsed ignore file %v with patterns %v", ignore_file_path, patterns)
+
 	return patterns, nil
 }
 
@@ -118,6 +127,15 @@ func getParentdir(dir string) string {
 	} else {
 		return filepath.Dir(dir)
 	}
+}
+
+// ReverseInplace reverses a slice in place, then returns it.
+func ReverseInplace[T any](slice []T) []T {
+	for i, j := 0, len(slice)-1; i < j; i, j = i+1, j-1 {
+		slice[i], slice[j] = slice[j], slice[i]
+	}
+
+	return slice
 }
 
 func ParentDirs(worktree_root, fpath string) []string {
@@ -137,10 +155,7 @@ func ParentDirs(worktree_root, fpath string) []string {
 	// add worktree_root
 	return_paths = append(return_paths, cur_dir)
 
-	// reverse
-	for i, j := 0, len(return_paths)-1; i < j; i, j = i+1, j-1 {
-		return_paths[i], return_paths[j] = return_paths[j], return_paths[i]
-	}
+	return_paths = ReverseInplace(return_paths)
 
 	return return_paths
 }
@@ -179,21 +194,25 @@ type IgnoreCache struct {
 
 func NewIgnoreCache(worktree_root string) *IgnoreCache {
 	ignore_patterns := make(map[string][]IgnorePattern, 0)
-	ic := IgnoreCache{ignore_patterns: ignore_patterns, worktree_root: worktree_root}
-	return &ic
+	ic := new(IgnoreCache)
+	ic.ignore_patterns = ignore_patterns
+	ic.worktree_root = worktree_root
+	return ic
 }
+
+var (
+	true_bool  *bool
+	false_bool *bool
+)
 
 func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
 	var err error
 	var ignore *bool
-	true_bool, false_bool := new(bool), new(bool)
-	*true_bool = true
-	*false_bool = false
 
-	normalized := filepath.ToSlash(filepath.Clean(fpath))
-
-	// root can never be ignored.
+	// root and worktree root can never be ignored.
 	if IsRoot(fpath) {
+		return false
+	} else if ic.worktree_root == fpath {
 		return false
 	}
 
@@ -202,26 +221,36 @@ func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
 		patterns, present := ic.ignore_patterns[ignore_dir]
 
 		if !present {
-			pattern_pairs, parse_err := ParseIgnoreFile(filepath.Join(par_dir, ".hvrtignore"))
-			if parse_err == nil && len(pattern_pairs) > 0 {
-				ic.ignore_patterns[normalized] = pattern_pairs
-				present = true
-				patterns = pattern_pairs
-			}
+			// even if the ignore file doesn't exist, store an empty slice so
+			// that we don't hit the file system again the next time we check
+			// for this ignore file on a different file with the same ancestor
+			// directory.
+			log.Printf("ignore dir to parse %v", ignore_dir)
+			pattern_pairs, _ := ParseIgnoreFile(filepath.Join(par_dir, ".hvrtignore"))
+			ic.ignore_patterns[ignore_dir] = pattern_pairs
+			patterns = pattern_pairs
+			present = true
 		}
 
-		if present {
+		if present && len(patterns) > 0 {
 			for _, pat := range patterns {
+				// log.Printf("Checking if path %v is ignored by patterns %v", fpath, patterns)
+
 				// If we already matched for ignore, don't keep checking unless it is a negated pattern.
 				// Don't check dir matches against non-dir paths.
-				if (ignore == true_bool && !pat.Negated) || (pat.AsDir && !de.IsDir()) {
+				if ignore == true_bool && !pat.Negated {
+					continue
+				} else if pat.Negated && ignore != true_bool {
+					continue
+				} else if pat.AsDir && !de.IsDir() {
 					continue
 				} else {
 					var name string
 					if pat.Rooted {
 						name, err = filepath.Rel(pat.IgnoreRoot, fpath)
 						if err != nil {
-							log.Printf("Could not make path relative: %v", err)
+							log.Println(err)
+							// log.Printf("Could not make path relative: %v", err)
 							continue
 						}
 						name = filepath.ToSlash(name)
@@ -263,7 +292,9 @@ func Parent() {
 
 // Skip ignored directories. Do nothing with ignored files.
 func DefaultIgnoreFunc(worktree_root, fpath string, d fs.DirEntry, err error) error {
+	log.Printf("Visiting to ignore: %v", fpath)
 	if d.IsDir() {
+		log.Printf("Ignoring directory: %v", fpath)
 		return fs.SkipDir
 	} else {
 		return nil

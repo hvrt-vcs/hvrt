@@ -18,5 +18,5 @@
 go.work
 
 
-dist/
-.git/
+/dist/
+/.git/

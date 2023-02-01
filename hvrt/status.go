@@ -279,11 +279,9 @@ func Status(repo_file, work_tree string) (*RepoStat, error) {
 	err = file_ignore.WalkWorktree(
 		real_work_tree,
 		func(worktree_root, fpath string, d fs.DirEntry, err error) error {
-			log.Printf("Visiting %v", fpath)
 			if !d.IsDir() {
 				rel, _ := filepath.Rel(worktree_root, fpath)
 				stat.ModPaths = append(stat.ModPaths, rel)
-				log.Printf("stat so far %v", *stat)
 			}
 			return nil
 		},
@@ -293,10 +291,8 @@ func Status(repo_file, work_tree string) (*RepoStat, error) {
 		// 	return nil
 		// },
 	)
-	log.Printf("Did we hit an error while walking? %v", err)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Returning stat %v", stat)
 	return stat, nil
 }

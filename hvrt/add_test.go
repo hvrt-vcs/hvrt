@@ -13,7 +13,6 @@ import (
 
 	// "regexp"
 
-	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +28,7 @@ func setupAddTests(t *testing.T, filename string, contents []byte) (string, stri
 	if err != nil {
 		t.Fatalf(`Failed to create dummy test directory: %v`, err)
 	}
-	log.Printf("Created temp directory: %s", workTree)
+	log_info.Printf("Created temp directory: %s", workTree)
 
 	err = os.Chdir(workTree)
 	if err != nil {
@@ -43,7 +42,7 @@ func setupAddTests(t *testing.T, filename string, contents []byte) (string, stri
 	}
 
 	repoFile := filepath.Join(workTree, WorkTreeConfigDir, "repo.hvrt")
-	log.Printf("creating repo file: %s", repoFile)
+	log_info.Printf("creating repo file: %s", repoFile)
 	defaultBranch := "trunk"
 
 	err = InitLocalAll(repoFile, workTree, defaultBranch)
@@ -53,7 +52,7 @@ func setupAddTests(t *testing.T, filename string, contents []byte) (string, stri
 	}
 
 	dummyFile := filepath.Join(workTree, filename)
-	log.Printf("creating dummy file: %s", dummyFile)
+	log_info.Printf("creating dummy file: %s", dummyFile)
 	err = os.WriteFile(dummyFile, contents, fs.FileMode(0777))
 	if err != nil {
 		cleanupFunc()
@@ -103,7 +102,7 @@ func TestAddFileToWorktreeDB(t *testing.T) {
 		} else if path != filename {
 			t.Fatalf(`Row is not "%v": "%v"`, filename, path)
 		}
-		log.Println("sqlite worktree DB row:", path, hash, hash_algo, size, created_at)
+		log_info.Println("sqlite worktree DB row:", path, hash, hash_algo, size, created_at)
 	}
 
 	if !found_something {
@@ -145,7 +144,7 @@ func TestAddEmptyFileToWorktreeDB(t *testing.T) {
 		} else if size != 0 {
 			t.Fatalf(`File "%v" is not zero bytes long`, filename)
 		}
-		log.Println("sqlite worktree DB row:", path, hash, hash_algo, size, created_at)
+		log_info.Println("sqlite worktree DB row:", path, hash, hash_algo, size, created_at)
 	}
 
 	if !found_something {

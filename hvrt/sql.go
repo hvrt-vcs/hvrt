@@ -103,6 +103,7 @@ func GetExistingLocalRepoDB(work_tree string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// log_debug.Printf("toml metadata: %v", md)
 	return nil, fmt.Errorf("toml metadata: %v", md)
 
 	work_tree_file := GetWorktreeDBPath(work_tree)

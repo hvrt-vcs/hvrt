@@ -32,10 +32,11 @@ func init() {
 	*true_bool = true
 	*false_bool = false
 
-	log_debug = log.New(io.Discard, "DEBUG:", 0)
-	log_info = log.New(os.Stderr, "INFO:", 0)
-	log_warning = log.New(os.Stderr, "WARNING:", 0)
-	log_error = log.New(os.Stderr, "ERROR:", 0)
+	logFlags := log.LstdFlags
+	log_debug = log.New(io.Discard, "DEBUG: ", logFlags)
+	log_info = log.New(os.Stderr, "INFO: ", logFlags)
+	log_warning = log.New(os.Stderr, "WARNING: ", logFlags)
+	log_error = log.New(os.Stderr, "ERROR: ", logFlags)
 }
 
 type IgnorePattern struct {

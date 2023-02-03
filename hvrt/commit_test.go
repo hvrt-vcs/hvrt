@@ -13,11 +13,16 @@ import (
 
 	// "regexp"
 
-	"log"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/hvrt-vcs/hvrt/log"
 )
+
+func init() {
+	log.SetLoggingLevel(0)
+}
 
 func setupCommitTests(t *testing.T, filename string, contents []byte) (string, string, string, Thunk) {
 	cwd, err := os.Getwd()
@@ -29,7 +34,7 @@ func setupCommitTests(t *testing.T, filename string, contents []byte) (string, s
 	if err != nil {
 		t.Fatalf(`Failed to create dummy test directory: %v`, err)
 	}
-	log.Printf("Created temp directory: %s", workTree)
+	log.Info.Printf("Created temp directory: %s", workTree)
 
 	err = os.Chdir(workTree)
 	if err != nil {
@@ -43,7 +48,7 @@ func setupCommitTests(t *testing.T, filename string, contents []byte) (string, s
 	}
 
 	repoFile := filepath.Join(workTree, WorkTreeConfigDir, "repo.hvrt")
-	log.Printf("creating repo file: %s", repoFile)
+	log.Info.Printf("creating repo file: %s", repoFile)
 	defaultBranch := "trunk"
 
 	err = InitLocalAll(repoFile, workTree, defaultBranch)
@@ -53,7 +58,7 @@ func setupCommitTests(t *testing.T, filename string, contents []byte) (string, s
 	}
 
 	dummyFile := filepath.Join(workTree, filename)
-	log.Printf("creating dummy file: %s", dummyFile)
+	log.Info.Printf("creating dummy file: %s", dummyFile)
 	err = os.WriteFile(dummyFile, contents, fs.FileMode(0777))
 	if err != nil {
 		cleanupFunc()

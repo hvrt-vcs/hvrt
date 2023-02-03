@@ -4,26 +4,20 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/hvrt-vcs/hvrt/log"
 	// "modernc.org/sqlite"
 )
 
 var (
 	true_bool  *bool
 	false_bool *bool
-
-	log_debug   *log.Logger
-	log_info    *log.Logger
-	log_warning *log.Logger
-	log_error   *log.Logger
 )
 
 // init sets initial values for variables used in the package.
@@ -31,12 +25,6 @@ func init() {
 	true_bool, false_bool = new(bool), new(bool)
 	*true_bool = true
 	*false_bool = false
-
-	logFlags := log.LstdFlags
-	log_debug = log.New(io.Discard, "DEBUG: ", logFlags)
-	log_info = log.New(os.Stderr, "INFO: ", logFlags)
-	log_warning = log.New(os.Stderr, "WARNING: ", logFlags)
-	log_error = log.New(os.Stderr, "ERROR: ", logFlags)
 }
 
 type IgnorePattern struct {
@@ -71,7 +59,7 @@ func ParseIgnoreFile(ignore_file_path string) ([]IgnorePattern, error) {
 
 	ignore_file, err := os.Open(ignore_file_path)
 	if err != nil {
-		log_warning.Printf("failed to parse ignore file %v", ignore_file_path)
+		log.Warning.Printf("failed to parse ignore file %v", ignore_file_path)
 		return nil, err
 	}
 	defer ignore_file.Close()
@@ -84,7 +72,7 @@ func ParseIgnoreFile(ignore_file_path string) ([]IgnorePattern, error) {
 	}
 
 	ignore_root := filepath.Dir(ignore_file_path)
-	log_debug.Printf("ignore root %v", ignore_root)
+	log.Debug.Printf("ignore root %v", ignore_root)
 	patterns := make([]IgnorePattern, 0)
 	scanner := bufio.NewScanner(ignore_file)
 	for scanner.Scan() {
@@ -131,7 +119,7 @@ func ParseIgnoreFile(ignore_file_path string) ([]IgnorePattern, error) {
 		}
 	}
 
-	log_info.Printf("parsed ignore file %v with patterns %v", ignore_file_path, patterns)
+	log.Info.Printf("parsed ignore file %v with patterns %v", ignore_file_path, patterns)
 
 	return patterns, nil
 }
@@ -183,7 +171,7 @@ func GetWorkTreeRoot(start_dir string) (string, error) {
 
 	cur_dir := abs_path
 	for cur_dir != "" {
-		log_debug.Println(cur_dir)
+		log.Debug.Println(cur_dir)
 		cur_dir_fs := os.DirFS(cur_dir).(fs.StatFS)
 		if wt_dir_finfo, wt_err := cur_dir_fs.Stat(".hvrt"); wt_err != nil {
 			if errors.Is(wt_err, fs.ErrNotExist) {
@@ -243,7 +231,7 @@ func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
 
 		if present && len(patterns) > 0 {
 			for _, pat := range patterns {
-				log_debug.Printf("Checking if path %v is ignored by patterns %v", fpath, patterns)
+				log.Debug.Printf("Checking if path %v is ignored by patterns %v", fpath, patterns)
 
 				// If we already matched for ignore, don't keep checking unless it is a negated pattern.
 				// Don't check dir matches against non-dir paths.
@@ -258,7 +246,7 @@ func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
 					if pat.Rooted {
 						name, err = filepath.Rel(pat.IgnoreRoot, fpath)
 						if err != nil {
-							log_error.Println(err)
+							log.Error.Println(err)
 							continue
 						}
 						name = filepath.ToSlash(name)
@@ -267,7 +255,7 @@ func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
 					}
 
 					if match, err := FnMatch(pat.Pattern, name); err != nil {
-						log_warning.Printf("skipping malformed ignore pattern: %v", pat)
+						log.Warning.Printf("skipping malformed ignore pattern: %v", pat)
 						continue
 					} else if match {
 						if pat.Negated {

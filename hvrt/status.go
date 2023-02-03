@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/hvrt-vcs/hvrt/file_ignore"
+	"github.com/hvrt-vcs/hvrt/log"
 
 	"golang.org/x/crypto/sha3"
 	// "modernc.org/sqlite"
@@ -54,7 +55,7 @@ func Status(repo_file, work_tree string) (*RepoStat, error) {
 	if err != nil {
 		return nil, err
 	}
-	log_debug.Printf("Real worktree %v", real_work_tree)
+	log.Debug.Printf("Real worktree %v", real_work_tree)
 	stat := new(RepoStat)
 	err = file_ignore.WalkWorktree(
 		real_work_tree,

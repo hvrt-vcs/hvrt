@@ -13,6 +13,7 @@ import (
 	// "fmt"
 	"encoding/hex"
 
+	"github.com/hvrt-vcs/hvrt/log"
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/crypto/sha3"
 
@@ -223,7 +224,7 @@ func cleanPaths(work_tree string, file_paths []string) (abs_work_tree string, re
 					// If we hit errors walking the hierarchy, just print them
 					// and keep moving forward.
 					if err != nil {
-						log_warning.Println(err)
+						log.Warning.Println(err)
 					}
 
 					if !d.IsDir() {
@@ -266,7 +267,7 @@ func AddFiles(work_tree string, file_paths []string) error {
 		if err != nil {
 			tx_err := wt_tx.Rollback()
 			if tx_err != nil {
-				log_error.Println("Error rolling back transaction:", tx_err)
+				log.Error.Println("Error rolling back transaction:", tx_err)
 			}
 			return err
 		}

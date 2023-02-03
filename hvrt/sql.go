@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/hvrt-vcs/hvrt/log"
+
 	// toml "github.com/pelletier/go-toml/v2"
 
 	"github.com/uptrace/bun/driver/sqliteshim"
@@ -103,8 +105,8 @@ func GetExistingLocalRepoDB(work_tree string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// log_debug.Printf("toml metadata: %v", md)
-	return nil, fmt.Errorf("toml metadata: %v", md)
+	log.Debug.Printf("toml metadata: %v", md)
+	return nil, fmt.Errorf("toml test")
 
 	work_tree_file := GetWorktreeDBPath(work_tree)
 	qparms := CopyOps(SqliteDefaultOpts)

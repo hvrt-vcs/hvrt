@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/hvrt-vcs/hvrt/hvrt"
+	"github.com/hvrt-vcs/hvrt/log"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +37,7 @@ var statusCmd = &cobra.Command{
 		for _, mod_path := range stat.ModPaths {
 			fhp, err := hvrt.HashFile(mod_path)
 			if err != nil {
-				log.Println("Encountered error:", err)
+				log.Error.Println(err)
 			} else {
 				fmt.Println(fhp)
 			}

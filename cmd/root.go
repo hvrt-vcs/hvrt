@@ -1,19 +1,20 @@
 package cmd
 
 import (
-	"log"
+	"math"
 	"os"
 
+	"github.com/hvrt-vcs/hvrt/log"
 	"github.com/spf13/cobra"
 	// "github.com/pelletier/go-toml/v2"
 	// "github.com/hvrt-vcs/hvrt/hvrt"
 )
 
 const (
-	ReturnSuccess         = 0
-	ReturnGenericError    = 1
-	ReturnArgumentError   = 2
-	ReturnUnexpectedError = 123
+	ReturnSuccess         int = 0
+	ReturnGenericError    int = 1
+	ReturnArgumentError   int = 2
+	ReturnUnexpectedError int = 123
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -32,6 +33,12 @@ var rootCmd = &cobra.Command{
 				return cderr
 			}
 		}
+
+		if rootFlags.Verbosity > 0 {
+			min := int(math.Max(0, float64(log.DefaultLoggingLevel-(rootFlags.Verbosity*10))))
+			log.SetLoggingLevel(min)
+		}
+
 		return nil
 	},
 }
@@ -41,12 +48,13 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("unexpected error: %v", r)
+			log.Error.Printf("unexpected error: %v", r)
 			os.Exit(ReturnUnexpectedError)
 		}
 	}()
 	err := rootCmd.Execute()
 	if err != nil {
+		log.Error.Println(err)
 		if returnCode != 0 {
 			os.Exit(returnCode)
 		} else {
@@ -64,6 +72,7 @@ var rootFlags = struct {
 	WorkTree  string
 	ChangeDir string
 	Unsafe    bool
+	Verbosity int
 }{
 	RepoPath:  "./.hvrt/repo.hvrt",
 	WorkTree:  ".",
@@ -79,6 +88,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
+	rootCmd.PersistentFlags().CountVarP(&rootFlags.Verbosity, "verbose", "v", "Print more information. Can be specified multiple times to increase verbosity.")
 	rootCmd.PersistentFlags().BoolVar(&rootFlags.Unsafe, "unsafe", rootFlags.Unsafe, "Allow unsafe operations to proceed")
 	rootCmd.PersistentFlags().StringVar(
 		&rootFlags.RepoPath,

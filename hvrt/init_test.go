@@ -3,11 +3,16 @@ package hvrt
 import (
 	// "regexp"
 	"errors"
-	"log"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/hvrt-vcs/hvrt/log"
 )
+
+func init() {
+	log.SetLoggingLevel(0)
+}
 
 func setupInitTests(t *testing.T) (string, string, string, Thunk) {
 	workTree, err := os.MkdirTemp("", "*-testing")
@@ -15,10 +20,10 @@ func setupInitTests(t *testing.T) (string, string, string, Thunk) {
 		t.Fatalf(`Failed to create dummy test directory: %v`, err)
 	}
 	cleanupFunc := func() { os.RemoveAll(workTree) }
-	log.Printf("Created temp directory: %s", workTree)
+	log.Info.Printf("Created temp directory: %s", workTree)
 
 	repoFile := filepath.Join(workTree, ".hvrt/repo.hvrt")
-	log.Printf("creating repo file: %s", repoFile)
+	log.Info.Printf("creating repo file: %s", repoFile)
 	defaultBranch := "trunk"
 
 	err = InitLocalAll(repoFile, workTree, defaultBranch)
@@ -35,7 +40,7 @@ func TestInitLocalAllCreatesRepoDB(t *testing.T) {
 	defer cleanupFunc()
 
 	if _, err := os.Stat(repoFile); err == nil {
-		log.Printf("repo file exists: %s", repoFile)
+		log.Info.Printf("repo file exists: %s", repoFile)
 	} else if errors.Is(err, os.ErrNotExist) {
 		t.Fatalf(`repo file not created: %v`, err)
 	} else {
@@ -51,7 +56,7 @@ func TestInitLocalAllCreatesWorktreeDB(t *testing.T) {
 	worktreeDB := filepath.Join(workTree, ".hvrt/work_tree_state.sqlite")
 
 	if _, err := os.Stat(worktreeDB); err == nil {
-		log.Printf("worktree database file exists: %s", worktreeDB)
+		log.Info.Printf("worktree database file exists: %s", worktreeDB)
 	} else if errors.Is(err, os.ErrNotExist) {
 		t.Fatalf(`worktree database file not created: %v`, err)
 	} else {
@@ -67,7 +72,7 @@ func TestInitLocalAllCreatesWorktreeConfig(t *testing.T) {
 	configFile := filepath.Join(workTree, ".hvrt/config.toml")
 
 	if _, err := os.Stat(configFile); err == nil {
-		log.Printf("worktree config file exists: %s", configFile)
+		log.Info.Printf("worktree config file exists: %s", configFile)
 	} else if errors.Is(err, os.ErrNotExist) {
 		t.Fatalf(`worktree config file not created: %v`, err)
 	} else {

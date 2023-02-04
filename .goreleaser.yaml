@@ -1,11 +1,8 @@
-# This is an example .goreleaser.yml file with some sensible defaults.
-# Make sure to check the documentation at https://goreleaser.com
+# File format documentation at https://goreleaser.com
 project_name: hvrt
 before:
   hooks:
-    # You may remove this if you don't use go modules.
     - go mod tidy
-    # you may remove this if you don't need go generate
     - go generate ./...
 builds:
   - env:
@@ -53,9 +50,7 @@ archives:
       "386": "i386"
       amd64: x86_64
 
-    # Can be used to change the archive formats for specific GOOSs.
-    # Most common use case is to archive as zip on Windows.
-    # Default is empty.
+    # create tar.gz files for every OS except Windows
     format_overrides:
       - goos: windows
         format: zip

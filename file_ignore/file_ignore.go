@@ -296,11 +296,11 @@ func DefaultIgnoreFunc(worktree_root, fpath string, d fs.DirEntry, err error) er
 }
 
 // Similar to `filepath.WalkDir`, but calls a different func for ignored files.
-func WalkWorktree(worktree_root string, fn, fn_ignore WalkDirFunc) error {
+func WalkWorktree(worktree_root, start_dir string, fn, fn_ignore WalkDirFunc) error {
 	ignore_cache := NewIgnoreCache(worktree_root)
 
 	return filepath.WalkDir(
-		worktree_root,
+		start_dir,
 		func(fpath string, d fs.DirEntry, err error) error {
 			if ignore_cache.MatchesIgnore(fpath, d) {
 				return fn_ignore(worktree_root, fpath, d, err)

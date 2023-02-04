@@ -13,6 +13,7 @@ import (
 	// "fmt"
 	"encoding/hex"
 
+	"github.com/hvrt-vcs/hvrt/file_ignore"
 	"github.com/hvrt-vcs/hvrt/log"
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/crypto/sha3"
@@ -263,7 +264,25 @@ func AddFiles(work_tree string, file_paths []string) error {
 	}
 
 	for _, add_path := range rel_file_paths {
-		err = AddFile(abs_work_tree, add_path, wt_tx)
+		stat, err := os.Stat(add_path)
+		if err != nil {
+			continue
+		}
+		if stat.IsDir() {
+			err = file_ignore.WalkWorktree(
+				abs_work_tree,
+				filepath.Join(abs_work_tree, add_path),
+				func(worktree_root, fpath string, d fs.DirEntry, ferr error) error {
+					if !d.IsDir() {
+						return AddFile(worktree_root, fpath, wt_tx)
+					}
+					return nil
+				},
+				file_ignore.DefaultIgnoreFunc,
+			)
+		} else {
+			err = AddFile(abs_work_tree, add_path, wt_tx)
+		}
 		if err != nil {
 			tx_err := wt_tx.Rollback()
 			if tx_err != nil {

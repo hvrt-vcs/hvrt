@@ -27,52 +27,53 @@ meet my preferences and needs (I don't expect it to become widely used like
 ever uses it, that's ok too; I'd still develop it anyway, just for personal
 experience if nothing else.
 
-When you take the vowels out of Havarti, you are left with `hvrt` (the name of
+When you [disemvowel](https://en.m.wiktionary.org/wiki/disemvowel) the word Havarti, you are left with `hvrt` (the name of
 the tool). We could probably treat it as an acronym, like "**H**ybrid **V**CS
 \<something\> \<something\>". Let me know if you think of something clever for
 the last two letters. Regardless, read below to learn some of Havarti's
-features:
+features/goals:
 
-* It supports tracking explicit file renames _and_ file copies.
-* It is a single binary, easy to install with no external dependencies.
+* Track explicit file renames _and_ file copies.
+* Multi-parent file copying (for merging multiple files into one file)
+* Single binary, easy to install with no external dependencies.
 * Cross platform (Windows, Mac, Linux, and more)
-* It can run either distributed or centralized or a combination of the two.
-* It is backed by a SQL database (sqlite), so most operations are _fast_.
-* It can handle files of any size.
-* It can retrieve only metadata without file data, and grab file data lazily
-  from an external source (which works well with large centralized monorepos).
-* It can grab narrow clones (i.e. retrieve/checkout only parts of a source tree
+* Backed by a SQLite database; adding support for other SQL DBs should be straighforward.
+* Handle files of nearly any size.
+* [WIP] Run either distributed or centralized or a combination of the two.
+* [WIP] Sparse cloning (i.e. retrieve only metadata without file data, and grab file data lazily
+  from an external source, which works well with large centralized monorepos).
+* [WIP] Narrow cloning (i.e. retrieve/checkout only parts of a source tree
   which is also good for large monorepos).
-* It can grab shallow clones to make local repos even smaller (historical
+* [WIP] Shallow cloning to make local repos even smaller (historical
   commits, both data and metadata, can be retrieved from upstream only when
   needed).
-* Has safe (i.e. history preserving) alternatives to Git style rebase, squash,
+* [WIP] Safe (i.e. history preserving) alternatives to Git style rebase, squash,
   and cherry-pick.
-* It discourages, but allows, unsafe (i.e. forgetful) Git style rebase, squash,
+* [WIP] Discourages, but allows, unsafe (i.e. forgetful) Git style rebase, squash,
   and cherry-pick.
 
 Here is quick comparison of Havarti to Git, Fossil, Mercurial, and Subversion.
 Havarti's features were chosen primarily because they matter to me. Maybe you
 value similar features:
 
-| Feature                                   | Havarti | Git    | Fossil | Mercurial | Subversion |
-|:------------------------------------------|:--------|:-------|:-------|:----------|:-----------|
-| **Explicit File Renames**                 | ✔️       | ❌[1][] | ❔      | ✔️         | ✔️          |
-| **Explicit File Copies**                  | ✔️       | ❌[1][] | ❔      | ✔️         | ✔️          |
-| **Single Binary**                         | ✔️       | ❌      | ✔️      | ❌         | ❌          |
-| **Native Cross Platform**                 | ✔️       | ❕[2][] | ✔️      | ✔️         | ✔️          |
-| **Commit offline (i.e. distributed)**     | ✔️       | ✔️      | ✔️      | ✔️         | ❌          |
-| **Centralized model**                     | ✔️       | ❕[3][] | ❌      | ❕[4][]    | ✔️          |
-| **Autosync with upstream (configurable)** | ✔️       | ❌      | ✔️      | ❌         | ✔️[5][]     |
-| [**Shallow clone**][9]                    | ✔️       | ✔️      | ❔      | ✔️         | ✔️[5][]     |
-| [**Partial clone**][9]                    | ✔️       | ✔️      | ❌      | ❌[4][]    | ✔️[5][]     |
-| **Narrow clone/checkout**                 | ✔️       | ❌      | ❌      | ❌[4][]    | ✔️[5][]     |
-| **Any file size**                         | ✔️       | ✔️      | ❌      | ✔️         | ✔️          |
-| **History rewriting abilities** [6][]     | ✔️       | ✔️      | ❌      | ✔️         | ❌          |
-| **Discourage unsafe operations** [6][]    | ✔️       | ❌      | ✔️      | ❌         | ✔️[5][]     |
-| **Serve static content as a website**     | ✔️       | ❌      | ✔️      | ❌         | ❌          |
-| **Bidirectional bridge to git**           | ❌       | ✔️      | ❌      | ✔️         | ✔️          |
-| **Builtin issue tracker, etc.**           | ❌       | ❌      | ✔️      | ❌         | ❌          |
+| Feature                                    | Havarti | Git    | Fossil | Mercurial | Subversion |
+|:-------------------------------------------|:--------|:-------|:-------|:----------|:-----------|
+| **Explicit File Renames**                  | ✔️       | ❌[1][] | ❔      | ✔️         | ✔️          |
+| **Explicit File Copies**                   | ✔️       | ❌[1][] | ❔      | ✔️         | ✔️          |
+| **Single Binary**                          | ✔️       | ❌      | ✔️      | ❌         | ❌          |
+| **Native Cross Platform**                  | ✔️       | ❕[2][] | ✔️      | ✔️         | ✔️          |
+| **Commit offline (i.e. distributed)**      | ✔️       | ✔️      | ✔️      | ✔️         | ❌          |
+| **Centralized model**                      | ✔️       | ❕[3][] | ❌      | ❕[4][]    | ✔️          |
+| **Autosync with upstream (configurable)**  | ✔️       | ❌      | ✔️      | ❌         | ✔️[5][]     |
+| [**Shallow clone**][9]                     | ✔️       | ✔️      | ❔      | ✔️         | ✔️[5][]     |
+| [**Partial clone**][9]                     | ✔️       | ✔️      | ❌      | ❌[4][]    | ✔️[5][]     |
+| **Narrow clone/checkout**                  | ✔️       | ❌      | ❌      | ❌[4][]    | ✔️[5][]     |
+| **Any file size**                          | ✔️       | ✔️      | ❌      | ✔️         | ✔️          |
+| **History rewriting abilities** [6][]      | ✔️       | ✔️      | ❌      | ✔️         | ❌          |
+| **Discourage unsafe operations** [6][]     | ✔️       | ❌      | ✔️      | ❌         | ✔️[5][]     |
+| **Serve content as static website**        | ✔️       | ❌      | ✔️      | ❌         | ❌          |
+| **Bidirectional bridge to git**            | ❌       | ✔️      | ❌      | ✔️         | ✔️          |
+| **Builtin issue tracker, etc.**            | ❌       | ❌      | ✔️      | ❌         | ❌          |
 
 [1]: # "Lazily calculated heuristically from tree snapshots. Can be wrong depending on CLI flags passed to `git blame` and/or amount of file changes between commits."
 [2]: # "Windows support via a Posix compatibility layer."

@@ -20,7 +20,7 @@ with your own.
 It was originally created to meet the needs of the
 completely distributed development model of the Linux kernel. It is a hairy
 problem to tackle, and it accomplishes the goal admirably. However, the projects I
-work on, both professionally and personally, are not the like the Linux kernel, and although `git` comes close to
+work on, both professionally and personally, are not like the Linux kernel, and although `git` comes close to
 meeting my needs and preferences, it isn't exactly what I want. I've looked into
 others VCS tools like `hg`, `fossil`, and `svn`, and these do not completely match what
 I'm looking for either. So I started work on Havarti. It is my own small VCS to

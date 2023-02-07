@@ -1,13 +1,15 @@
 {
 	"recommendations": [
+		"brunnerh.insert-unicode",
+		"darkriszty.markdown-table-prettify",
 		"eamodio.gitlens",
 		"golang.go",
 		"gruntfuggly.todo-tree",
+		"mhutchie.git-graph",
 		"ms-vscode-remote.remote-wsl",
+		"qwtel.sqlite-viewer",
+		"stkb.rewrap",
 		"tamasfe.even-better-toml",
 		"thinker.sort-json",
-		"stkb.rewrap",
-		"qwtel.sqlite-viewer",
-		"mhutchie.git-graph"
 	]
 }

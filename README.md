@@ -58,30 +58,33 @@ Here is quick comparison of Havarti to Git, Fossil, Mercurial, and Subversion.
 Havarti's features were chosen primarily because they matter to me. Maybe you
 value similar features:
 
-| Feature                                     | Havarti | Git    | Fossil | Mercurial | Subversion |
-|:--------------------------------------------|:--------|:-------|:-------|:----------|:-----------|
-| **Explicit File Renames**                   | ✔️       | ❌[1][] | ❔      | ✔️         | ✔️          |
-| **Explicit File Copies**                    | ✔️       | ❌[1][] | ❔      | ✔️         | ✔️          |
-| **Single Binary**                           | ✔️       | ❌      | ✔️      | ❌         | ❌          |
-| **Native Cross Platform**                   | ✔️       | ❕[2][] | ✔️      | ✔️         | ✔️          |
-| **Commit offline (i.e. distributed)**       | ✔️       | ✔️      | ✔️      | ✔️         | ❌          |
-| **Centralized model**                       | ✔️       | ❕[3][] | ❌      | ❕[4][]    | ✔️          |
-| **Autosync with upstream (configurable)**   | ✔️       | ❌      | ✔️      | ❌         | ✔️[5][]     |
-| [**Shallow clone**][9]                      | ✔️       | ✔️      | ❔      | ✔️         | ✔️[5][]     |
-| [**Partial clone**][9]                      | ✔️       | ✔️      | ❌      | ❌[4][]    | ✔️[5][]     |
-| **Narrow clone/checkout**                   | ✔️       | ❌      | ❌      | ❌[4][]    | ✔️[5][]     |
-| **Any file size**                           | ✔️       | ✔️      | ❌      | ✔️         | ✔️          |
-| **History rewriting abilities** [6][]       | ✔️       | ✔️      | ❌      | ✔️         | ❌          |
-| **Discourage unsafe operations** [6][]      | ✔️       | ❌      | ✔️      | ❌         | ✔️[5][]     |
-| **Serve content as static website**         | ✔️       | ❌      | ✔️      | ❌         | ❌          |
-| **Bidirectional bridge to git**             | ❌       | ✔️      | ❌      | ✔️         | ✔️          |
-| **Local webapp issue tracker, forum, etc.** | ❌       | ❌      | ✔️      | ❌         | ❌          |
+| Feature                                     | Havarti | Git | Fossil | Mercurial | Subversion |
+|:--------------------------------------------|:--------|:----|:-------|:----------|:-----------|
+| **Explicit File Renames**                   | ✔️      | ❌¹  | ❔      | ✔️        | ✔️         |
+| **Explicit File Copies**                    | ✔️      | ❌¹  | ❔      | ✔️        | ✔️         |
+| **Single Binary**                           | ✔️      | ❌   | ✔️     | ❌         | ❌          |
+| **Native Cross Platform**                   | ✔️      | ❕²  | ✔️     | ✔️        | ✔️         |
+| **Commit offline (i.e. distributed)**       | ✔️      | ✔️  | ✔️     | ✔️        | ❌          |
+| **Centralized model**                       | ✔️      | ❕³  | ❌      | ❕⁴        | ✔️         |
+| **Autosync with upstream (configurable)**   | ✔️      | ❌   | ✔️     | ❌         | ✔️⁵        |
+| [**Shallow clone**][7]⁷                     | ✔️      | ✔️  | ❔      | ✔️        | ✔️⁵        |
+| [**Partial clone**][7]⁷                     | ✔️      | ✔️  | ❌      | ❌⁴        | ✔️⁵        |
+| **Narrow clone/checkout**                   | ✔️      | ❌   | ❌      | ❌⁴        | ✔️⁵        |
+| **Any file size**                           | ✔️      | ✔️  | ❌      | ✔️        | ✔️         |
+| **History rewriting abilities** ⁶           | ✔️      | ✔️  | ❌      | ✔️        | ❌          |
+| **Discourage unsafe operations** ⁶          | ✔️      | ❌   | ✔️     | ❌         | ✔️⁵        |
+| **Serve content as static website**         | ✔️      | ❌   | ✔️     | ❌         | ❌          |
+| **Bidirectional bridge to git**             | ❌       | ✔️  | ❌      | ✔️        | ✔️         |
+| **Local webapp issue tracker, forum, etc.** | ❌       | ❌   | ✔️     | ❌         | ❌          |
 
-[1]: # "Lazily calculated heuristically from tree snapshots. Can be wrong depending on CLI flags passed to `git blame` and/or amount of file changes between commits."
-[2]: # "Windows support via a Posix compatibility layer."
-[3]: # "Via shallow clones, partial clones, and extensions."
-[4]: # "Via extensions."
-[5]: # "All centralized VCSs have this behavior by design."
-[6]: # "Havarti doesn't arbitrarily handicap users. But it doesn't encourage them to do unsafe things either."
+#### Footnotes:
+1. Lazily calculated heuristically from tree snapshots. Can be wrong depending
+  on CLI flags passed to `git blame` and/or amount of file changes between commits.
+2. Windows support via a Posix compatibility layer.
+3. Via shallow clones, partial clones, and extensions.
+4. Via extensions.
+5. All centralized VCS tools have this behavior by design.
+6. Havarti doesn't arbitrarily handicap users. But it doesn't encourage them to do unsafe things either.
+7. https://github.blog/2020-12-21-get-up-to-speed-with-partial-clone-and-shallow-clone/
 
-[9]: https://github.blog/2020-12-21-get-up-to-speed-with-partial-clone-and-shallow-clone/
+[7]: https://github.blog/2020-12-21-get-up-to-speed-with-partial-clone-and-shallow-clone/

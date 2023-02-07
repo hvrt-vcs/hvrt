@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"io/fs"
+	stdlib_fs "io/fs"
 	"os"
 	"strings"
 
@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 
 	"github.com/hvrt-vcs/hvrt/file_ignore"
+	"github.com/hvrt-vcs/hvrt/fs"
 	"github.com/hvrt-vcs/hvrt/log"
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/crypto/sha3"
@@ -29,7 +30,7 @@ import (
 // function is called. Reusing prepared statements this way, we should see a big
 // performance increase, which will make a difference when we are adding lots of
 // files within a single transaction.
-func AddFile(work_tree, file_path string, tx *sql.Tx) error {
+func AddFile(work_tree_fs fs.ReadWriteFS, file_path string, tx *sql.Tx) error {
 	// `AddFiles`` should already have cleaned incoming paths to make sure that
 	// they are all relative, but in case this is called directly, we still need
 	// to check.
@@ -58,8 +59,7 @@ func AddFile(work_tree, file_path string, tx *sql.Tx) error {
 	}
 	file_script := string(file_script_bytes)
 
-	full_file_path := filepath.Join(work_tree, file_path)
-	file_reader, err := os.Open(full_file_path)
+	file_reader, err := work_tree_fs.OpenFile(file_path, os.O_RDONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -221,7 +221,7 @@ func cleanPaths(work_tree string, file_paths []string) (abs_work_tree string, re
 			}
 		} else {
 			err = filepath.WalkDir(abs_p,
-				func(path string, d fs.DirEntry, err error) error {
+				func(path string, d stdlib_fs.DirEntry, err error) error {
 					// If we hit errors walking the hierarchy, just print them
 					// and keep moving forward.
 					if err != nil {
@@ -258,6 +258,12 @@ func AddFiles(work_tree string, file_paths []string) error {
 	}
 	defer wt_db.Close()
 
+	// work_tree_fs := os.DirFS(abs_work_tree).(stdlib_fs.StatFS)
+	work_tree_fs, err := fs.NewOSFS(abs_work_tree)
+	if err != nil {
+		return err
+	}
+
 	wt_tx, err := wt_db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return err
@@ -270,9 +276,9 @@ func AddFiles(work_tree string, file_paths []string) error {
 		}
 		if stat.IsDir() {
 			err = file_ignore.WalkWorktree(
-				abs_work_tree,
-				filepath.Join(abs_work_tree, add_path),
-				func(worktree_root, fpath string, d fs.DirEntry, ferr error) error {
+				work_tree_fs,
+				add_path,
+				func(worktree_root fs.ReadWriteFS, fpath string, d stdlib_fs.DirEntry, ferr error) error {
 					if !d.IsDir() {
 						return AddFile(worktree_root, fpath, wt_tx)
 					}
@@ -281,7 +287,7 @@ func AddFiles(work_tree string, file_paths []string) error {
 				file_ignore.DefaultIgnoreFunc,
 			)
 		} else {
-			err = AddFile(abs_work_tree, add_path, wt_tx)
+			err = AddFile(work_tree_fs, add_path, wt_tx)
 		}
 		if err != nil {
 			tx_err := wt_tx.Rollback()

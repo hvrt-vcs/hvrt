@@ -4,13 +4,15 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io/fs"
+	stdlib_fs "io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/hvrt-vcs/hvrt/fs"
 	"github.com/hvrt-vcs/hvrt/log"
 	// "modernc.org/sqlite"
 )
@@ -55,9 +57,9 @@ func FnMatch(name, pat string) (bool, error) {
 
 // TODO: more closely match gitignore rules. For example, inverse rules starting
 // with `!`, etc. See URL: https://git-scm.com/docs/gitignore
-func ParseIgnoreFile(ignore_file_path string) ([]IgnorePattern, error) {
+func ParseIgnoreFile(worktree_root stdlib_fs.FS, ignore_file_path string) ([]IgnorePattern, error) {
 
-	ignore_file, err := os.Open(ignore_file_path)
+	ignore_file, err := worktree_root.Open(ignore_file_path)
 	if err != nil {
 		log.Warning.Printf("failed to parse ignore file %v", ignore_file_path)
 		return nil, err
@@ -141,24 +143,42 @@ func ReverseInplace[T any](slice []T) []T {
 	return slice
 }
 
-func ParentDirs(worktree_root, fpath string) []string {
+// func ParentDirs(worktree_root, fpath string) []string {
+// 	return_paths := make([]string, 0)
+// 	worktree_root = filepath.Clean(worktree_root)
+// 	fpath = filepath.Clean(fpath)
+
+// 	if IsRoot(fpath) || worktree_root == fpath {
+// 		return_paths = append(return_paths, fpath)
+// 		return return_paths
+// 	}
+
+// 	cur_dir := filepath.Dir(fpath)
+// 	for ; !IsRoot(cur_dir) && cur_dir != worktree_root; cur_dir = filepath.Dir(cur_dir) {
+// 		return_paths = append(return_paths, cur_dir)
+// 	}
+// 	// add worktree_root
+// 	return_paths = append(return_paths, cur_dir)
+
+// 	return_paths = ReverseInplace(return_paths)
+
+// 	return return_paths
+// }
+
+func ParentDirs(fpath string) []string {
 	return_paths := make([]string, 0)
-	worktree_root = filepath.Clean(worktree_root)
 	fpath = filepath.Clean(fpath)
 
-	if IsRoot(fpath) || worktree_root == fpath {
-		return_paths = append(return_paths, fpath)
-		return return_paths
-	}
+	fpath = filepath.ToSlash(fpath)
+	paths := strings.Split(fpath, "/")
 
-	cur_dir := filepath.Dir(fpath)
-	for ; !IsRoot(cur_dir) && cur_dir != worktree_root; cur_dir = filepath.Dir(cur_dir) {
-		return_paths = append(return_paths, cur_dir)
+	for i, p := range paths {
+		if len(return_paths) == 0 {
+			return_paths = append(return_paths, p)
+		} else {
+			return_paths = append(return_paths, path.Join(return_paths[i-1], p))
+		}
 	}
-	// add worktree_root
-	return_paths = append(return_paths, cur_dir)
-
-	return_paths = ReverseInplace(return_paths)
 
 	return return_paths
 }
@@ -172,9 +192,9 @@ func GetWorkTreeRoot(start_dir string) (string, error) {
 	cur_dir := abs_path
 	for cur_dir != "" {
 		log.Debug.Println(cur_dir)
-		cur_dir_fs := os.DirFS(cur_dir).(fs.StatFS)
+		cur_dir_fs := os.DirFS(cur_dir).(stdlib_fs.StatFS)
 		if wt_dir_finfo, wt_err := cur_dir_fs.Stat(".hvrt"); wt_err != nil {
-			if errors.Is(wt_err, fs.ErrNotExist) {
+			if errors.Is(wt_err, stdlib_fs.ErrNotExist) {
 				cur_dir = getParentdir(cur_dir)
 			} else {
 				panic(wt_err)
@@ -192,10 +212,10 @@ func GetWorkTreeRoot(start_dir string) (string, error) {
 
 type IgnoreCache struct {
 	ignore_patterns map[string][]IgnorePattern
-	worktree_root   string
+	worktree_root   stdlib_fs.FS
 }
 
-func NewIgnoreCache(worktree_root string) *IgnoreCache {
+func NewIgnoreCache(worktree_root stdlib_fs.FS) *IgnoreCache {
 	ignore_patterns := make(map[string][]IgnorePattern, 0)
 	ic := new(IgnoreCache)
 	ic.ignore_patterns = ignore_patterns
@@ -203,18 +223,18 @@ func NewIgnoreCache(worktree_root string) *IgnoreCache {
 	return ic
 }
 
-func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
+func (ic *IgnoreCache) MatchesIgnore(fpath string, de stdlib_fs.DirEntry) bool {
 	var err error
 	var ignore *bool
 
-	// root and worktree root can never be ignored.
-	if IsRoot(fpath) {
-		return false
-	} else if ic.worktree_root == fpath {
-		return false
-	}
+	// // root and worktree root can never be ignored.
+	// if IsRoot(fpath) {
+	// 	return false
+	// } else if ic.worktree_root == fpath {
+	// 	return false
+	// }
 
-	for _, par_dir := range ParentDirs(ic.worktree_root, filepath.Dir(fpath)) {
+	for _, par_dir := range ParentDirs(filepath.Dir(fpath)) {
 		ignore_dir := filepath.ToSlash(par_dir)
 		patterns, present := ic.ignore_patterns[ignore_dir]
 
@@ -223,7 +243,7 @@ func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
 			// that we don't hit the file system again the next time we check
 			// for this ignore file on a different file with the same ancestor
 			// directory.
-			pattern_pairs, _ := ParseIgnoreFile(filepath.Join(par_dir, ".hvrtignore"))
+			pattern_pairs, _ := ParseIgnoreFile(ic.worktree_root, filepath.Join(par_dir, ".hvrtignore"))
 			ic.ignore_patterns[ignore_dir] = pattern_pairs
 			patterns = pattern_pairs
 			present = true
@@ -276,7 +296,7 @@ func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
 	}
 }
 
-type WalkDirFunc func(worktree_root, fpath string, d fs.DirEntry, err error) error
+type WalkDirFunc func(worktree_root fs.ReadWriteFS, fpath string, d stdlib_fs.DirEntry, err error) error
 
 func IsRoot(fpath string) bool {
 	return strings.HasSuffix(filepath.Dir(fpath), string(filepath.Separator))
@@ -287,21 +307,29 @@ func Parent() {
 }
 
 // Skip ignored directories. Do nothing with ignored files.
-func DefaultIgnoreFunc(worktree_root, fpath string, d fs.DirEntry, err error) error {
+func DefaultIgnoreFunc(worktree_root fs.ReadWriteFS, fpath string, d stdlib_fs.DirEntry, err error) error {
 	if d.IsDir() {
-		return fs.SkipDir
+		return stdlib_fs.SkipDir
 	} else {
 		return nil
 	}
 }
 
-// Similar to `filepath.WalkDir`, but calls a different func for ignored files.
-func WalkWorktree(worktree_root, start_dir string, fn, fn_ignore WalkDirFunc) error {
+// Similar to `fs.WalkDir`, but calls a separate func for ignored files.
+//
+// TODO: pivot to using `fs.FS` instance instead of direct file access. This
+// should make it easier for testing, as well as abstracting away the underlying
+// filesystem.
+func WalkWorktree(worktree_root fs.ReadWriteFS, start_dir string, fn, fn_ignore WalkDirFunc) error {
 	ignore_cache := NewIgnoreCache(worktree_root)
+	if start_dir == "" {
+		start_dir = "."
+	}
 
-	return filepath.WalkDir(
+	return stdlib_fs.WalkDir(
+		worktree_root,
 		start_dir,
-		func(fpath string, d fs.DirEntry, err error) error {
+		func(fpath string, d stdlib_fs.DirEntry, err error) error {
 			if ignore_cache.MatchesIgnore(fpath, d) {
 				return fn_ignore(worktree_root, fpath, d, err)
 			} else {

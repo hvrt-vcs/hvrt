@@ -24,27 +24,19 @@ type BasicFile interface {
 // An File interface. It is acceptable for any implementation which doesn't implement
 type File interface {
 	Chmod(mode stdlib_fs.FileMode) error
-	Chdir() error
-	Chown(uid int, gid int) error
 	Close() error
-	Name() string
 	Read(b []byte) (n int, err error)
 	ReadAt(b []byte, off int64) (n int, err error)
-	ReadDir(n int) ([]stdlib_fs.DirEntry, error)
 	ReadFrom(r io.Reader) (n int64, err error)
-	Readdir(n int) ([]stdlib_fs.FileInfo, error)
-	Readdirnames(n int) (names []string, err error)
 	Seek(offset int64, whence int) (ret int64, err error)
 	SetDeadline(t time.Time) error
 	SetReadDeadline(t time.Time) error
 	SetWriteDeadline(t time.Time) error
 	Stat() (stdlib_fs.FileInfo, error)
 	Sync() error
-	SyscallConn() (syscall.RawConn, error)
 	Truncate(size int64) error
 	Write(b []byte) (n int, err error)
 	WriteAt(b []byte, off int64) (n int, err error)
-	WriteString(s string) (n int, err error)
 }
 
 // An FS interface that can, more or less, emulate a real filesystem

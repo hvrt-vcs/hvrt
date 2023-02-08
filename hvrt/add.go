@@ -30,7 +30,7 @@ import (
 // function is called. Reusing prepared statements this way, we should see a big
 // performance increase, which will make a difference when we are adding lots of
 // files within a single transaction.
-func AddFile(work_tree_fs fs.ReadWriteFS, file_path string, tx *sql.Tx) error {
+func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 	// `AddFiles`` should already have cleaned incoming paths to make sure that
 	// they are all relative, but in case this is called directly, we still need
 	// to check.
@@ -194,72 +194,70 @@ func appendRelPath(paths []string, work_tree, maybe_child string) ([]string, err
 	return paths, nil
 }
 
-func cleanPaths(work_tree string, file_paths []string) (abs_work_tree string, rel_file_paths []string, ret_err error) {
-	abs_wt, err := filepath.Abs(work_tree)
-	if err != nil {
-		return "", nil, err
-	}
+func cleanPaths(worktree_fs fs.FullFS, file_paths []string) (rel_file_paths []string, ret_err error) {
 	return_paths := make([]string, 0, len(file_paths))
 
 	for _, p := range file_paths {
-		abs_p, err := filepath.Abs(p)
+		rel_path, err := worktree_fs.Rel(p)
 		if err != nil {
-			return abs_wt, return_paths, err
+			return return_paths, err
 		}
-
-		p_stat, err := os.Stat(abs_p)
+		p_stat, err := worktree_fs.Stat(rel_path)
 		if err != nil {
-			return abs_wt, return_paths, err
+			return return_paths, err
 		}
 
 		// TODO: add .hvrtignore logic in here, along with respecting the
 		// `force` flag to override it.
 		if !p_stat.IsDir() {
-			return_paths, err = appendRelPath(return_paths, abs_wt, abs_p)
-			if err != nil {
-				return abs_wt, return_paths, err
-			}
+			return_paths = append(return_paths, rel_path)
 		} else {
-			err = filepath.WalkDir(abs_p,
-				func(path string, d stdlib_fs.DirEntry, err error) error {
-					// If we hit errors walking the hierarchy, just print them
-					// and keep moving forward.
+			err = file_ignore.WalkWorktree(
+				worktree_fs,
+				rel_path,
+				func(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, err error) error {
 					if err != nil {
-						log.Warning.Println(err)
+						// panic(err)
+						return err
 					}
 
 					if !d.IsDir() {
-						return_paths, err = appendRelPath(return_paths, abs_wt, path)
-						if err != nil {
-							return err
-						}
+						return_paths = append(return_paths, fpath)
 					}
 					return nil
 				},
+				file_ignore.DefaultIgnoreFunc,
 			)
+
 			if err != nil {
-				return abs_wt, return_paths, err
+				return return_paths, err
 			}
 		}
 	}
 
-	return abs_wt, return_paths, nil
+	return return_paths, nil
 }
 
 func AddFiles(work_tree string, file_paths []string) error {
-	abs_work_tree, rel_file_paths, err := cleanPaths(work_tree, file_paths)
+	abs_work_tree, err := filepath.Abs(work_tree)
 	if err != nil {
 		return err
 	}
 
+	// Because of how sqlite works, using a VFS to isn't straightforward at this
+	// moment. Just hit the real file system.
 	wt_db, err := GetExistingWorktreeDB(abs_work_tree)
 	if err != nil {
 		return err
 	}
 	defer wt_db.Close()
 
-	// work_tree_fs := os.DirFS(abs_work_tree).(stdlib_fs.StatFS)
 	work_tree_fs, err := fs.NewOSFS(abs_work_tree)
+	if err != nil {
+		return err
+	}
+
+	rel_file_paths, err := cleanPaths(work_tree_fs, file_paths)
 	if err != nil {
 		return err
 	}
@@ -270,15 +268,16 @@ func AddFiles(work_tree string, file_paths []string) error {
 	}
 
 	for _, add_path := range rel_file_paths {
-		stat, err := os.Stat(add_path)
+		stat, err := work_tree_fs.Stat(add_path)
 		if err != nil {
+			log.Error.Println(err)
 			continue
 		}
 		if stat.IsDir() {
 			err = file_ignore.WalkWorktree(
 				work_tree_fs,
 				add_path,
-				func(worktree_root fs.ReadWriteFS, fpath string, d stdlib_fs.DirEntry, ferr error) error {
+				func(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, ferr error) error {
 					if !d.IsDir() {
 						return AddFile(worktree_root, fpath, wt_tx)
 					}

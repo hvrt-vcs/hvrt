@@ -3,6 +3,7 @@ package cmd
 import (
 	"math"
 	"os"
+	"runtime/debug"
 
 	"github.com/hvrt-vcs/hvrt/log"
 	"github.com/spf13/cobra"
@@ -48,7 +49,8 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error.Printf("unexpected error: %v", r)
+			log.Debug.Printf("stacktrace from panic: %s", string(debug.Stack()))
+			log.Error.Printf("unexpected error: %s", r)
 			os.Exit(ReturnUnexpectedError)
 		}
 	}()

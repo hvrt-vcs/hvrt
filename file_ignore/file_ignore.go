@@ -296,7 +296,7 @@ func (ic *IgnoreCache) MatchesIgnore(fpath string, de stdlib_fs.DirEntry) bool {
 	}
 }
 
-type WalkDirFunc func(worktree_root fs.ReadWriteFS, fpath string, d stdlib_fs.DirEntry, err error) error
+type WalkDirFunc func(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, err error) error
 
 func IsRoot(fpath string) bool {
 	return strings.HasSuffix(filepath.Dir(fpath), string(filepath.Separator))
@@ -307,7 +307,7 @@ func Parent() {
 }
 
 // Skip ignored directories. Do nothing with ignored files.
-func DefaultIgnoreFunc(worktree_root fs.ReadWriteFS, fpath string, d stdlib_fs.DirEntry, err error) error {
+func DefaultIgnoreFunc(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, err error) error {
 	if d.IsDir() {
 		return stdlib_fs.SkipDir
 	} else {
@@ -320,20 +320,26 @@ func DefaultIgnoreFunc(worktree_root fs.ReadWriteFS, fpath string, d stdlib_fs.D
 // TODO: pivot to using `fs.FS` instance instead of direct file access. This
 // should make it easier for testing, as well as abstracting away the underlying
 // filesystem.
-func WalkWorktree(worktree_root fs.ReadWriteFS, start_dir string, fn, fn_ignore WalkDirFunc) error {
-	ignore_cache := NewIgnoreCache(worktree_root)
+func WalkWorktree(worktree_fs fs.FullFS, start_dir string, fn, fn_ignore WalkDirFunc) error {
+	ignore_cache := NewIgnoreCache(worktree_fs)
 	if start_dir == "" {
 		start_dir = "."
 	}
 
 	return stdlib_fs.WalkDir(
-		worktree_root,
+		worktree_fs,
 		start_dir,
 		func(fpath string, d stdlib_fs.DirEntry, err error) error {
+			// log.Debug.Printf("why is direntry nil? %v", d)
+			// log.Debug.Printf("Does direntry have an error? %v", err)
+			if err != nil {
+				panic(err)
+				// return err
+			}
 			if ignore_cache.MatchesIgnore(fpath, d) {
-				return fn_ignore(worktree_root, fpath, d, err)
+				return fn_ignore(worktree_fs, fpath, d, err)
 			} else {
-				return fn(worktree_root, fpath, d, err)
+				return fn(worktree_fs, fpath, d, err)
 			}
 		},
 	)

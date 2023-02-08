@@ -62,12 +62,12 @@ func Status(repo_file, work_tree string) (*RepoStat, error) {
 	}
 
 	log.Debug.Printf("Real worktree %v", real_work_tree)
-	stat := new(RepoStat)
+	stat := &RepoStat{}
 	err = file_ignore.WalkWorktree(
 		work_tree_fs,
-		real_work_tree,
-		func(worktree_root fs.ReadWriteFS, fpath string, d stdlib_fs.DirEntry, err error) error {
-			if !d.IsDir() {
+		".",
+		func(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, err error) error {
+			if d != nil && !d.IsDir() {
 				stat.ModPaths = append(stat.ModPaths, fpath)
 			}
 			return nil

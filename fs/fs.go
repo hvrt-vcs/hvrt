@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -39,13 +38,18 @@ type File interface {
 	WriteAt(b []byte, off int64) (n int, err error)
 }
 
-// An FS interface that can, more or less, emulate a real filesystem
-type ReadWriteFS interface {
+type OpenFileFS interface {
 	stdlib_fs.FS
 	stdlib_fs.StatFS
-	stdlib_fs.ReadDirFS
 
 	OpenFile(name string, flag int, perm os.FileMode) (File, error)
+}
+
+// An FS interface that can, more or less, emulate a real filesystem
+type FullFS interface {
+	OpenFileFS
+	stdlib_fs.ReadDirFS
+	Rel(name string) (string, error)
 }
 
 // An implemententation of `ReadWriteFS` to interact with a real filesystem on the present operating system.
@@ -102,4 +106,12 @@ func (osfs *OSFS) ReadDir(name string) ([]stdlib_fs.DirEntry, error) {
 
 func (osfs *OSFS) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 	return os.OpenFile(filepath.Join(osfs.root_dir, name), flag, perm)
+}
+
+func (osfs *OSFS) Rel(name string) (string, error) {
+	if filepath.IsAbs(name) {
+		return filepath.Rel(osfs.root_dir, name)
+	} else {
+		return name, nil
+	}
 }

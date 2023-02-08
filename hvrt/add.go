@@ -59,14 +59,14 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 	}
 	file_script := string(file_script_bytes)
 
-	file_reader, err := work_tree_fs.OpenFile(file_path, os.O_RDONLY, 0644)
+	file_to_add, err := work_tree_fs.OpenFile(file_path, os.O_RDONLY, 0644)
 	if err != nil {
 		return err
 	}
-	defer file_reader.Close()
+	defer file_to_add.Close()
 
 	hash := sha3.New256()
-	_, err = io.Copy(hash, file_reader)
+	_, err = io.Copy(hash, file_to_add)
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 	file_hex_digest := hex.EncodeToString(hash.Sum([]byte{}))
 	hash.Reset()
 
-	fstat, err := file_reader.Stat()
+	fstat, err := work_tree_fs.Stat(file_path)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 	}
 
 	// rewind file to beginning
-	if _, err = file_reader.Seek(0, 0); err != nil {
+	if _, err = file_to_add.Seek(0, 0); err != nil {
 		return err
 	}
 
@@ -104,7 +104,8 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 	// clarification: https://yourbasic.org/golang/clear-slice/
 	digest_bytes := make([]byte, 0)
 
-	// TODO: pull this chunk size from config
+	// TODO: pull this chunk size from config. Default should probably be 1MiB
+	// to match zstd default window size.
 	// 8KiB
 	chunk_size := int64(1024 * 8)
 	// chunk_size := int64(1) // For testing
@@ -124,7 +125,7 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 		hash.Reset()
 		compressor.Reset(buffer)
 		multi_writer := io.MultiWriter(hash, compressor)
-		section_reader := io.NewSectionReader(file_reader, cur_byte, chunk_size)
+		section_reader := io.LimitReader(file_to_add, chunk_size)
 
 		// `num`` should never be less than `1``. First, the for loop condition
 		// above should make reading a zero length file impossible. Second, if

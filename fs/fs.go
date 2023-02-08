@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 func init() {
@@ -20,34 +19,55 @@ type BasicFile interface {
 	stdlib_fs.File
 }
 
-// An File interface. It is acceptable for any implementation which doesn't implement
-type File interface {
-	Chmod(mode stdlib_fs.FileMode) error
-	Close() error
-	Read(b []byte) (n int, err error)
-	ReadAt(b []byte, off int64) (n int, err error)
-	ReadFrom(r io.Reader) (n int64, err error)
-	Seek(offset int64, whence int) (ret int64, err error)
-	SetDeadline(t time.Time) error
-	SetReadDeadline(t time.Time) error
-	SetWriteDeadline(t time.Time) error
-	Stat() (stdlib_fs.FileInfo, error)
+// Syncer is the interface that wraps the basic Sync method. Sync will sync any
+// buffered or uncommitted data to some external resource. When there is nothing
+// to sync, this should behave as a no op. Otherwise, Sync should return an
+// error if any buffered data could not be synced.
+type Syncer interface {
 	Sync() error
-	Truncate(size int64) error
-	Write(b []byte) (n int, err error)
-	WriteAt(b []byte, off int64) (n int, err error)
+}
+
+// WriteSyncer is the interface that groups the basic Write and Sync methods.
+type WriteSyncer interface {
+	io.Writer
+	Syncer
+}
+
+// CloseSyncer is the interface that groups the basic Close and Sync methods. In
+// general, it is expected in an implementation of this interface that the Close
+// method will implicitly call Sync, however this is not a hard requirement.
+type CloseSyncer interface {
+	io.Closer
+	Syncer
+}
+
+// WriteCloseSyncer is the interface that groups the basic Write, Close, and Sync methods.
+type WriteCloseSyncer interface {
+	io.Writer
+	io.Closer
+	Syncer
+}
+
+// A File interface. It is acceptable for any implementation which doesn't
+// implement a given method to simply return NotImplementedError for that
+// method.
+type File interface {
+	io.Reader
+	io.Writer
+	io.Closer
+	io.Seeker
+	Syncer
 }
 
 type OpenFileFS interface {
 	stdlib_fs.FS
-	stdlib_fs.StatFS
-
 	OpenFile(name string, flag int, perm os.FileMode) (File, error)
 }
 
 // An FS interface that can, more or less, emulate a real filesystem
 type FullFS interface {
 	OpenFileFS
+	stdlib_fs.StatFS
 	stdlib_fs.ReadDirFS
 	Rel(name string) (string, error)
 }

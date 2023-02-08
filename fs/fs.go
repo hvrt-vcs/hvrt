@@ -15,48 +15,13 @@ func init() {
 
 var NotImplementedError error = fmt.Errorf("requested functionality is not implemented")
 
-type BasicFile interface {
-	stdlib_fs.File
-}
-
-// Syncer is the interface that wraps the basic Sync method. Sync will sync any
-// buffered or uncommitted data to some external resource. When there is nothing
-// to sync, this should behave as a no op. Otherwise, Sync should return an
-// error if any buffered data could not be synced.
-type Syncer interface {
-	Sync() error
-}
-
-// WriteSyncer is the interface that groups the basic Write and Sync methods.
-type WriteSyncer interface {
-	io.Writer
-	Syncer
-}
-
-// CloseSyncer is the interface that groups the basic Close and Sync methods. In
-// general, it is expected in an implementation of this interface that the Close
-// method will implicitly call Sync, however this is not a hard requirement.
-type CloseSyncer interface {
-	io.Closer
-	Syncer
-}
-
-// WriteCloseSyncer is the interface that groups the basic Write, Close, and Sync methods.
-type WriteCloseSyncer interface {
-	io.Writer
-	io.Closer
-	Syncer
-}
-
 // A File interface. It is acceptable for any implementation which doesn't
 // implement a given method to simply return NotImplementedError for that
 // method.
 type File interface {
-	io.Reader
+	stdlib_fs.File
 	io.Writer
-	io.Closer
 	io.Seeker
-	Syncer
 }
 
 type OpenFileFS interface {

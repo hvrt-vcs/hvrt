@@ -24,6 +24,13 @@ type File interface {
 	io.Seeker
 }
 
+// CreateFS is the interface that wraps the Create method.
+type CreateFS interface {
+	stdlib_fs.FS
+	Create(name string) (File, error)
+}
+
+// OpenFileFS is the interface that wraps the OpenFile method. It need not be able to implement all flags that os.OpenFile supports.
 type OpenFileFS interface {
 	stdlib_fs.FS
 	OpenFile(name string, flag int, perm os.FileMode) (File, error)

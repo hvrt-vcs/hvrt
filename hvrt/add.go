@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	stdlib_fs "io/fs"
-	"os"
-	"strings"
 
 	// "fmt"
 	"encoding/hex"
@@ -30,7 +28,7 @@ import (
 // function is called. Reusing prepared statements this way, we should see a big
 // performance increase, which will make a difference when we are adding lots of
 // files within a single transaction.
-func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
+func AddFile(file_to_add io.ReadSeeker, file_path string, tx *sql.Tx) error {
 	// `AddFiles`` should already have cleaned incoming paths to make sure that
 	// they are all relative, but in case this is called directly, we still need
 	// to check.
@@ -59,33 +57,30 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 	}
 	file_script := string(file_script_bytes)
 
-	file_to_add, err := work_tree_fs.OpenFile(file_path, os.O_RDONLY, 0644)
-	if err != nil {
+	// rewind file to beginning
+	if _, err = file_to_add.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	defer file_to_add.Close()
 
 	hash := sha3.New256()
-	_, err = io.Copy(hash, file_to_add)
+	file_size, err := io.Copy(hash, file_to_add)
 	if err != nil {
 		return err
 	}
 
-	file_hex_digest := hex.EncodeToString(hash.Sum([]byte{}))
+	// Save time/space with a reused digest slice. See the following link for
+	// clarification: https://yourbasic.org/golang/clear-slice/
+	digest_bytes := hash.Sum(make([]byte, 0))
+	file_hex_digest := hex.EncodeToString(digest_bytes)
 	hash.Reset()
 
-	fstat, err := work_tree_fs.Stat(file_path)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec(blob_script, file_hex_digest, "sha3-256", fstat.Size())
+	_, err = tx.Exec(blob_script, file_hex_digest, "sha3-256", file_size)
 	if err != nil {
 		return err
 	}
 
 	// To be cross platform, we normalize the path with forward slashes.
-	_, err = tx.Exec(file_script, filepath.ToSlash(file_path), file_hex_digest, "sha3-256", fstat.Size())
+	_, err = tx.Exec(file_script, filepath.ToSlash(file_path), file_hex_digest, "sha3-256", file_size)
 	if err != nil {
 		return err
 	}
@@ -96,13 +91,9 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 	}
 
 	// rewind file to beginning
-	if _, err = file_to_add.Seek(0, 0); err != nil {
+	if _, err = file_to_add.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-
-	// Save time/space with a reused digest slice. See the following link for
-	// clarification: https://yourbasic.org/golang/clear-slice/
-	digest_bytes := make([]byte, 0)
 
 	// TODO: pull this chunk size from config. Default should probably be 1MiB
 	// to match zstd default window size.
@@ -116,14 +107,10 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 		return err
 	}
 
-	for cur_byte, num := int64(0), int64(0); cur_byte < fstat.Size(); cur_byte += num {
-		// Retain underlying capacity from previous loop iteration, but set
-		// length to zero.
-		digest_bytes = digest_bytes[:0]
+	for cur_byte, num := int64(0), int64(0); cur_byte < file_size; cur_byte += num {
 		buffer.Reset()
-
-		hash.Reset()
 		compressor.Reset(buffer)
+		hash.Reset()
 		multi_writer := io.MultiWriter(hash, compressor)
 		section_reader := io.LimitReader(file_to_add, chunk_size)
 
@@ -149,7 +136,10 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 		}
 		enc_blob := buffer.Bytes()
 
-		chunk_hex_digest := hex.EncodeToString(hash.Sum(digest_bytes))
+		// Retain underlying capacity, but set length to zero.
+		digest_bytes = digest_bytes[:0]
+		digest_bytes = hash.Sum(hash.Sum(digest_bytes))
+		chunk_hex_digest := hex.EncodeToString(digest_bytes)
 
 		_, err = chunk_stmt.Exec(
 			file_hex_digest,  // 1. blob_hash
@@ -182,41 +172,63 @@ func AddFile(work_tree_fs fs.FullFS, file_path string, tx *sql.Tx) error {
 	return nil
 }
 
-func appendRelPath(paths []string, work_tree, maybe_child string) ([]string, error) {
-	rel_path, err := filepath.Rel(work_tree, maybe_child)
-	if err != nil {
-		return paths, err
+func getStatPathFunc(maybe_statfs stdlib_fs.FS) func(path string) (stdlib_fs.FileInfo, error) {
+	if wt_statfs, can_be_statfs := maybe_statfs.(stdlib_fs.StatFS); can_be_statfs {
+		return wt_statfs.Stat
+	} else {
+		return func(path string) (stdlib_fs.FileInfo, error) {
+			if f, err := maybe_statfs.Open(path); err != nil {
+				return nil, err
+			} else {
+				return f.Stat()
+			}
+		}
 	}
-	if strings.HasPrefix(rel_path, "..") || filepath.IsAbs(rel_path) {
-		return paths, fmt.Errorf(`path "%v" outside work tree "%v"`, maybe_child, work_tree)
-	}
-	paths = append(paths, rel_path)
-
-	return paths, nil
 }
 
-func cleanPaths(worktree_fs fs.FullFS, file_paths []string) (rel_file_paths []string, ret_err error) {
+func cleanPaths(worktree_fs fs.FullFS, abs_work_tree string, file_paths []string) ([]string, error) {
+	all_rel := true
+	for _, p := range file_paths {
+		if filepath.IsAbs(p) {
+			all_rel = false
+			break
+		}
+	}
+
+	rel_paths := make([]string, len(file_paths))
+	if all_rel {
+		copy(rel_paths, file_paths)
+	} else {
+		if !filepath.IsAbs(abs_work_tree) {
+			return nil, fmt.Errorf("worktree is not absolute path")
+		}
+
+		for _, ap := range file_paths {
+			rp, err := filepath.Rel(abs_work_tree, ap)
+			if err != nil {
+				return nil, err
+			}
+			rel_paths = append(rel_paths, rp)
+		}
+
+	}
+	statFunc := getStatPathFunc(worktree_fs)
 	return_paths := make([]string, 0, len(file_paths))
 
-	for _, p := range file_paths {
-		rel_path, err := worktree_fs.Rel(p)
+	for _, rel_path := range rel_paths {
+		p_stat, err := statFunc(rel_path)
 		if err != nil {
-			return return_paths, err
-		}
-		p_stat, err := worktree_fs.Stat(rel_path)
-		if err != nil {
-			return return_paths, err
+			log.Error.Println(err)
+			continue
 		}
 
-		// TODO: add .hvrtignore logic in here, along with respecting the
-		// `force` flag to override it.
 		if !p_stat.IsDir() {
 			return_paths = append(return_paths, rel_path)
 		} else {
 			err = file_ignore.WalkWorktree(
 				worktree_fs,
 				rel_path,
-				func(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, err error) error {
+				func(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error {
 					if err != nil {
 						// panic(err)
 						return err
@@ -227,6 +239,8 @@ func cleanPaths(worktree_fs fs.FullFS, file_paths []string) (rel_file_paths []st
 					}
 					return nil
 				},
+
+				// TODO: allow ability to forcefully override add .hvrtignore logic in here.
 				file_ignore.DefaultIgnoreFunc,
 			)
 
@@ -237,6 +251,23 @@ func cleanPaths(worktree_fs fs.FullFS, file_paths []string) (rel_file_paths []st
 	}
 
 	return return_paths, nil
+}
+
+func openReadSeekCloser(openfs stdlib_fs.FS, fpath string) (io.ReadSeekCloser, error) {
+	file, err := openfs.Open(fpath)
+	if err != nil {
+		log.Error.Printf("cannot add file %v due to err %v", fpath, err)
+		return nil, err
+	}
+
+	read_seek_closer, can_read_seek := file.(io.ReadSeekCloser)
+	if !can_read_seek {
+		defer file.Close()
+		err = fmt.Errorf("cannot add file %v because it cannot cast to io.ReadSeekCloser", fpath)
+		return nil, err
+	}
+
+	return read_seek_closer, nil
 }
 
 func AddFiles(work_tree string, file_paths []string) error {
@@ -258,7 +289,7 @@ func AddFiles(work_tree string, file_paths []string) error {
 		return err
 	}
 
-	rel_file_paths, err := cleanPaths(work_tree_fs, file_paths)
+	rel_file_paths, err := cleanPaths(work_tree_fs, work_tree, file_paths)
 	if err != nil {
 		return err
 	}
@@ -269,7 +300,14 @@ func AddFiles(work_tree string, file_paths []string) error {
 	}
 
 	for _, add_path := range rel_file_paths {
-		stat, err := work_tree_fs.Stat(add_path)
+		add_file, err := work_tree_fs.Open(add_path)
+		if err != nil {
+			log.Error.Println(err)
+			continue
+		}
+		defer add_file.Close()
+
+		stat, err := add_file.Stat()
 		if err != nil {
 			log.Error.Println(err)
 			continue
@@ -278,16 +316,40 @@ func AddFiles(work_tree string, file_paths []string) error {
 			err = file_ignore.WalkWorktree(
 				work_tree_fs,
 				add_path,
-				func(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, ferr error) error {
+				func(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error {
+					if err != nil {
+						log.Debug.Println(err)
+						return err
+					}
+
 					if !d.IsDir() {
-						return AddFile(worktree_root, fpath, wt_tx)
+						read_seek_closer, err := openReadSeekCloser(worktree_root, fpath)
+						if err != nil {
+							return nil
+						}
+						defer read_seek_closer.Close()
+						return AddFile(read_seek_closer, fpath, wt_tx)
 					}
 					return nil
 				},
 				file_ignore.DefaultIgnoreFunc,
 			)
+			if err != nil {
+				log.Error.Println(err)
+				continue
+			}
 		} else {
-			err = AddFile(work_tree_fs, add_path, wt_tx)
+			var read_seek_closer io.ReadSeeker
+			if read_seek_closer, err = openReadSeekCloser(work_tree_fs, add_path); err != nil {
+				log.Error.Println(err)
+				continue
+			} else {
+				err = AddFile(read_seek_closer, add_path, wt_tx)
+				if err != nil {
+					log.Error.Println(err)
+					continue
+				}
+			}
 		}
 		if err != nil {
 			tx_err := wt_tx.Rollback()
@@ -296,6 +358,10 @@ func AddFiles(work_tree string, file_paths []string) error {
 			}
 			return err
 		}
+		// Although we made a deferred call to close previously, that won't
+		// trigger until we leave the func. To free up potential resources like
+		// file descriptors, we call close here as well.
+		add_file.Close()
 	}
 
 	return wt_tx.Commit()

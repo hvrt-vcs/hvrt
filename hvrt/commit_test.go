@@ -82,8 +82,10 @@ func TestAddFileToLocalRepoDB(t *testing.T) {
 	work_tree, _, _, cleanupFunc := setupCommitTests(t, filename, contents)
 	defer cleanupFunc()
 
-	_, err := GetExistingLocalRepoDB(work_tree)
+	local_db, err := GetExistingLocalRepoDB(work_tree)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	log.Debug.Println(local_db)
 }

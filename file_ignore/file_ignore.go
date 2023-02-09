@@ -296,7 +296,7 @@ func (ic *IgnoreCache) MatchesIgnore(fpath string, de stdlib_fs.DirEntry) bool {
 	}
 }
 
-type WalkDirFunc func(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, err error) error
+type WalkDirFunc func(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error
 
 func IsRoot(fpath string) bool {
 	return strings.HasSuffix(filepath.Dir(fpath), string(filepath.Separator))
@@ -307,7 +307,7 @@ func Parent() {
 }
 
 // Skip ignored directories. Do nothing with ignored files.
-func DefaultIgnoreFunc(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, err error) error {
+func DefaultIgnoreFunc(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error {
 	if d.IsDir() {
 		return stdlib_fs.SkipDir
 	} else {
@@ -324,6 +324,10 @@ func WalkWorktree(worktree_fs fs.FullFS, start_dir string, fn, fn_ignore WalkDir
 	ignore_cache := NewIgnoreCache(worktree_fs)
 	if start_dir == "" {
 		start_dir = "."
+	}
+
+	if filepath.IsAbs(start_dir) {
+		return fmt.Errorf("start directory cannot be absolute %v", start_dir)
 	}
 
 	return stdlib_fs.WalkDir(

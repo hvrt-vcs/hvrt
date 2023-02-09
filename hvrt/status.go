@@ -66,7 +66,7 @@ func Status(repo_file, work_tree string) (*RepoStat, error) {
 	err = file_ignore.WalkWorktree(
 		work_tree_fs,
 		".",
-		func(worktree_root fs.FullFS, fpath string, d stdlib_fs.DirEntry, err error) error {
+		func(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error {
 			if d != nil && !d.IsDir() {
 				stat.ModPaths = append(stat.ModPaths, fpath)
 			}

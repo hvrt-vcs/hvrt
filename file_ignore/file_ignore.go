@@ -333,11 +333,8 @@ func WalkWorktree(worktree_fs fs.FS, start_dir string, fn, fn_ignore WalkDirFunc
 		worktree_fs,
 		start_dir,
 		func(fpath string, d fs.DirEntry, err error) error {
-			// log.Debug.Printf("why is direntry nil? %v", d)
-			// log.Debug.Printf("Does direntry have an error? %v", err)
 			if err != nil {
-				panic(err)
-				// return err
+				return err
 			}
 			if ignore_cache.MatchesIgnore(fpath, d) {
 				return fn_ignore(worktree_fs, fpath, d, err)

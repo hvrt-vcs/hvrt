@@ -80,7 +80,7 @@ value similar features:
 #### Footnotes:
 1. Lazily calculated heuristically from tree snapshots. Can be wrong depending
   on CLI flags passed to `git blame` and/or amount of file changes between commits.
-2. Windows support via a Posix compatibility layer.
+2. Windows support via a Posix compatibility layer. Comes bundled with many indirect dependency programs like `bash`, `perl`, and `curl`.
 3. Via shallow clones, partial clones, and extensions.
 4. Via extensions.
 5. All centralized VCS tools have this behavior by design.

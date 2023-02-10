@@ -6,14 +6,14 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	stdlib_fs "io/fs"
+	"io/fs"
 
 	// "fmt"
 	"encoding/hex"
 
 	"github.com/hvrt-vcs/hvrt/file_ignore"
-	"github.com/hvrt-vcs/hvrt/fs"
 	"github.com/hvrt-vcs/hvrt/log"
+	"github.com/hvrt-vcs/hvrt/vfs"
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/crypto/sha3"
 
@@ -172,11 +172,11 @@ func AddFile(file_to_add io.ReadSeeker, file_path string, tx *sql.Tx) error {
 	return nil
 }
 
-func getStatPathFunc(maybe_statfs stdlib_fs.FS) func(path string) (stdlib_fs.FileInfo, error) {
-	if wt_statfs, can_be_statfs := maybe_statfs.(stdlib_fs.StatFS); can_be_statfs {
+func getStatPathFunc(maybe_statfs fs.FS) func(path string) (fs.FileInfo, error) {
+	if wt_statfs, can_be_statfs := maybe_statfs.(fs.StatFS); can_be_statfs {
 		return wt_statfs.Stat
 	} else {
-		return func(path string) (stdlib_fs.FileInfo, error) {
+		return func(path string) (fs.FileInfo, error) {
 			if f, err := maybe_statfs.Open(path); err != nil {
 				return nil, err
 			} else {
@@ -186,7 +186,7 @@ func getStatPathFunc(maybe_statfs stdlib_fs.FS) func(path string) (stdlib_fs.Fil
 	}
 }
 
-func cleanPaths(worktree_fs fs.FullFS, abs_work_tree string, file_paths []string) ([]string, error) {
+func cleanPaths(worktree_fs vfs.FullFS, abs_work_tree string, file_paths []string) ([]string, error) {
 	all_rel := true
 	for _, p := range file_paths {
 		if filepath.IsAbs(p) {
@@ -228,7 +228,7 @@ func cleanPaths(worktree_fs fs.FullFS, abs_work_tree string, file_paths []string
 			err = file_ignore.WalkWorktree(
 				worktree_fs,
 				rel_path,
-				func(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error {
+				func(worktree_root fs.FS, fpath string, d fs.DirEntry, err error) error {
 					if err != nil {
 						// panic(err)
 						return err
@@ -253,7 +253,7 @@ func cleanPaths(worktree_fs fs.FullFS, abs_work_tree string, file_paths []string
 	return return_paths, nil
 }
 
-func openReadSeekCloser(openfs stdlib_fs.FS, fpath string) (io.ReadSeekCloser, error) {
+func openReadSeekCloser(openfs fs.FS, fpath string) (io.ReadSeekCloser, error) {
 	file, err := openfs.Open(fpath)
 	if err != nil {
 		log.Error.Printf("cannot add file %v due to err %v", fpath, err)
@@ -284,7 +284,7 @@ func AddFiles(work_tree string, file_paths []string) error {
 	}
 	defer wt_db.Close()
 
-	work_tree_fs, err := fs.NewOSFS(abs_work_tree)
+	work_tree_fs, err := vfs.NewOSFS(abs_work_tree)
 	if err != nil {
 		return err
 	}
@@ -316,7 +316,7 @@ func AddFiles(work_tree string, file_paths []string) error {
 			err = file_ignore.WalkWorktree(
 				work_tree_fs,
 				add_path,
-				func(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error {
+				func(worktree_root fs.FS, fpath string, d fs.DirEntry, err error) error {
 					if err != nil {
 						log.Debug.Println(err)
 						return err

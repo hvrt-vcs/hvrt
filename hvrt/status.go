@@ -4,12 +4,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	stdlib_fs "io/fs"
+	"io/fs"
 	"os"
 
 	"github.com/hvrt-vcs/hvrt/file_ignore"
-	"github.com/hvrt-vcs/hvrt/fs"
 	"github.com/hvrt-vcs/hvrt/log"
+	"github.com/hvrt-vcs/hvrt/vfs"
 
 	"golang.org/x/crypto/sha3"
 	// "modernc.org/sqlite"
@@ -56,7 +56,7 @@ func Status(repo_file, work_tree string) (*RepoStat, error) {
 		return nil, err
 	}
 
-	work_tree_fs, err := fs.NewOSFS(real_work_tree)
+	work_tree_fs, err := vfs.NewOSFS(real_work_tree)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func Status(repo_file, work_tree string) (*RepoStat, error) {
 	err = file_ignore.WalkWorktree(
 		work_tree_fs,
 		".",
-		func(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error {
+		func(worktree_root fs.FS, fpath string, d fs.DirEntry, err error) error {
 			if d != nil && !d.IsDir() {
 				stat.ModPaths = append(stat.ModPaths, fpath)
 			}

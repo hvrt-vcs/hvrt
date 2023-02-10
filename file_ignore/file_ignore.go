@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	stdlib_fs "io/fs"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/hvrt-vcs/hvrt/fs"
 	"github.com/hvrt-vcs/hvrt/log"
+	"github.com/hvrt-vcs/hvrt/vfs"
 	// "modernc.org/sqlite"
 )
 
@@ -57,7 +57,7 @@ func FnMatch(name, pat string) (bool, error) {
 
 // TODO: more closely match gitignore rules. For example, inverse rules starting
 // with `!`, etc. See URL: https://git-scm.com/docs/gitignore
-func ParseIgnoreFile(worktree_root stdlib_fs.FS, ignore_file_path string) ([]IgnorePattern, error) {
+func ParseIgnoreFile(worktree_root fs.FS, ignore_file_path string) ([]IgnorePattern, error) {
 
 	ignore_file, err := worktree_root.Open(ignore_file_path)
 	if err != nil {
@@ -192,9 +192,9 @@ func GetWorkTreeRoot(start_dir string) (string, error) {
 	cur_dir := abs_path
 	for cur_dir != "" {
 		log.Debug.Println(cur_dir)
-		cur_dir_fs := os.DirFS(cur_dir).(stdlib_fs.StatFS)
+		cur_dir_fs := os.DirFS(cur_dir).(fs.StatFS)
 		if wt_dir_finfo, wt_err := cur_dir_fs.Stat(".hvrt"); wt_err != nil {
-			if errors.Is(wt_err, stdlib_fs.ErrNotExist) {
+			if errors.Is(wt_err, fs.ErrNotExist) {
 				cur_dir = getParentdir(cur_dir)
 			} else {
 				panic(wt_err)
@@ -212,10 +212,10 @@ func GetWorkTreeRoot(start_dir string) (string, error) {
 
 type IgnoreCache struct {
 	ignore_patterns map[string][]IgnorePattern
-	worktree_root   stdlib_fs.FS
+	worktree_root   fs.FS
 }
 
-func NewIgnoreCache(worktree_root stdlib_fs.FS) *IgnoreCache {
+func NewIgnoreCache(worktree_root fs.FS) *IgnoreCache {
 	ignore_patterns := make(map[string][]IgnorePattern, 0)
 	ic := new(IgnoreCache)
 	ic.ignore_patterns = ignore_patterns
@@ -223,7 +223,7 @@ func NewIgnoreCache(worktree_root stdlib_fs.FS) *IgnoreCache {
 	return ic
 }
 
-func (ic *IgnoreCache) MatchesIgnore(fpath string, de stdlib_fs.DirEntry) bool {
+func (ic *IgnoreCache) MatchesIgnore(fpath string, de fs.DirEntry) bool {
 	var err error
 	var ignore *bool
 
@@ -296,7 +296,7 @@ func (ic *IgnoreCache) MatchesIgnore(fpath string, de stdlib_fs.DirEntry) bool {
 	}
 }
 
-type WalkDirFunc func(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error
+type WalkDirFunc func(worktree_root fs.FS, fpath string, d fs.DirEntry, err error) error
 
 func IsRoot(fpath string) bool {
 	return strings.HasSuffix(filepath.Dir(fpath), string(filepath.Separator))
@@ -307,9 +307,9 @@ func Parent() {
 }
 
 // Skip ignored directories. Do nothing with ignored files.
-func DefaultIgnoreFunc(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.DirEntry, err error) error {
+func DefaultIgnoreFunc(worktree_root fs.FS, fpath string, d fs.DirEntry, err error) error {
 	if d.IsDir() {
-		return stdlib_fs.SkipDir
+		return fs.SkipDir
 	} else {
 		return nil
 	}
@@ -320,7 +320,7 @@ func DefaultIgnoreFunc(worktree_root stdlib_fs.FS, fpath string, d stdlib_fs.Dir
 // TODO: pivot to using `fs.FS` instance instead of direct file access. This
 // should make it easier for testing, as well as abstracting away the underlying
 // filesystem.
-func WalkWorktree(worktree_fs fs.FullFS, start_dir string, fn, fn_ignore WalkDirFunc) error {
+func WalkWorktree(worktree_fs vfs.FullFS, start_dir string, fn, fn_ignore WalkDirFunc) error {
 	ignore_cache := NewIgnoreCache(worktree_fs)
 	if start_dir == "" {
 		start_dir = "."
@@ -330,10 +330,10 @@ func WalkWorktree(worktree_fs fs.FullFS, start_dir string, fn, fn_ignore WalkDir
 		return fmt.Errorf("start directory cannot be absolute %v", start_dir)
 	}
 
-	return stdlib_fs.WalkDir(
+	return fs.WalkDir(
 		worktree_fs,
 		start_dir,
-		func(fpath string, d stdlib_fs.DirEntry, err error) error {
+		func(fpath string, d fs.DirEntry, err error) error {
 			// log.Debug.Printf("why is direntry nil? %v", d)
 			// log.Debug.Printf("Does direntry have an error? %v", err)
 			if err != nil {

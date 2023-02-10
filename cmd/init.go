@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	// "fmt"
-
 	"github.com/hvrt-vcs/hvrt/hvrt"
 	"github.com/spf13/cobra"
 )
@@ -15,7 +13,6 @@ var initFlags = struct {
 	DefaultBranch: "trunk",
 }
 
-// initCmd represents the init command
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize a new repository",
@@ -25,30 +22,19 @@ var initCmd = &cobra.Command{
 	working tree and initializing the repository internally to it (like git).`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		err := hvrt.InitLocalAll(rootFlags.RepoPath, rootFlags.WorkTree, initFlags.DefaultBranch)
-		if err != nil {
-			return err
-		} else {
-			return nil
-		}
+		return hvrt.InitLocalAll(rootFlags.RepoPath, rootFlags.WorkTree, initFlags.DefaultBranch)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(initCmd)
 
-	// Here you will define your flags and configuration settings.
+	// init command never takes positional args
+	initCmd.Args = WrapPositionalArgsAsCommandError(cobra.NoArgs)
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// initCmd.PersistentFlags().String("foo", "", "A help for foo")
+	// take positional arguments specify directory to initialize
+	// initCmd.Args = WrapPositionalArgsAsCommandError(cobra.MaximumNArgs(1))
 
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
 	initCmd.Flags().BoolVarP(&initFlags.Bare, "bare", "b", false, "Do not initialize a work tree")
 	initCmd.Flags().StringVarP(&initFlags.DefaultBranch, "default-branch", "d", initFlags.DefaultBranch, "default branch to use when initializing repo")
-
-	// init command never takes positional args
-	initCmd.Args = cobra.NoArgs
-
 }

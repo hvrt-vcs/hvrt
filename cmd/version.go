@@ -9,28 +9,30 @@ import (
 )
 
 var versionFlags = struct {
-	SemanticVersion bool
+	Bare bool
 }{
-	SemanticVersion: false,
+	Bare: false,
 }
 
 func init() {
-	versionCmd.Flags().BoolVarP(&versionFlags.SemanticVersion, "semantic-version", "s", false, "Print out a semantic version instead of friendly version")
-
 	rootCmd.AddCommand(versionCmd)
+
+	versionCmd.Flags().BoolVarP(&versionFlags.Bare, "bare", "b", false, "Print out a bare version instead of friendly version")
 }
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number of Havarti",
 	Long:  `All software has versions. This is Havarti's.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		var version string
-		if versionFlags.SemanticVersion {
-			version = hvrt.SemanticVersion
+		if versionFlags.Bare {
+			version = hvrt.BareVersion
 		} else {
 			version = hvrt.FormattedVersion
 		}
 		fmt.Println(version)
+		return nil
 	},
+	Args: WrapPositionalArgsAsCommandError(cobra.ExactArgs(0)),
 }

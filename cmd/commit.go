@@ -1,0 +1,22 @@
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+var commitCmd = &cobra.Command{
+	Use:   "commit",
+	Short: "commit changes to the repo",
+	Long:  `Previously tracked files will be automatically added to the commit. Use the '--staged-only' flag to behave otherwise.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("commit called")
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(commitCmd)
+
+	commitCmd.Flags().BoolP("staged-only", "s", false, "Commit only changes that have been placed in the staging area")
+}

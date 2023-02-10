@@ -81,7 +81,7 @@ func InitWorkTree(work_tree, default_branch string, inner_thunk ThunkErr) error 
 		return err
 	}
 
-	_, err = wt_tx.Exec(work_tree_string, SemanticVersion, default_branch)
+	_, err = wt_tx.Exec(work_tree_string, BareVersion, default_branch)
 	if err != nil {
 		// Ignore rollback errors, for now.
 		_ = wt_tx.Rollback()
@@ -126,7 +126,7 @@ func InitLocal(repo_file, default_branch string, inner_thunk ThunkErr) error {
 		return err
 	}
 
-	_, err = repo_tx.Exec(repo_string, SemanticVersion, default_branch)
+	_, err = repo_tx.Exec(repo_string, BareVersion, default_branch)
 	if err != nil {
 		// Ignore rollback errors, for now.
 		_ = repo_tx.Rollback()

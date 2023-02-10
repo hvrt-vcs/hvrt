@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-//go:embed SEMANTIC_VERSION.txt
-var SemanticVersion string
+//go:embed VERSION.txt
+var BareVersion string
 var FormattedVersion string
 
 func init() {
-	SemanticVersion = strings.TrimSpace(SemanticVersion)
-	FormattedVersion = fmt.Sprintf("Havarti VCS %s", SemanticVersion)
+	BareVersion = strings.TrimSpace(BareVersion)
+	FormattedVersion = fmt.Sprintf("Havarti VCS %s", BareVersion)
 }

@@ -13,7 +13,6 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/hvrt-vcs/hvrt/log"
-	"github.com/hvrt-vcs/hvrt/vfs"
 	// "modernc.org/sqlite"
 )
 
@@ -320,7 +319,7 @@ func DefaultIgnoreFunc(worktree_root fs.FS, fpath string, d fs.DirEntry, err err
 // TODO: pivot to using `fs.FS` instance instead of direct file access. This
 // should make it easier for testing, as well as abstracting away the underlying
 // filesystem.
-func WalkWorktree(worktree_fs vfs.FullFS, start_dir string, fn, fn_ignore WalkDirFunc) error {
+func WalkWorktree(worktree_fs fs.FS, start_dir string, fn, fn_ignore WalkDirFunc) error {
 	ignore_cache := NewIgnoreCache(worktree_fs)
 	if start_dir == "" {
 		start_dir = "."

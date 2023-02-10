@@ -180,13 +180,14 @@ func getStatPathFunc(maybe_statfs fs.FS) func(path string) (fs.FileInfo, error) 
 			if f, err := maybe_statfs.Open(path); err != nil {
 				return nil, err
 			} else {
+				defer f.Close()
 				return f.Stat()
 			}
 		}
 	}
 }
 
-func cleanPaths(worktree_fs vfs.FullFS, abs_work_tree string, file_paths []string) ([]string, error) {
+func cleanPaths(worktree_fs fs.FS, abs_work_tree string, file_paths []string) ([]string, error) {
 	all_rel := true
 	for _, p := range file_paths {
 		if filepath.IsAbs(p) {

@@ -12,12 +12,11 @@ up again in future commits until and if it is added again via the add subcommand
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},
+	Args: WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(1)),
 }
 
 func init() {
 	rootCmd.AddCommand(rmCmd)
-
-	rmCmd.Args = WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(1))
 
 	rmCmd.Flags().BoolP("recursive", "r", false, "Allow recursive removal when a directory name is given.")
 	rmCmd.Flags().BoolP("staged", "s", false, "Only remove a file from the staging area.")

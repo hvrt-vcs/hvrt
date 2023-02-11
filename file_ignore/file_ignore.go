@@ -54,8 +54,7 @@ func FnMatch(name, pat string) (bool, error) {
 	return FnMatchCase(name, pat)
 }
 
-// TODO: more closely match gitignore rules. For example, inverse rules starting
-// with `!`, etc. See URL: https://git-scm.com/docs/gitignore
+// For gitignore matching rules ee URL: https://git-scm.com/docs/gitignore
 func ParseIgnoreFile(worktree_root fs.FS, ignore_file_path string) ([]IgnorePattern, error) {
 
 	ignore_file, err := worktree_root.Open(ignore_file_path)
@@ -315,10 +314,6 @@ func DefaultIgnoreFunc(worktree_root fs.FS, fpath string, d fs.DirEntry, err err
 }
 
 // Similar to `fs.WalkDir`, but calls a separate func for ignored files.
-//
-// TODO: pivot to using `fs.FS` instance instead of direct file access. This
-// should make it easier for testing, as well as abstracting away the underlying
-// filesystem.
 func WalkWorktree(worktree_fs fs.FS, start_dir string, fn, fn_ignore WalkDirFunc) error {
 	ignore_cache := NewIgnoreCache(worktree_fs)
 	if start_dir == "" {

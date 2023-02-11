@@ -18,5 +18,9 @@ var commitCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(commitCmd)
 
-	commitCmd.Flags().BoolP("staged-only", "s", false, "Commit only changes that have been placed in the staging area")
+	commitCmd.Flags().BoolP("staged-only", "s", false, "Commit only changes that have previously been placed in the staging area.")
+	commitCmd.Flags().StringP("message", "m", "", "Commit message.")
+	commitCmd.Flags().String("author", "", "Commit author.")
+	commitCmd.Flags().String("committer", "", "Individual creating the commit. Defaults to author if not provided.")
+	commitCmd.Flags().BoolP("sign", "S", false, "Sign commit.")
 }

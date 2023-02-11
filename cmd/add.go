@@ -13,7 +13,8 @@ var addCmd = &cobra.Command{
 running the add subcommand, previously untracked files are staged for the next
 commit. This command will run recursively when given a directory instead of a
 path to an individual file. Rules in .hvrtignore are followed unless '--force'
-is supplied.`,
+is supplied. Currently '--force' override only works on individual files, not
+recursively on directories.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return hvrt.AddFiles(rootFlags.WorkTree, args)
 	},

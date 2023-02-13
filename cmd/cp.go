@@ -7,12 +7,14 @@ import (
 )
 
 var cpCmd = &cobra.Command{
-	Use:   "cp",
-	Short: "Copy/duplicate a file, directory, or symlink",
-	Run: func(cmd *cobra.Command, args []string) {
+	Use:     "cp",
+	Aliases: []string{"copy"},
+	Short:   "Copy/duplicate a file, directory, or symlink",
+	Args:    WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(2)),
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("cp called")
+		return nil
 	},
-	Args: WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(2)),
 }
 
 func init() {

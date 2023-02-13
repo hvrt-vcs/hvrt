@@ -15,10 +15,10 @@ commit. This command will run recursively when given a directory instead of a
 path to an individual file. Rules in .hvrtignore are followed unless '--force'
 is supplied. Currently '--force' override only works on individual files, not
 recursively on directories.`,
+	Args: WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return hvrt.AddFiles(rootFlags.WorkTree, args)
 	},
-	Args: WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(1)),
 }
 
 func init() {

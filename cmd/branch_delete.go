@@ -7,13 +7,13 @@ import (
 )
 
 var branchDeleteCmd = &cobra.Command{
-	Use:   "delete",
-	Short: "Delete branches",
+	Use:     "delete",
+	Aliases: []string{"del", "remove", "rm"},
+	Short:   "Delete branches",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("branch delete called")
 		return nil
 	},
-	Aliases: []string{"del", "remove", "rm"},
 }
 
 func init() {

@@ -12,8 +12,9 @@ import (
 var logCmd = &cobra.Command{
 	Use:   "log",
 	Short: "Show commit logs",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("log called")
+		return nil
 	},
 }
 

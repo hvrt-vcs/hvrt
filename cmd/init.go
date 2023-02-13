@@ -14,8 +14,9 @@ var initFlags = struct {
 }
 
 var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize a new repository/worktree",
+	Use:     "init",
+	Aliases: []string{"initialize"},
+	Short:   "Initialize a new repository/worktree",
 	Long: `The new repo can specify the repository path and/or working tree using the global flags.
 
 	If neither are specified, this defaults to using the current directory as the

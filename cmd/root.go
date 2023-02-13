@@ -146,7 +146,8 @@ func init() {
 		rootFlags.RepoPath,
 		`Path to repo. Unlike git and some other VCS tools, hvrt does not need
 the repo data to live inside a main worktree. This allows multiple worktrees to
-easily exist in parallel.`,
+easily exist in parallel. Multiple worktrees can even point to the same branch
+at the same time.`,
 	)
 	rootCmd.PersistentFlags().StringVar(&rootFlags.WorkTree, "work-tree", rootFlags.WorkTree, "Path to work tree")
 	rootCmd.PersistentFlags().StringVarP(

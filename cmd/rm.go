@@ -5,14 +5,15 @@ import (
 )
 
 var rmCmd = &cobra.Command{
-	Use:   "rm",
-	Short: "Remove a file from being tracked in the repo",
+	Use:     "rm",
+	Aliases: []string{"remove", "unlink"},
+	Short:   "Remove a file from being tracked in the repo",
 	Long: `After removing a file from the repo, it will not automatically get picked 
 up again in future commits until and if it is added again via the add subcommand.`,
+	Args: WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},
-	Args: WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(1)),
 }
 
 func init() {

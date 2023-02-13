@@ -11,11 +11,11 @@ var unstageCmd = &cobra.Command{
 	Short: "Remove a change from the stage",
 	Long: `The change will remain in the work directory tree. This behaves
 identically to 'hvrt rm --staged --keep'.`,
+	Args: WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("unstage called")
 		return nil
 	},
-	Args: WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(1)),
 }
 
 func init() {

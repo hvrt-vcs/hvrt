@@ -7,13 +7,13 @@ import (
 )
 
 var branchListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List branches",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List branches",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("branch ls called")
 		return nil
 	},
-	Aliases: []string{"ls"},
 }
 
 func init() {

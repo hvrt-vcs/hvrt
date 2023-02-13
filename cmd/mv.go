@@ -7,13 +7,14 @@ import (
 )
 
 var mvCmd = &cobra.Command{
-	Use:   "mv",
-	Short: "Move/rename a file, directory, or symlink",
+	Use:     "mv",
+	Aliases: []string{"move", "rename"},
+	Short:   "Move/rename a file, directory, or symlink",
+	Args:    WrapPositionalArgsAsCommandError(cobra.ExactArgs(2)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("mv called")
 		return nil
 	},
-	Args: WrapPositionalArgsAsCommandError(cobra.ExactArgs(2)),
 }
 
 func init() {

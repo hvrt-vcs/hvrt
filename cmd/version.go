@@ -24,6 +24,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number of Havarti",
 	Long:  `All software has versions. This is Havarti's.`,
+	Args:  WrapPositionalArgsAsCommandError(cobra.ExactArgs(0)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var version string
 		if versionFlags.Bare {
@@ -34,5 +35,4 @@ var versionCmd = &cobra.Command{
 		fmt.Println(version)
 		return nil
 	},
-	Args: WrapPositionalArgsAsCommandError(cobra.ExactArgs(0)),
 }

@@ -10,8 +10,9 @@ var commitCmd = &cobra.Command{
 	Use:   "commit",
 	Short: "commit changes to the repo",
 	Long:  `Previously tracked files will be automatically added to the commit. Use the '--staged-only' flag to behave otherwise.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("commit called")
+		return nil
 	},
 }
 

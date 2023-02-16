@@ -116,6 +116,17 @@ CREATE TABLE commit_tags (
 CREATE INDEX tag_commits_idx ON commit_tags("commit_hash", "commit_hash_algo");
 CREATE INDEX commit_tags_idx ON commit_tags("tag_name");
 
+CREATE TABLE commit_parent_types (
+	"name" TEXT NOT NULL,
+
+	PRIMARY KEY ("name")
+);
+
+INSERT INTO commit_parent_types ("name") VALUES ('regular');
+INSERT INTO commit_parent_types ("name") VALUES ('merge');
+INSERT INTO commit_parent_types ("name") VALUES ('cherry_pick');
+INSERT INTO commit_parent_types ("name") VALUES ('revert');
+
 CREATE TABLE commit_parents (
 -- If a given commit has no parents, it is a root commit.
 -- If a given commit points to parent that does not exist, it is because of a shallow clone.
@@ -125,7 +136,7 @@ CREATE TABLE commit_parents (
 	"commit_hash_algo"	TEXT NOT NULL,
 	"parent_hash"	TEXT NOT NULL,
 	"parent_hash_algo"	TEXT NOT NULL,
-	"parent_type"	TEXT CHECK("parent_type" IN ('regular', 'merge', 'cherry_pick', 'replay', 'reorder', 'revert')) NOT NULL,
+	"parent_type"	TEXT NOT NULL,
 	"order"	INTEGER NOT NULL,
 	PRIMARY KEY ("commit_hash", "commit_hash_algo", "parent_hash", "parent_hash_algo")
 
@@ -133,6 +144,7 @@ CREATE TABLE commit_parents (
 	UNIQUE ("commit_hash", "commit_hash_algo", "order")
 	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 	FOREIGN KEY ("parent_hash", "parent_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	FOREIGN KEY ("parent_type") REFERENCES "commit_parent_types" ("name") ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE INDEX commit_parents_commit_id_idx ON commit_parents("commit_hash", "commit_hash_algo");

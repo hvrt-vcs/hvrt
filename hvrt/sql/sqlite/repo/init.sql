@@ -125,7 +125,7 @@ CREATE TABLE commit_parents (
 	"commit_hash_algo"	TEXT NOT NULL,
 	"parent_hash"	TEXT NOT NULL,
 	"parent_hash_algo"	TEXT NOT NULL,
-	"parent_type"	TEXT CHECK("parent_type" IN ('regular', 'merge', 'cherry_pick', 'replay', 'reorder')) NOT NULL,
+	"parent_type"	TEXT CHECK("parent_type" IN ('regular', 'merge', 'cherry_pick', 'replay', 'reorder', 'revert')) NOT NULL,
 	"order"	INTEGER NOT NULL,
 	PRIMARY KEY ("commit_hash", "commit_hash_algo", "parent_hash", "parent_hash_algo")
 

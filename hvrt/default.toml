@@ -1,6 +1,6 @@
-[worktree]
+[worktree.repo]
 	# type of "sqlite" means the repo exists as a sqlite file on disk.
-	repo.type = "sqlite"
+	type = "sqlite"
 
 	# If not otherwise specified, the repo sqlite file is created inside the
 	# primary worktree and is referenced relative to it. When the repo lives
@@ -9,4 +9,4 @@
 	# for local files. We replace the variable `${WORKTREE}` with the absolute
 	# path to the worktree, using forward slashes even on MS Windows. See link:
 	# https://en.wikipedia.org/wiki/File_URI_scheme
-	repo.uri = "file://${WORKTREE}/.hvrt/repo.hvrt"
+	uri = "file://${HVRT_WORK_TREE}/.hvrt/repo.hvrt"

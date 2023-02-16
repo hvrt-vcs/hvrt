@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/hvrt-vcs/hvrt/log"
@@ -24,9 +23,8 @@ import (
 var SQLFiles embed.FS
 
 var SQLDialectToDrivers = map[string]string{
-	"sqlite": sqliteshim.ShimName,
-	// "postgresql": "postgresql",
-	// "mysql":      "mysql",
+	"sqlite":     sqliteshim.ShimName,
+	"postgresql": "postgresql",
 }
 
 var WorkTreeDBName = "work_tree_state.sqlite"
@@ -90,25 +88,45 @@ func GetExistingWorktreeDB(work_tree string) (*sql.DB, error) {
 	return wt_db, nil
 }
 
+func GetRepoDBUri(work_tree string) (db_uri, db_type string, err error) {
+	config_path := filepath.Join(work_tree, WorkTreeConfigDir, "config.toml")
+	var conf HvrtConfig
+	_, err = toml.DecodeFile(config_path, &conf)
+	if err != nil {
+		return "", "", err
+	}
+	log.Debug.Printf("toml data: %#v", conf)
+	// log.Debug.Printf("toml metadata: %#v", md)
+
+	db_type = conf.Worktree.Repo.Type
+	if conf.Worktree.Repo.Type != "sqlite" {
+		return "", "", fmt.Errorf("%w: cannot use database type other than sqlite", NotImplementedError)
+	}
+
+	varMap := map[string]string{
+		"HVRT_WORK_TREE": work_tree,
+	}
+	db_uri = os.Expand(conf.Worktree.Repo.URI, func(s string) string { return varMap[s] })
+
+	return db_uri, db_type, nil
+}
+
 type HvrtConfig struct {
-	Age        int
-	Cats       []string
-	Pi         float64
-	Perfection []int
-	DOB        time.Time
+	Worktree struct {
+		Repo struct {
+			Type string
+			URI  string
+		}
+	}
 }
 
 func GetExistingLocalRepoDB(work_tree string) (*sql.DB, error) {
-	config_path := filepath.Join(work_tree, WorkTreeConfigDir, "config.toml")
-	var conf HvrtConfig
-	md, err := toml.DecodeFile(config_path, &conf)
+	db_uri, db_type, err := GetRepoDBUri(work_tree)
 	if err != nil {
 		return nil, err
 	}
-	log.Debug.Printf("toml metadata: %v", md)
-	return nil, fmt.Errorf("toml test")
+	db_uri = strings.TrimPrefix(db_uri, "file://")
 
-	work_tree_file := GetWorktreeDBPath(work_tree)
 	qparms := CopyOps(SqliteDefaultOpts)
 
 	// The default mode is "rwc", which will create the file if it doesn't
@@ -117,7 +135,7 @@ func GetExistingLocalRepoDB(work_tree string) (*sql.DB, error) {
 	qparms["mode"] = "rw"
 
 	// work tree state is always sqlite
-	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
+	wt_db, err := sql.Open(SQLDialectToDrivers[db_type], SqliteDSN(db_uri, qparms))
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +145,7 @@ func GetExistingLocalRepoDB(work_tree string) (*sql.DB, error) {
 	// check whether it exists. We do this after opening the database connection
 	// to avoid a race condition where someone else could delete the file
 	// between our existence check and the opening of the connection.
-	if _, err = os.Stat(work_tree_file); err != nil {
+	if _, err = os.Stat(db_uri); err != nil {
 		wt_db.Close()
 		return nil, err
 	}

@@ -35,16 +35,16 @@ CREATE TABLE tags (
 INSERT INTO tags ("name", "is_default", "is_branch", "created_at")
 	VALUES ($2, TRUE, TRUE, strftime("%s", CURRENT_TIMESTAMP));
 
--- It is theoretically possible to have a single tree shared between multiple
--- commits. This can happen under the following conditions: the file IDs and
--- associated blob IDs are identical (since these are the only values hashed to
--- generate the tree ID). The values are sorted by the file ID path, then hashed
--- on file ID hash (as a UTF8 hex string) and blob ID hash (as a UTF8 hex
--- string), in that order.
 CREATE TABLE trees (
+	-- It is theoretically possible to have a single tree shared between multiple
+	-- commits. This can happen under the following conditions: the file IDs and
+	-- associated blob IDs are identical (since these are the only values hashed to
+	-- generate the tree ID). The values are sorted by the file ID path, then hashed
+	-- on file ID hash (as a UTF8 hex string) and blob ID hash (as a UTF8 hex
+	-- string), in that order.
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
-	PRIMARY KEY ("hash", "hash_algo")
+	PRIMARY KEY ("hash", "hash_algo")  ON CONFLICT IGNORE
 );
 
 CREATE TABLE commits (
@@ -219,7 +219,7 @@ CREATE TABLE blobs (
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
 	"byte_length"	INTEGER NOT NULL,
-	PRIMARY KEY ("hash", "hash_algo")
+	PRIMARY KEY ("hash", "hash_algo") ON CONFLICT IGNORE
 );
 
 CREATE TABLE unversioned_files (
@@ -261,7 +261,7 @@ CREATE TABLE chunks (
 	-- individually later when streaming them.
 	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
 	"data"	BLOB NOT NULL,
-	PRIMARY KEY ("hash", "hash_algo")
+	PRIMARY KEY ("hash", "hash_algo")  ON CONFLICT IGNORE
 );
 
 CREATE TABLE blob_chunks (
@@ -283,7 +283,7 @@ CREATE TABLE blob_chunks (
 	"start_byte"	INTEGER NOT NULL,
 	"end_byte"	INTEGER NOT NULL,
 
-	PRIMARY KEY ("blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte")
+	PRIMARY KEY ("blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte") ON CONFLICT IGNORE
 
 	-- When a blob is deleted, its association with any chunks should be severed.
 	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED

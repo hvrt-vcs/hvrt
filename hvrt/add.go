@@ -138,7 +138,7 @@ func AddFile(file_to_add io.ReadSeeker, file_path string, tx *sql.Tx) error {
 
 		// Retain underlying capacity, but set length to zero.
 		digest_bytes = digest_bytes[:0]
-		digest_bytes = hash.Sum(hash.Sum(digest_bytes))
+		digest_bytes = hash.Sum(digest_bytes)
 		chunk_hex_digest := hex.EncodeToString(digest_bytes)
 
 		_, err = chunk_stmt.Exec(

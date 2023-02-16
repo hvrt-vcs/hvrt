@@ -130,7 +130,7 @@ func TestAddEmptyFileToWorktreeDB(t *testing.T) {
 	}
 	defer wt_db.Close()
 
-	rows, err := wt_db.Query("SELECT * from staged_to_add")
+	rows, err := wt_db.Query("SELECT path, blob_hash, blob_hash_algo, size, added_at FROM staged_to_add")
 	if err != nil {
 		t.Fatalf(`Failed to retrieve SQL rows due to error: %v`, err)
 	}

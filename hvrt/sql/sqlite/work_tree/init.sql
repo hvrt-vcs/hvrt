@@ -16,14 +16,17 @@ CREATE TABLE vcs_version (
 INSERT INTO vcs_version ("id", "version", "created_at", "modified_at")
 	VALUES (1, $1, strftime("%s", CURRENT_TIMESTAMP), strftime("%s", CURRENT_TIMESTAMP));
 
--- XXX: The `blobs` and `blob_chunks` tables should be identical to the same
--- tables in the repo so that when we create commits from the stage, all that we
--- need to do is slurp data directly from here and dump it directly into the
--- repo, no extra processing required.
 CREATE TABLE blobs (
+	-- XXX: The `blobs` and `blob_chunks` tables should be identical to the same
+	-- tables in the repo so that when we create commits from the stage, all
+	-- that we need to do is slurp data directly from here and dump it directly
+	-- into the repo, no extra processing required.
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
 	"byte_length"	INTEGER NOT NULL,
+
+	-- Since hash values should be unique, we assume that the byte length is the
+	-- same so long as the hashes are the same.
 	PRIMARY KEY ("hash", "hash_algo") ON CONFLICT IGNORE
 );
 
@@ -57,7 +60,7 @@ CREATE TABLE blob_chunks (
 	"start_byte"	INTEGER NOT NULL,
 	"end_byte"	INTEGER NOT NULL,
 
-	PRIMARY KEY ("blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte")
+	PRIMARY KEY ("blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte") ON CONFLICT IGNORE
 
 	-- When a blob is deleted, its association with any chunks should be severed.
 	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED

@@ -87,11 +87,11 @@ func TestAddFileToLocalRepoDB(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	local_db, err := GetExistingLocalRepoDB(work_tree)
+	repo_db, err := GetExistingRepoDB(work_tree)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer local_db.Close()
+	defer repo_db.Close()
 
-	log.Debug.Println(local_db)
+	log.Debug.Println(repo_db)
 }

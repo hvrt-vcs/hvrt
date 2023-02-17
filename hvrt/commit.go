@@ -42,31 +42,8 @@ func SliceContains[T comparable](slc []T, comp T) bool {
 	return false
 }
 
-func Commit(work_tree, message, author, committer string) error {
-	wt_db, err := GetExistingWorktreeDB(work_tree)
-	if err != nil {
-		return err
-	}
-	defer wt_db.Close()
-
-	lr_db, err := GetExistingLocalRepoDB(work_tree)
-	if err != nil {
-		return err
-	}
-	defer lr_db.Close()
-
-	wt_tx, err := wt_db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return err
-	}
-
-	lr_tx, err := lr_db.BeginTx(context.Background(), nil)
-	if err != nil {
-		wt_tx.Rollback()
-		return err
-	}
-
-	rows, err := wt_db.Query(
+func innerCommit(work_tree, message, author, committer string, wt_tx, repo_tx *sql.Tx) error {
+	rows, err := wt_tx.Query(
 		`SELECT path, blob_chunks.blob_hash, blob_chunks.blob_hash_algo, size, added_at, blob_chunks.chunk_hash, blob_chunks.chunk_hash_algo, blob_chunks.start_byte, blob_chunks.end_byte, chunks.compression_algo, chunks.data FROM staged_to_add
 LEFT OUTER JOIN blob_chunks ON (staged_to_add.blob_hash = blob_chunks.blob_hash AND staged_to_add.blob_hash_algo = blob_chunks.blob_hash_algo)
 LEFT OUTER JOIN chunks ON (blob_chunks.chunk_hash = chunks.hash AND blob_chunks.chunk_hash_algo = chunks.hash_algo)`,
@@ -94,8 +71,6 @@ LEFT OUTER JOIN chunks ON (blob_chunks.chunk_hash = chunks.hash AND blob_chunks.
 			&file.data,
 		)
 		if err != nil {
-			wt_tx.Rollback()
-			lr_tx.Rollback()
 			return err
 		}
 		files = append(files, file)
@@ -103,7 +78,50 @@ LEFT OUTER JOIN chunks ON (blob_chunks.chunk_hash = chunks.hash AND blob_chunks.
 	}
 	log.Debug.Println("sqlite worktree DB rows:", files)
 
-	wt_tx.Commit()
-	lr_tx.Commit()
+	return nil
+}
+
+func Commit(work_tree, message, author, committer string) error {
+	wt_db, err := GetExistingWorktreeDB(work_tree)
+	if err != nil {
+		return err
+	}
+	defer wt_db.Close()
+
+	repo_db, err := GetExistingRepoDB(work_tree)
+	if err != nil {
+		return err
+	}
+	defer repo_db.Close()
+
+	wt_tx, err := wt_db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+
+	repo_tx, err := repo_db.BeginTx(context.Background(), nil)
+	if err != nil {
+		if tx_err := wt_tx.Rollback(); tx_err != nil {
+			log.Error.Println(tx_err)
+		}
+		return err
+	}
+
+	if err := innerCommit(work_tree, message, author, committer, wt_tx, repo_tx); err != nil {
+		if tx_err := wt_tx.Rollback(); tx_err != nil {
+			log.Error.Println(tx_err)
+		} else if tx_err := repo_tx.Rollback(); tx_err != nil {
+			log.Error.Println(tx_err)
+		}
+
+		return err
+	} else {
+		if tx_err := wt_tx.Commit(); tx_err != nil {
+			return tx_err
+		} else if tx_err := repo_tx.Commit(); tx_err != nil {
+			return tx_err
+		}
+	}
+
 	return nil
 }

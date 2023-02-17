@@ -32,26 +32,40 @@ var WorkTreeDBName = "work_tree_state.sqlite"
 func init() {
 }
 
-var SqliteDefaultOpts = map[string]string{
-	"_foreign_keys":        "on",
-	"_case_sensitive_like": "on",
-	"mode":                 "rwc",
+var SqliteDefaultOpts = map[string][]string{
+
+	// FIXME: the modernc.org/sqlite implementation creates all connections and
+	// read/write/create by default. It seems the "mode" parameter below is
+	// completely ignore.
+	"mode": {"rwc"},
+
+	// make transactions start with `BEGIN IMMEDIATE` instead of `BEGIN`. This
+	// avoids deadlocks and busy errors at the expense of write speed.
+	"_txlock": {"immediate"},
+
+	// TODO: I'm not sure that mattn/sqlite respects a _pragma DSN parameter
+	// like modernc.org/sqlite does. Try to reconcile this somehow.
+	"_pragma": {"journal_mode(WAL)", "case_sensitive_like(on)", "foreign_keys(on)"},
 }
 
-func SqliteDSN(path string, parms map[string]string) string {
+func SqliteDSN(path string, parms map[string][]string) string {
 	qparms := []string{}
-	for key, val := range parms {
-		qparms = append(qparms, fmt.Sprintf("%s=%s", key, val))
+	for key, vals := range parms {
+		for _, v := range vals {
+			qparms = append(qparms, fmt.Sprintf("%s=%s", key, v))
+		}
 	}
 	qstring := strings.Join(qparms, "&")
 	dsn := fmt.Sprintf("%s?%s", path, url.QueryEscape(qstring))
 	return dsn
 }
 
-func CopyOps(ops map[string]string) map[string]string {
-	rmap := make(map[string]string)
+func CopyOps(ops map[string][]string) map[string][]string {
+	rmap := make(map[string][]string)
 	for key, val := range ops {
-		rmap[key] = val
+		val_copy := make([]string, len(val))
+		copy(val_copy, val)
+		rmap[key] = val_copy
 	}
 	return rmap
 }
@@ -67,7 +81,7 @@ func GetExistingWorktreeDB(work_tree string) (*sql.DB, error) {
 	// The default mode is "rwc", which will create the file if it doesn't
 	// already exist. This is NOT what we want. We want to fail loudly if the
 	// file does not exist already.
-	qparms["mode"] = "rw"
+	qparms["mode"] = []string{"rw"}
 
 	// work tree state is always sqlite
 	wt_db, err := sql.Open(SQLDialectToDrivers["sqlite"], SqliteDSN(work_tree_file, qparms))
@@ -120,7 +134,7 @@ type HvrtConfig struct {
 	}
 }
 
-func GetExistingLocalRepoDB(work_tree string) (*sql.DB, error) {
+func GetExistingRepoDB(work_tree string) (*sql.DB, error) {
 	db_uri, db_type, err := GetRepoDBUri(work_tree)
 	if err != nil {
 		return nil, err
@@ -132,7 +146,7 @@ func GetExistingLocalRepoDB(work_tree string) (*sql.DB, error) {
 	// The default mode is "rwc", which will create the file if it doesn't
 	// already exist. This is NOT what we want. We want to fail loudly if the
 	// file does not exist already.
-	qparms["mode"] = "rw"
+	qparms["mode"] = []string{"rw"}
 
 	// work tree state is always sqlite
 	wt_db, err := sql.Open(SQLDialectToDrivers[db_type], SqliteDSN(db_uri, qparms))

@@ -19,20 +19,6 @@ import (
 func init() {
 }
 
-type fileToAdd struct {
-	path             sql.NullString
-	blob_hash        sql.NullString
-	blob_hash_algo   sql.NullString
-	size             sql.NullInt64
-	added_at         sql.NullInt64
-	chunk_hash       sql.NullString
-	chunk_hash_algo  sql.NullString
-	start_byte       sql.NullInt64
-	end_byte         sql.NullInt64
-	compression_algo sql.NullString
-	data             []byte
-}
-
 func SliceContains[T comparable](slc []T, comp T) bool {
 	for _, v := range slc {
 		if comp == v {
@@ -43,40 +29,64 @@ func SliceContains[T comparable](slc []T, comp T) bool {
 }
 
 func innerCommit(work_tree, message, author, committer string, wt_tx, repo_tx *sql.Tx) error {
-	rows, err := wt_tx.Query(
-		`SELECT path, blob_chunks.blob_hash, blob_chunks.blob_hash_algo, size, added_at, blob_chunks.chunk_hash, blob_chunks.chunk_hash_algo, blob_chunks.start_byte, blob_chunks.end_byte, chunks.compression_algo, chunks.data FROM staged_to_add
-LEFT OUTER JOIN blob_chunks ON (staged_to_add.blob_hash = blob_chunks.blob_hash AND staged_to_add.blob_hash_algo = blob_chunks.blob_hash_algo)
-LEFT OUTER JOIN chunks ON (blob_chunks.chunk_hash = chunks.hash AND blob_chunks.chunk_hash_algo = chunks.hash_algo)`,
-	)
+	read_chunks_path := "sql/sqlite/work_tree/read_chunks.sql"
+	read_chunks_bytes, err := SQLFiles.ReadFile(read_chunks_path)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	read_chunks := string(read_chunks_bytes)
 
-	files := make([]fileToAdd, 0)
+	// FIXME: do not hardcode this to sqlite
+	write_chunk_path := "sql/sqlite/repo/write_chunk.sql"
+	write_chunk_bytes, err := SQLFiles.ReadFile(write_chunk_path)
+	if err != nil {
+		return err
+	}
+	write_chunk := string(write_chunk_bytes)
 
-	for rows.Next() {
-		file := fileToAdd{}
-		err := rows.Scan(
-			&file.path,
-			&file.blob_hash,
-			&file.blob_hash_algo,
-			&file.size,
-			&file.added_at,
-			&file.chunk_hash,
-			&file.chunk_hash_algo,
-			&file.start_byte,
-			&file.end_byte,
-			&file.compression_algo,
-			&file.data,
+	write_chunk_stmt, err := repo_tx.Prepare(write_chunk)
+	if err != nil {
+		return err
+	}
+	defer write_chunk_stmt.Close()
+
+	chunk_rows, err := wt_tx.Query(read_chunks)
+	if err != nil {
+		return err
+	}
+	defer chunk_rows.Close()
+
+	var (
+		hash             string
+		hash_algo        string
+		compression_algo string
+		data             sql.RawBytes
+	)
+
+	for chunk_rows.Next() {
+		err := chunk_rows.Scan(
+			&hash,
+			&hash_algo,
+			&compression_algo,
+			&data,
 		)
 		if err != nil {
 			return err
 		}
-		files = append(files, file)
-		log.Debug.Println("sqlite worktree DB row:", file)
+		log.Debug.Printf(
+			"hash: '%v', hash_algo: '%v', compression_algo: '%v', data: '%v'",
+			hash,
+			hash_algo,
+			compression_algo,
+			data,
+		)
+
+		if result, err := write_chunk_stmt.Exec(hash, hash_algo, compression_algo, data); err != nil {
+			return err
+		} else {
+			log.Debug.Printf("execution result: %v", result)
+		}
 	}
-	log.Debug.Println("sqlite worktree DB rows:", files)
 
 	return nil
 }

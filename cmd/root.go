@@ -149,7 +149,10 @@ the repo data to live inside a main worktree. This allows multiple worktrees to
 easily exist in parallel. Multiple worktrees can even point to the same branch
 at the same time.`,
 	)
+
 	rootCmd.PersistentFlags().StringVar(&rootFlags.WorkTree, "work-tree", rootFlags.WorkTree, "Path to work tree")
+	_ = rootCmd.MarkFlagDirname("work-tree")
+
 	rootCmd.PersistentFlags().StringVarP(
 		&rootFlags.ChangeDir,
 		"change-directory", "C",
@@ -159,6 +162,7 @@ This option affects options that expect a path name like --repo and
 --work-tree because their interpretations of the path names will be made
 relative to the working directory specified by the -C option.`,
 	)
+	_ = rootCmd.MarkFlagDirname("change-directory")
 
 	rootCmd.SetFlagErrorFunc(
 		func(c *cobra.Command, err error) error {

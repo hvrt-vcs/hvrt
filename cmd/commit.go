@@ -31,7 +31,9 @@ func init() {
 	commitCmd.Flags().StringVarP(&commitFlags.message, "message", "m", "", "Commit message.")
 	_ = commitCmd.MarkFlagRequired("message")
 
-	// FIXME: pull message from user config when not given on command line
+	// FIXME: alert user when value not set in config or given on command line.
+	// Supply with a simple default value based on username@hostname for the
+	// current system.
 	commitCmd.Flags().StringVar(&commitFlags.author, "author", "", "Commit author.")
 	_ = commitCmd.MarkFlagRequired("author")
 

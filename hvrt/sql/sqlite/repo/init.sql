@@ -82,6 +82,10 @@ CREATE TABLE commit_headers (
 CREATE INDEX commit_headers_idx ON commit_headers ("key", "value");
 
 CREATE TABLE commit_annotations (
+	-- TODO: make annotations point to a hashable parent somehow, and hash the
+	-- results of the header key/value. This way we can know that data was not
+	-- lost in transit over the wire.
+
 	-- annotations are NOT considered when hashing commits
 
 	"id" INTEGER,

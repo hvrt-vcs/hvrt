@@ -36,11 +36,14 @@ var SqliteDefaultOpts = map[string][]string{
 
 	// FIXME: the modernc.org/sqlite implementation creates all connections and
 	// read/write/create by default. It seems the "mode" parameter below is
-	// completely ignore.
+	// completely ignored. A pragma value of `query_only(on)` will mostly get us
+	// the behavior that we want though
 	"mode": {"rwc"},
 
 	// make transactions start with `BEGIN IMMEDIATE` instead of `BEGIN`. This
-	// avoids deadlocks and busy errors at the expense of write speed.
+	// avoids deadlocks and busy errors at the expense of write speed. Should
+	// not be a problem since the code is currently single threaded and
+	// sequential.
 	"_txlock": {"immediate"},
 
 	// TODO: I'm not sure that mattn/sqlite respects a _pragma DSN parameter

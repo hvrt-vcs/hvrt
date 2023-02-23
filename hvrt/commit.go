@@ -164,7 +164,36 @@ func commitBlobChunks(wt_tx, repo_tx *sql.Tx) error {
 	return nil
 }
 
+type treeMember struct {
+	fid_hash       string
+	fid_hash_algo  string
+	path           string
+	blob_hash      string
+	blob_hash_algo string
+	parents        []treeMember
+}
+
 func commitTree(wt_tx, repo_tx *sql.Tx) (tree_hash string, tree_hash_algo string, err error) {
+	head_commit_row := wt_tx.QueryRow(SQLStrings_sqlite_work_tree_read_head_commit)
+
+	var (
+		hash      string
+		hash_algo string
+	)
+
+	if err := head_commit_row.Scan(&hash, &hash_algo); err != nil {
+		return "", "", err
+	}
+
+	// treeMembers := make([]treeMember, 0)
+	log.Debug.Printf("head commit hash '%v', hash_algo '%v'", hash, hash_algo)
+
+	if hash != "0" && hash_algo != "nil" {
+		// get previous commit tree and layer new changes on top of it
+	} else {
+
+	}
+
 	return "", "", nil
 }
 

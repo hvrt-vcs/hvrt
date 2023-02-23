@@ -137,12 +137,15 @@ CREATE TABLE staged_to_remove (
 
 CREATE TABLE head_commit (
 -- Should only have one entry at any given time. Ensure this by always
--- attempting to insert with an `id` value of `1`.
+-- attempting to insert/update with an `id` value of `1`.
 	"id"	INTEGER NOT NULL,
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
 	PRIMARY KEY ("id")
 );
+
+-- the `0|nil` value should be considered a placeholder meaning none exists.
+INSERT INTO "head_commit" ("id", "hash", "hash_algo") VALUES (1, "0", "nil");
 
 -- Should a "detached head" state be possible, like in git? Or do all commits
 -- need to have at least one tag (usually a branch) in order to be valid?
@@ -160,4 +163,4 @@ CREATE TABLE current_tag (
 );
 
 -- Insert default branch when we run this init script.
-INSERT INTO current_tag ("id", "name", "is_branch") VALUES (1, $2, TRUE);
+INSERT INTO "current_tag" ("id", "name", "is_branch") VALUES (1, $2, TRUE);

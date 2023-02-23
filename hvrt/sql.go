@@ -22,6 +22,14 @@ import (
 //go:embed sql
 var SQLFiles embed.FS
 
+// TODO: use go:generate to create a nested struct with all the SQL file
+// contents in it. This will save a lot of boiler plate opening files in the
+// embedded SQLFiles fs.FS object. Also, it will allow the presence or absence
+// of the SQL values to be checked at compile time instead of at run time.
+
+//go:embed sql/sqlite/work_tree/read_head_commit.sql
+var SQLStrings_sqlite_work_tree_read_head_commit string
+
 var SQLDialectToDrivers = map[string]string{
 	"sqlite":     sqliteshim.ShimName,
 	"postgresql": "postgresql",

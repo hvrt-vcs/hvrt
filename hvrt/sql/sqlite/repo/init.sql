@@ -47,9 +47,10 @@ CREATE TABLE trees (
 	-- It is theoretically possible to have a single tree shared between multiple
 	-- commits. This can happen under the following conditions: the file IDs and
 	-- associated blob IDs are identical (since these are the only values hashed to
-	-- generate the tree ID). The values are sorted by the file ID path, then hashed
-	-- on file ID hash (as a UTF8 hex string) and blob ID hash (as a UTF8 hex
-	-- string), in that order.
+	-- generate the tree ID). This might happen, for example, when a troublesome
+	-- commit is reverted without modification. The values are sorted by the
+	-- file ID path, then hashed on file ID hash (as a UTF8 hex string) and blob
+	-- ID hash (as a UTF8 hex string), in that order.
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
 	PRIMARY KEY ("hash", "hash_algo")  ON CONFLICT IGNORE

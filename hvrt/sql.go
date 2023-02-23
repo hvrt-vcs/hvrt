@@ -48,7 +48,7 @@ var SqliteDefaultOpts = map[string][]string{
 
 	// TODO: I'm not sure that mattn/sqlite respects a _pragma DSN parameter
 	// like modernc.org/sqlite does. Try to reconcile this somehow.
-	"_pragma": {"journal_mode(WAL)", "case_sensitive_like(on)", "foreign_keys(on)"},
+	"_pragma": {"journal_mode(WAL)", "case_sensitive_like(1)", "foreign_keys(1)"},
 }
 
 func SqliteDSN(path string, parms map[string][]string) string {

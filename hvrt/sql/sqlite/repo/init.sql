@@ -21,19 +21,27 @@ CREATE TABLE tags (
 	"name"	TEXT NOT NULL,
 	"annotation"	TEXT,
 
-	-- only one should be flagged true as default branch. Use a trigger or
-	-- constraint of some sort to ensure that this is the case.
-	"is_default" BOOLEAN NOT NULL DEFAULT FALSE,
 	"is_hidden" BOOLEAN NOT NULL DEFAULT FALSE,
 	"is_branch" BOOLEAN NOT NULL,
 	"created_at" INTEGER NOT NULL,
-	UNIQUE ("is_default")
 	PRIMARY KEY ("name")
 );
 
+CREATE TABLE default_branch (
+	"id"	INTEGER,
+	"name"	TEXT NOT NULL,
+	UNIQUE ("name")
+	PRIMARY KEY ("id" AUTOINCREMENT)
+	FOREIGN KEY ("name") REFERENCES "tags" ("name") ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED
+);
+
 -- Insert default branch when we run this init script.
-INSERT INTO tags ("name", "is_default", "is_branch", "created_at")
-	VALUES ($2, TRUE, TRUE, strftime("%s", CURRENT_TIMESTAMP));
+INSERT INTO "tags" ("name", "is_branch", "created_at")
+	VALUES ($2, TRUE, strftime("%s", CURRENT_TIMESTAMP));
+
+-- There should only ever be one entry into this table.
+INSERT INTO "default_branch" ("id", "name") VALUES (1, $2);
+
 
 CREATE TABLE trees (
 	-- It is theoretically possible to have a single tree shared between multiple

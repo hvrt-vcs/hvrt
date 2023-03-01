@@ -31,8 +31,8 @@ var SQLFiles embed.FS
 var SQLStrings_sqlite_work_tree_read_head_commit string
 
 var SQLDialectToDrivers = map[string]string{
-	"sqlite":     sqliteshim.ShimName,
-	"postgresql": "postgresql",
+	"sqlite":   sqliteshim.ShimName,
+	"postgres": "postgresql",
 }
 
 var WorkTreeDBName = "work_tree_state.sqlite"

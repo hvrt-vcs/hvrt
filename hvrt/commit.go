@@ -3,6 +3,7 @@ package hvrt
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/hvrt-vcs/hvrt/log"
 )
@@ -164,13 +165,57 @@ func commitBlobChunks(wt_tx, repo_tx *sql.Tx) error {
 	return nil
 }
 
+type hash_value struct {
+	Hash     string
+	HashAlgo string
+}
+
+type blob struct {
+	HashValue hash_value
+}
+
+type fileId struct {
+	HashValue hash_value
+}
+
 type treeMember struct {
-	fid_hash       string
-	fid_hash_algo  string
-	path           string
-	blob_hash      string
-	blob_hash_algo string
-	parents        []treeMember
+	FileId  fileId
+	Blob    blob
+	Path    string
+	Parents []fileId
+}
+
+type tree struct {
+	Members []treeMember
+}
+
+type commit struct {
+	Tree    tree
+	Headers map[string]string
+}
+
+func hashTreeMember(tr_mbr treeMember, hash_algo string) (*hash_value, error) {
+	if !SliceContains([]string{"sha3-256"}, hash_algo) {
+		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
+	}
+
+	return nil, fmt.Errorf("%w: commit hashing", NotImplementedError)
+}
+
+func hashTree(tr tree, hash_algo string) (*hash_value, error) {
+	if !SliceContains([]string{"sha3-256"}, hash_algo) {
+		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
+	}
+
+	return nil, fmt.Errorf("%w: commit hashing", NotImplementedError)
+}
+
+func hashCommit(cmt commit, hash_algo string) (*hash_value, error) {
+	if !SliceContains([]string{"sha3-256"}, hash_algo) {
+		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
+	}
+
+	return nil, fmt.Errorf("%w: commit hashing", NotImplementedError)
 }
 
 func commitTree(wt_tx, repo_tx *sql.Tx) (tree_hash string, tree_hash_algo string, err error) {

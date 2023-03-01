@@ -23,6 +23,27 @@
 			}
 		},
 		{
+			"label": "GoReleaser build all (WSL)",
+			"type": "shell",
+			"command": "wsl",
+			"windows": {
+				"command": "wsl.exe"
+			},
+			"args": [
+				"--cd",
+				"${workspaceFolder}",
+				"--",
+				"goreleaser",
+				"build",
+				"--snapshot",
+				"--rm-dist"
+			],
+			"problemMatcher": [],
+			"group": {
+				"kind": "build"
+			}
+		},
+		{
 			"label": "GoReleaser build all",
 			"type": "shell",
 			"command": "goreleaser",

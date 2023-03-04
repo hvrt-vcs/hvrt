@@ -3,9 +3,12 @@ package hvrt
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
+	"hash"
 
 	"github.com/hvrt-vcs/hvrt/log"
+	"golang.org/x/crypto/sha3"
 )
 
 // import (
@@ -165,24 +168,93 @@ func commitBlobChunks(wt_tx, repo_tx *sql.Tx) error {
 	return nil
 }
 
-type hash_value struct {
-	Hash     string
-	HashAlgo string
+type HashAlgorithm interface {
+	Name() string
+	NewHasher() hash.Hash
+}
+
+type hashCreator func() hash.Hash
+
+var hashMapper = map[string]hashCreator{
+	"sha3-256": sha3.New256,
+}
+
+type genericAlgorithm string
+
+func NewHashAlgo(name string) (HashAlgorithm, error) {
+	_, present := hashMapper[name]
+	if !present {
+		return nil, fmt.Errorf("%w: unknown hash algorithm '%v'", NotImplementedError, name)
+	}
+
+	return genericAlgorithm(name), nil
+}
+
+func (al genericAlgorithm) Name() string {
+	return string(al)
+}
+
+func (al genericAlgorithm) NewHasher() hash.Hash {
+	hasherFunc, present := hashMapper[string(al)]
+	if !present {
+		// A genericAlgorithm cannot be constructed unless a map entry exists
+		// for it. Somehow it got removed from the map.
+		panic(fmt.Errorf("map entry no longer present for algorithm '%v'", al))
+	}
+	return hasherFunc()
+}
+
+type Hashable interface {
+	// bytes to pass to a hash.Hash instance
+	HashBytes() []byte
+}
+
+type hashValue struct {
+	Digest    []byte
+	Algorithm HashAlgorithm
+}
+
+func (h *hashValue) HexDigest() string {
+	return hex.EncodeToString(h.Digest)
+}
+
+func (h *hashValue) HashBytes() []byte {
+	hex_digest := h.HexDigest()
+	name := h.Algorithm.Name()
+	return_bytes := make([]byte, 0, len(hex_digest)+len(name)+1)
+	return_bytes = append(return_bytes, []byte(hex_digest)...)
+	return_bytes = append(return_bytes, []byte("|")...)
+	return_bytes = append(return_bytes, []byte(name)...)
+	return return_bytes
 }
 
 type blob struct {
-	HashValue hash_value
+	HashValue hashValue
 }
 
-type fileId struct {
-	HashValue hash_value
+func (b *blob) HashBytes() []byte {
+	return_bytes := make([]byte, 0)
+	return_bytes = append(return_bytes, []byte("blob:")...)
+	return_bytes = append(return_bytes, b.HashValue.HashBytes()...)
+	return return_bytes
+}
+
+type FileId struct {
+	HashValue hashValue
+}
+
+func (fid *FileId) HashBytes() []byte {
+	return_bytes := make([]byte, 0)
+	return_bytes = append(return_bytes, []byte("FileId:")...)
+	return_bytes = append(return_bytes, fid.HashValue.HashBytes()...)
+	return return_bytes
 }
 
 type treeMember struct {
-	FileId  fileId
+	FileId  FileId
 	Blob    blob
 	Path    string
-	Parents []fileId
+	Parents []FileId
 }
 
 type tree struct {
@@ -194,7 +266,7 @@ type commit struct {
 	Headers map[string]string
 }
 
-func hashTreeMember(tr_mbr treeMember, hash_algo string) (*hash_value, error) {
+func hashTreeMember(tr_mbr treeMember, hash_algo string) (*hashValue, error) {
 	if !SliceContains([]string{"sha3-256"}, hash_algo) {
 		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
 	}
@@ -202,7 +274,7 @@ func hashTreeMember(tr_mbr treeMember, hash_algo string) (*hash_value, error) {
 	return nil, fmt.Errorf("%w: commit hashing", NotImplementedError)
 }
 
-func hashTree(tr tree, hash_algo string) (*hash_value, error) {
+func hashTree(tr tree, hash_algo string) (*hashValue, error) {
 	if !SliceContains([]string{"sha3-256"}, hash_algo) {
 		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
 	}
@@ -210,7 +282,7 @@ func hashTree(tr tree, hash_algo string) (*hash_value, error) {
 	return nil, fmt.Errorf("%w: commit hashing", NotImplementedError)
 }
 
-func hashCommit(cmt commit, hash_algo string) (*hash_value, error) {
+func hashCommit(cmt commit, hash_algo string) (*hashValue, error) {
 	if !SliceContains([]string{"sha3-256"}, hash_algo) {
 		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
 	}

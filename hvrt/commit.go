@@ -168,40 +168,55 @@ func commitBlobChunks(wt_tx, repo_tx *sql.Tx) error {
 	return nil
 }
 
-type HashAlgorithm interface {
-	Name() string
-	NewHasher() hash.Hash
-}
-
 type hashCreator func() hash.Hash
 
 var hashMapper = map[string]hashCreator{
 	"sha3-256": sha3.New256,
 }
 
-type genericAlgorithm string
+// Implements `hash.Hash` interface, but also returns the name of the algorithm
+// used for the hash.
+type NamedHash interface {
+	hash.Hash
+	Name() string
+}
 
-func NewHashAlgo(name string) (HashAlgorithm, error) {
-	_, present := hashMapper[name]
+type genericAlgorithm struct {
+	internalName string
+	internalHash hash.Hash
+}
+
+func NewNamedHash(name string) (NamedHash, error) {
+	hashFunc, present := hashMapper[name]
 	if !present {
 		return nil, fmt.Errorf("%w: unknown hash algorithm '%v'", NotImplementedError, name)
 	}
 
-	return genericAlgorithm(name), nil
+	return &genericAlgorithm{internalName: name, internalHash: hashFunc()}, nil
 }
 
-func (al genericAlgorithm) Name() string {
-	return string(al)
+func (al *genericAlgorithm) Name() string {
+	return al.internalName
 }
 
-func (al genericAlgorithm) NewHasher() hash.Hash {
-	hasherFunc, present := hashMapper[string(al)]
-	if !present {
-		// A genericAlgorithm cannot be constructed unless a map entry exists
-		// for it. Somehow it got removed from the map.
-		panic(fmt.Errorf("map entry no longer present for algorithm '%v'", al))
-	}
-	return hasherFunc()
+func (al *genericAlgorithm) Write(p []byte) (n int, err error) {
+	return al.internalHash.Write(p)
+}
+
+func (al *genericAlgorithm) Sum(b []byte) []byte {
+	return al.internalHash.Sum(b)
+}
+
+func (al *genericAlgorithm) Reset() {
+	al.internalHash.Reset()
+}
+
+func (al *genericAlgorithm) Size() int {
+	return al.internalHash.Size()
+}
+
+func (al *genericAlgorithm) BlockSize() int {
+	return al.internalHash.BlockSize()
 }
 
 type Hashable interface {
@@ -211,7 +226,7 @@ type Hashable interface {
 
 type hashValue struct {
 	Digest    []byte
-	Algorithm HashAlgorithm
+	Algorithm NamedHash
 }
 
 func (h *hashValue) HexDigest() string {

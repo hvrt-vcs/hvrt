@@ -1,11 +1,13 @@
 package hvrt
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"hash"
+	"io"
 
 	"github.com/hvrt-vcs/hvrt/log"
 	"golang.org/x/crypto/sha3"
@@ -221,7 +223,7 @@ func (al *genericAlgorithm) BlockSize() int {
 
 type Hashable interface {
 	// bytes to pass to a hash.Hash instance
-	HashBytes() []byte
+	HashBytes() io.Reader
 }
 
 type hashValue struct {
@@ -233,36 +235,32 @@ func (h *hashValue) HexDigest() string {
 	return hex.EncodeToString(h.Digest)
 }
 
-func (h *hashValue) HashBytes() []byte {
+func (h *hashValue) HashBytes() io.Reader {
 	hex_digest := h.HexDigest()
 	name := h.Algorithm.Name()
 	return_bytes := make([]byte, 0, len(hex_digest)+len(name)+1)
 	return_bytes = append(return_bytes, []byte(hex_digest)...)
 	return_bytes = append(return_bytes, []byte("|")...)
 	return_bytes = append(return_bytes, []byte(name)...)
-	return return_bytes
+	return bytes.NewBuffer(return_bytes)
 }
 
 type blob struct {
 	HashValue hashValue
 }
 
-func (b *blob) HashBytes() []byte {
-	return_bytes := make([]byte, 0)
-	return_bytes = append(return_bytes, []byte("blob:")...)
-	return_bytes = append(return_bytes, b.HashValue.HashBytes()...)
-	return return_bytes
+func (b *blob) HashBytes() io.Reader {
+	type_bytes_reader := bytes.NewBuffer([]byte("blob:"))
+	return io.MultiReader(type_bytes_reader, b.HashValue.HashBytes())
 }
 
 type FileId struct {
 	HashValue hashValue
 }
 
-func (fid *FileId) HashBytes() []byte {
-	return_bytes := make([]byte, 0)
-	return_bytes = append(return_bytes, []byte("FileId:")...)
-	return_bytes = append(return_bytes, fid.HashValue.HashBytes()...)
-	return return_bytes
+func (fid *FileId) HashBytes() io.Reader {
+	type_bytes_reader := bytes.NewBuffer([]byte("FileId:"))
+	return io.MultiReader(type_bytes_reader, fid.HashValue.HashBytes())
 }
 
 type treeMember struct {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"strings"
 
 	"github.com/hvrt-vcs/hvrt/log"
 	"golang.org/x/crypto/sha3"
@@ -23,6 +24,106 @@ import (
 // )
 
 func init() {
+}
+
+type HashType string
+type HashAlgorithm string
+
+const (
+	CHUNK_TYPE   HashType = "chunk"
+	BLOB_TYPE    HashType = "blob"
+	FILE_ID_TYPE HashType = "file_id"
+	TREE_TYPE    HashType = "tree"
+	COMMIT_TYPE  HashType = "commit"
+	BUNDLE_TYPE  HashType = "bundle"
+)
+
+const (
+	SHA3_256 HashAlgorithm = "sha3-256"
+)
+
+type hashCreator func() hash.Hash
+
+var hashMapper = map[HashAlgorithm]hashCreator{
+	"sha3-256": sha3.New256,
+}
+
+// Implements `hash.Hash` interface, but also returns the name of the algorithm
+// used for the hash.
+type NamedHash interface {
+	hash.Hash
+	Name() HashAlgorithm
+}
+
+type genericAlgorithm struct {
+	internalName HashAlgorithm
+	internalHash hash.Hash
+}
+
+func NewNamedHash(name HashAlgorithm) (NamedHash, error) {
+	hashFunc, present := hashMapper[name]
+	if !present {
+		return nil, fmt.Errorf("%w: unknown hash algorithm '%v'", NotImplementedError, name)
+	}
+
+	return &genericAlgorithm{internalName: name, internalHash: hashFunc()}, nil
+}
+
+func (al *genericAlgorithm) Name() HashAlgorithm {
+	return al.internalName
+}
+
+func (al *genericAlgorithm) Write(p []byte) (n int, err error) {
+	return al.internalHash.Write(p)
+}
+
+func (al *genericAlgorithm) Sum(b []byte) []byte {
+	return al.internalHash.Sum(b)
+}
+
+func (al *genericAlgorithm) Reset() {
+	al.internalHash.Reset()
+}
+
+func (al *genericAlgorithm) Size() int {
+	return al.internalHash.Size()
+}
+
+func (al *genericAlgorithm) BlockSize() int {
+	return al.internalHash.BlockSize()
+}
+
+type Hashable interface {
+	// bytes to stream to a hash.Hash instance
+	HashBytes() (io.ReadCloser, error)
+}
+
+const HashValueDelimiter = ":"
+
+type HashValue struct {
+	Type      HashType
+	Algorithm HashAlgorithm
+	HexDigest string
+}
+
+func (hv HashValue) ToStringSlice() []string {
+	return []string{string(hv.Type), string(hv.Algorithm), hv.HexDigest}
+}
+
+func (hv HashValue) ToString() string {
+	if hv.Type == "" || hv.Algorithm == "" || hv.HexDigest == "" {
+		return ""
+	} else {
+		return strings.Join(hv.ToStringSlice(), HashValueDelimiter)
+	}
+}
+
+func (hv HashValue) HashBytes() (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewBuffer([]byte(hv.ToString()))), nil
+}
+
+type HashValueGenerator interface {
+	GenerateHashValue() (HashValue, error)
 }
 
 func SliceContains[T comparable](slc []T, comp T) bool {
@@ -170,108 +271,41 @@ func commitBlobChunks(wt_tx, repo_tx *sql.Tx) error {
 	return nil
 }
 
-type hashCreator func() hash.Hash
-
-var hashMapper = map[string]hashCreator{
-	"sha3-256": sha3.New256,
+func CalculateFileID(path string, commit HashValue, parents []HashValue) (HashValue, error) {
+	return HashValue{}, NotImplementedError
 }
 
-// Implements `hash.Hash` interface, but also returns the name of the algorithm
-// used for the hash.
-type NamedHash interface {
-	hash.Hash
-	Name() string
-}
-
-type genericAlgorithm struct {
-	internalName string
-	internalHash hash.Hash
-}
-
-func NewNamedHash(name string) (NamedHash, error) {
-	hashFunc, present := hashMapper[name]
-	if !present {
-		return nil, fmt.Errorf("%w: unknown hash algorithm '%v'", NotImplementedError, name)
+func CalculateBlob(blob io.Reader, hasher NamedHash) (HashValue, error) {
+	if _, err := io.Copy(hasher, blob); err != nil {
+		return HashValue{}, err
 	}
-
-	return &genericAlgorithm{internalName: name, internalHash: hashFunc()}, nil
+	digest := hasher.Sum([]byte{})
+	hex_digest := hex.EncodeToString(digest)
+	return HashValue{Type: BLOB_TYPE, Algorithm: hasher.Name(), HexDigest: hex_digest}, nil
 }
 
-func (al *genericAlgorithm) Name() string {
-	return al.internalName
+type TreeMember struct {
+	Path   string
+	FileId HashValue
+	Blob   HashValue
 }
 
-func (al *genericAlgorithm) Write(p []byte) (n int, err error) {
-	return al.internalHash.Write(p)
-}
-
-func (al *genericAlgorithm) Sum(b []byte) []byte {
-	return al.internalHash.Sum(b)
-}
-
-func (al *genericAlgorithm) Reset() {
-	al.internalHash.Reset()
-}
-
-func (al *genericAlgorithm) Size() int {
-	return al.internalHash.Size()
-}
-
-func (al *genericAlgorithm) BlockSize() int {
-	return al.internalHash.BlockSize()
-}
-
-type Hashable interface {
-	// bytes to pass to a hash.Hash instance
-	HashBytes() io.Reader
-}
-
-type hashValue struct {
-	Digest    []byte
-	Algorithm NamedHash
-}
-
-func (h *hashValue) HexDigest() string {
-	return hex.EncodeToString(h.Digest)
-}
-
-func (h *hashValue) HashBytes() io.Reader {
-	hex_digest := h.HexDigest()
-	name := h.Algorithm.Name()
-	return_bytes := make([]byte, 0, len(hex_digest)+len(name)+1)
-	return_bytes = append(return_bytes, []byte(hex_digest)...)
-	return_bytes = append(return_bytes, []byte("|")...)
-	return_bytes = append(return_bytes, []byte(name)...)
-	return bytes.NewBuffer(return_bytes)
-}
-
-type blob struct {
-	HashValue hashValue
-}
-
-func (b *blob) HashBytes() io.Reader {
-	type_bytes_reader := bytes.NewBuffer([]byte("blob:"))
-	return io.MultiReader(type_bytes_reader, b.HashValue.HashBytes())
-}
-
-type FileId struct {
-	HashValue hashValue
-}
-
-func (fid *FileId) HashBytes() io.Reader {
-	type_bytes_reader := bytes.NewBuffer([]byte("FileId:"))
-	return io.MultiReader(type_bytes_reader, fid.HashValue.HashBytes())
-}
-
-type treeMember struct {
-	FileId  FileId
-	Blob    blob
-	Path    string
-	Parents []FileId
+func (t *TreeMember) HashBytes() (io.ReadCloser, error) {
+	return_string := []string{
+		t.Path,
+		t.FileId.ToString(),
+		t.Blob.ToString(),
+	}
+	joined_bytes := []byte(strings.Join(return_string, "\t"))
+	return io.NopCloser(bytes.NewBuffer(joined_bytes)), nil
 }
 
 type tree struct {
-	Members []treeMember
+	Members []TreeMember
+}
+
+func (t *tree) HashBytes() (io.ReadCloser, error) {
+	return nil, NotImplementedError
 }
 
 type commit struct {
@@ -279,7 +313,7 @@ type commit struct {
 	Headers map[string]string
 }
 
-func hashTreeMember(tr_mbr treeMember, hash_algo string) (*hashValue, error) {
+func hashTree(tr tree, hash_algo string) (*HashValue, error) {
 	if !SliceContains([]string{"sha3-256"}, hash_algo) {
 		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
 	}
@@ -287,15 +321,7 @@ func hashTreeMember(tr_mbr treeMember, hash_algo string) (*hashValue, error) {
 	return nil, fmt.Errorf("%w: commit hashing", NotImplementedError)
 }
 
-func hashTree(tr tree, hash_algo string) (*hashValue, error) {
-	if !SliceContains([]string{"sha3-256"}, hash_algo) {
-		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
-	}
-
-	return nil, fmt.Errorf("%w: commit hashing", NotImplementedError)
-}
-
-func hashCommit(cmt commit, hash_algo string) (*hashValue, error) {
+func hashCommit(cmt commit, hash_algo string) (*HashValue, error) {
 	if !SliceContains([]string{"sha3-256"}, hash_algo) {
 		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
 	}

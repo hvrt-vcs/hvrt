@@ -313,20 +313,20 @@ type commit struct {
 	Headers map[string]string
 }
 
-func hashTree(tr tree, hash_algo string) (*HashValue, error) {
-	if !SliceContains([]string{"sha3-256"}, hash_algo) {
-		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
+func hashTree(tr tree, hash_algo NamedHash) (HashValue, error) {
+	if hash_algo == nil {
+		return HashValue{}, fmt.Errorf("hash_algo cannot be nil")
 	}
 
-	return nil, fmt.Errorf("%w: commit hashing", NotImplementedError)
+	return HashValue{}, fmt.Errorf("%w: commit hashing", NotImplementedError)
 }
 
-func hashCommit(cmt commit, hash_algo string) (*HashValue, error) {
-	if !SliceContains([]string{"sha3-256"}, hash_algo) {
-		return nil, fmt.Errorf("unknown hash algo %v", hash_algo)
+func hashCommit(cmt commit, hash_algo NamedHash) (HashValue, error) {
+	if hash_algo == nil {
+		return HashValue{}, fmt.Errorf("hash_algo cannot be nil")
 	}
 
-	return nil, fmt.Errorf("%w: commit hashing", NotImplementedError)
+	return HashValue{}, fmt.Errorf("%w: commit hashing", NotImplementedError)
 }
 
 func commitTree(wt_tx, repo_tx *sql.Tx) (tree_hash string, tree_hash_algo string, err error) {

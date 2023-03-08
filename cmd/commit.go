@@ -18,7 +18,7 @@ var commitCmd = &cobra.Command{
 	Short: "commit changes to the repo",
 	Long:  `Previously tracked files will be automatically added to the commit. Use the '--staged-only' flag to behave otherwise.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return hvrt.Commit(rootFlags.WorkTree, commitFlags.message, commitFlags.author, commitFlags.committer)
+		return hvrt.CommitWorktree(rootFlags.WorkTree, commitFlags.message, commitFlags.author, commitFlags.committer)
 	},
 }
 

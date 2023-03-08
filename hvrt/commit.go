@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/hvrt-vcs/hvrt/log"
@@ -94,8 +95,8 @@ func (al *genericAlgorithm) BlockSize() int {
 }
 
 type Hashable interface {
-	// bytes to stream to a hash.Hash instance
-	HashBytes() (io.ReadCloser, error)
+	// bytes to pass to a hash.Hash instance
+	HashBytes() []byte
 }
 
 const HashValueDelimiter = ":"
@@ -118,8 +119,8 @@ func (hv HashValue) ToString() string {
 	}
 }
 
-func (hv HashValue) HashBytes() (io.ReadCloser, error) {
-	return io.NopCloser(bytes.NewBuffer([]byte(hv.ToString()))), nil
+func (hv HashValue) HashBytes() []byte {
+	return []byte(hv.ToString())
 }
 
 type HashValueGenerator interface {
@@ -128,7 +129,7 @@ type HashValueGenerator interface {
 
 func SliceContains[T comparable](slc []T, comp T) bool {
 	for _, v := range slc {
-		if comp == v {
+		if v == comp {
 			return true
 		}
 	}
@@ -290,43 +291,63 @@ type TreeMember struct {
 	Blob   HashValue
 }
 
-func (t *TreeMember) HashBytes() (io.ReadCloser, error) {
-	return_string := []string{
+func (t *TreeMember) HashBytes() []byte {
+	string_slice := []string{
 		t.Path,
 		t.FileId.ToString(),
 		t.Blob.ToString(),
 	}
-	joined_bytes := []byte(strings.Join(return_string, "\t"))
-	return io.NopCloser(bytes.NewBuffer(joined_bytes)), nil
+	joined_bytes := []byte(strings.Join(string_slice, "\t"))
+	return joined_bytes
 }
 
-type tree struct {
+type Tree struct {
 	Members []TreeMember
 }
 
-func (t *tree) HashBytes() (io.ReadCloser, error) {
-	return nil, NotImplementedError
-}
+func (t *Tree) HashBytes() []byte {
+	string_slice := make([]string, 0, len(t.Members))
 
-type commit struct {
-	Tree    tree
-	Headers map[string]string
-}
-
-func hashTree(tr tree, hash_algo NamedHash) (HashValue, error) {
-	if hash_algo == nil {
-		return HashValue{}, fmt.Errorf("hash_algo cannot be nil")
+	for _, tm := range t.Members {
+		string_slice = append(string_slice, string(tm.HashBytes()))
 	}
-
-	return HashValue{}, fmt.Errorf("%w: commit hashing", NotImplementedError)
+	sort.Strings(string_slice)
+	joined_bytes := []byte(strings.Join(string_slice, "\n"))
+	return joined_bytes
 }
 
-func hashCommit(cmt commit, hash_algo NamedHash) (HashValue, error) {
-	if hash_algo == nil {
-		return HashValue{}, fmt.Errorf("hash_algo cannot be nil")
-	}
+type HeaderMap map[string]string
 
-	return HashValue{}, fmt.Errorf("%w: commit hashing", NotImplementedError)
+func (hm HeaderMap) HashBytes() []byte {
+	headers := make([]string, len(hm))
+
+	sorted_keys := make([]string, len(hm))
+	i := 0
+	for k := range hm {
+		sorted_keys[i] = k
+		i++
+	}
+	sort.Strings(sorted_keys)
+
+	for _, hk := range sorted_keys {
+		headers = append(headers, fmt.Sprintf("%v=%v", hk, hm[hk]))
+	}
+	joined_bytes := []byte(strings.Join(headers, "\n"))
+	return joined_bytes
+}
+
+type Commit struct {
+	Headers HeaderMap
+	Tree    Tree
+}
+
+func (c *Commit) HashBytes() []byte {
+	child_byte_slices := [][]byte{
+		c.Headers.HashBytes(),
+		c.Tree.HashBytes(),
+	}
+	joined_bytes := bytes.Join(child_byte_slices, []byte("\n"))
+	return joined_bytes
 }
 
 func commitTree(wt_tx, repo_tx *sql.Tx) (tree_hash string, tree_hash_algo string, err error) {
@@ -407,7 +428,7 @@ func innerCommit(work_tree, message, author, committer string, wt_tx, repo_tx *s
 	return nil
 }
 
-func Commit(work_tree, message, author, committer string) error {
+func CommitWorktree(work_tree, message, author, committer string) error {
 	wt_db, err := GetExistingWorktreeDB(work_tree)
 	if err != nil {
 		return err

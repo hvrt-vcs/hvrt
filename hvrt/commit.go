@@ -30,6 +30,7 @@ func init() {
 type HashType string
 type HashAlgorithm string
 
+// HashType constants
 const (
 	CHUNK_TYPE   HashType = "chunk"
 	BLOB_TYPE    HashType = "blob"
@@ -39,6 +40,7 @@ const (
 	BUNDLE_TYPE  HashType = "bundle"
 )
 
+// HashAlgorithm constants
 const (
 	SHA3_256 HashAlgorithm = "sha3-256"
 )
@@ -54,6 +56,8 @@ var hashMapper = map[HashAlgorithm]hashCreator{
 type NamedHash interface {
 	hash.Hash
 	Name() HashAlgorithm
+	HashBytes(t HashType, b []byte) HashValue
+	HashReader(r io.Reader) HashValue
 }
 
 type genericAlgorithm struct {
@@ -72,6 +76,25 @@ func NewNamedHash(name HashAlgorithm) (NamedHash, error) {
 
 func (al *genericAlgorithm) Name() HashAlgorithm {
 	return al.internalName
+}
+
+// Return a HashValue of the given bytes. Does *not* reset the underlying hash
+// state before or after writing given bytes to the hash.
+func (al *genericAlgorithm) HashBytes(t HashType, b []byte) HashValue {
+	al.Write(b)
+	digest := al.Sum(nil)
+	hex_digest := hex.EncodeToString(digest)
+	return HashValue{Algorithm: al.internalName, HexDigest: hex_digest, Type: t}
+}
+
+// Return a HashValue of the given bytes. Does *not* reset the underlying hash
+// state before or after writing given reader's contents to the hash. An
+// io.Reader is always assumed to be a `BLOB_TYPE` value for `Type`.
+func (al *genericAlgorithm) HashReader(r io.Reader) HashValue {
+	io.Copy(al, r)
+	digest := al.Sum(nil)
+	hex_digest := hex.EncodeToString(digest)
+	return HashValue{Algorithm: al.internalName, HexDigest: hex_digest, Type: BLOB_TYPE}
 }
 
 func (al *genericAlgorithm) Write(p []byte) (n int, err error) {
@@ -97,6 +120,7 @@ func (al *genericAlgorithm) BlockSize() int {
 type Hashable interface {
 	// bytes to pass to a hash.Hash instance
 	HashBytes() []byte
+	// HashType() HashType
 }
 
 const HashValueDelimiter = ":"

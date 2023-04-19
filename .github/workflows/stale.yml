@@ -26,3 +26,5 @@ jobs:
         stale-issue-label: 'stale-issue'
         stale-pr-label: 'stale-pr'
         days-before-stale: 60
+        exempt-all-assignees: true
+        exempt-all-milestones: true

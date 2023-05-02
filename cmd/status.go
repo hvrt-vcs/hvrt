@@ -16,7 +16,7 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Print the status of the given repository and work tree",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		stat, err := hvrt.Status(rootFlags.RepoPath, rootFlags.WorkTree)
+		stat, err := HavartiState.Status()
 		if err != nil {
 			return err
 		} else if stat == nil {

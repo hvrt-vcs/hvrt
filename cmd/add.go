@@ -17,7 +17,11 @@ is supplied. Currently '--force' override only works on individual files, not
 recursively on directories.`,
 	Args: WrapPositionalArgsAsCommandError(cobra.MinimumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return hvrt.AddFiles(rootFlags.WorkTree, args)
+		work_tree, err := HavartiState.GetWorkTree()
+		if err != nil {
+			return err
+		}
+		return hvrt.AddFiles(work_tree, args)
 	},
 }
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/hvrt-vcs/hvrt/hvrt"
 	"github.com/hvrt-vcs/hvrt/log"
 	"github.com/spf13/cobra"
 	// "github.com/pelletier/go-toml/v2"
@@ -79,21 +80,45 @@ const (
 	ReturnUnexpectedError int = 123
 )
 
+const (
+	changeDirFlag = "change-directory"
+)
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "hvrt",
 	Short: "Havarti VCS",
 	Long:  `Havarti is a Hybrid VCS that works both distributed or centralized.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if rootFlags.ChangeDir != "" {
-			cderr := os.Chdir(rootFlags.ChangeDir)
+		var err error
+		HavartiState, err = hvrt.NewHavartiState(&rootFlags.WorkTree, rootFlags.RepoPath, "sqlite")
+		if err != nil {
+			return err
+		}
+
+		if unsafe, err := cmd.PersistentFlags().GetBool("unsafe"); err != nil {
+			return err
+		} else {
+			HavartiState.AllowUnsafe = unsafe
+		}
+
+		if verbosity, err := cmd.PersistentFlags().GetCount("verbose"); err != nil {
+			return err
+		} else if verbosity > 0 {
+			HavartiState.Verbosity = verbosity
+		}
+
+		if changeDir, err := cmd.PersistentFlags().GetString(changeDirFlag); err != nil {
+			return err
+		} else if changeDir != "" {
+			cderr := os.Chdir(changeDir)
 			if cderr != nil {
 				return NewCommandError(ReturnArgumentError, cderr)
 			}
 		}
 
-		if rootFlags.Verbosity > 0 {
-			min := int(math.Max(0, float64(log.DefaultLoggingLevel-(rootFlags.Verbosity*10))))
+		if HavartiState.Verbosity > 0 {
+			min := int(math.Max(0, float64(log.DefaultLoggingLevel-(HavartiState.Verbosity*10))))
 			log.SetLoggingLevel(min)
 		}
 
@@ -124,22 +149,19 @@ func Execute() {
 	}
 }
 
+var HavartiState *hvrt.HavartiState = &hvrt.HavartiState{}
+
 var rootFlags = struct {
-	RepoPath  string
-	WorkTree  string
-	ChangeDir string
-	Unsafe    bool
-	Verbosity int
+	RepoPath string
+	WorkTree string
 }{
-	RepoPath:  "./.hvrt/repo.hvrt",
-	WorkTree:  ".",
-	ChangeDir: "",
-	Unsafe:    false,
+	RepoPath: "./.hvrt/repo.hvrt",
+	WorkTree: ".",
 }
 
 func init() {
-	rootCmd.PersistentFlags().CountVarP(&rootFlags.Verbosity, "verbose", "v", "Print more information. Can be specified multiple times to increase verbosity.")
-	rootCmd.PersistentFlags().BoolVar(&rootFlags.Unsafe, "unsafe", rootFlags.Unsafe, "Allow unsafe operations to proceed")
+	rootCmd.PersistentFlags().CountP("verbose", "v", "Print more information. Can be specified multiple times to increase verbosity.")
+	rootCmd.PersistentFlags().Bool("unsafe", false, "Allow unsafe operations to proceed")
 	rootCmd.PersistentFlags().StringVar(
 		&rootFlags.RepoPath,
 		"repo",
@@ -153,16 +175,15 @@ at the same time.`,
 	rootCmd.PersistentFlags().StringVar(&rootFlags.WorkTree, "work-tree", rootFlags.WorkTree, "Path to work tree")
 	_ = rootCmd.MarkFlagDirname("work-tree")
 
-	rootCmd.PersistentFlags().StringVarP(
-		&rootFlags.ChangeDir,
-		"change-directory", "C",
-		rootFlags.ChangeDir,
+	rootCmd.PersistentFlags().StringP(
+		changeDirFlag, "C",
+		"",
 		`Run as if started in given path instead of the current working directory.
 This option affects options that expect a path name like --repo and
 --work-tree because their interpretations of the path names will be made
 relative to the working directory specified by the -C option.`,
 	)
-	_ = rootCmd.MarkFlagDirname("change-directory")
+	_ = rootCmd.MarkFlagDirname(changeDirFlag)
 
 	rootCmd.SetFlagErrorFunc(
 		func(c *cobra.Command, err error) error {

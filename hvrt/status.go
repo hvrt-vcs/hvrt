@@ -50,7 +50,13 @@ type RepoStat struct {
 	UnkPaths []string
 }
 
-func Status(repo_file, work_tree string) (*RepoStat, error) {
+// Method that returns the status of a repo given a HavartiState struct pointer
+func (hs *HavartiState) Status() (*RepoStat, error) {
+	work_tree, err := hs.GetWorkTree()
+	if err != nil {
+		return nil, err
+	}
+
 	real_work_tree, err := file_ignore.GetWorkTreeRoot(work_tree)
 	if err != nil {
 		return nil, err

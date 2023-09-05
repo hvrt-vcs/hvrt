@@ -24,7 +24,7 @@ type File interface {
 	io.Seeker
 }
 
-// CreateFS is the interface that wraps the Create method.
+// CreateFS is the interface that wraps the Create method. It should behave similarly to the os.Create function.
 type CreateFS interface {
 	stdlib_fs.FS
 	Create(name string) (File, error)
@@ -36,12 +36,16 @@ type OpenFileFS interface {
 	OpenFile(name string, flag int, perm os.FileMode) (File, error)
 }
 
-// An FS interface that can, more or less, emulate a real filesystem
-type FullFS interface {
-	OpenFileFS
-	stdlib_fs.StatFS
-	stdlib_fs.ReadDirFS
-	Rel(name string) (string, error)
+// RemoveFS is the interface that wraps the Remove method. If a file system cannot remove (i.e. unlink) files under any circumstances, then it should not implment this interface.
+type RemoveFS interface {
+	stdlib_fs.FS
+	Remove(name string) error
+}
+
+// RenameFS is the interface that wraps the Rename method. If a file system cannot rename (i.e. move) files under any circumstances, then it should not implment this interface.
+type RenameFS interface {
+	stdlib_fs.FS
+	Rename(oldpath, newpath string) error
 }
 
 // An implemententation of `ReadWriteFS` to interact with a real filesystem on the present operating system.
@@ -98,6 +102,14 @@ func (osfs *OSFS) ReadDir(name string) ([]stdlib_fs.DirEntry, error) {
 
 func (osfs *OSFS) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 	return os.OpenFile(filepath.Join(osfs.root_dir, name), flag, perm)
+}
+
+func (osfs *OSFS) Remove(name string) error {
+	return os.Remove(filepath.Join(osfs.root_dir, name))
+}
+
+func (osfs *OSFS) Rename(oldpath, newpath string) error {
+	return os.Rename(filepath.Join(osfs.root_dir, oldpath), filepath.Join(osfs.root_dir, newpath))
 }
 
 func (osfs *OSFS) Rel(name string) (string, error) {

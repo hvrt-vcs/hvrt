@@ -6,7 +6,7 @@ before:
     - go generate ./...
 builds:
   - env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     main: ./
     binary: hvrt
     targets:
@@ -19,39 +19,22 @@ builds:
 
       # We choose the lowest possible versions of all archs to ensure as broad
       # of support as possible.
-      # - darwin_amd64_v1
-      # - darwin_arm64
-      # - freebsd_amd64_v1
-      # - freebsd_arm64
-      # - linux_386_softfloat
+      - darwin_amd64_v1
+      - darwin_arm64
+      - freebsd_amd64_v1
+      - freebsd_arm64
+      - linux_386_softfloat
       - linux_amd64_v1
-      # - linux_arm_5
-      # - linux_arm_6
-      # - linux_arm_7
-      # - linux_arm64
-      # - linux_riscv64
-      # - windows_amd64_v1
-      # - windows_arm64
+      - linux_arm_5
+      - linux_arm_6
+      - linux_arm_7
+      - linux_arm64
+      - linux_riscv64
+      - windows_amd64_v1
+      - windows_arm64
 archives:
-  - replacements:
-      aix: AIX
-      android: Android
-      darwin: macOS
-      dragonfly: DragonFlyBSD
-      freebsd: FreeBSD
-      illumos: Illumos
-      ios: iOS
-      linux: Linux
-      netbsd: NetBSD
-      openbsd: OpenBSD
-      plan9: Plan9
-      solaris: Solaris
-      windows: Windows
-      "386": "i386"
-      amd64: x86_64
-
-    # create tar.gz files for every OS except Windows
-    format_overrides:
+  # create tar.gz files for every OS except Windows
+  - format_overrides:
       - goos: windows
         format: zip
 checksum:

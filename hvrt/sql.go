@@ -67,7 +67,7 @@ func SqliteDSN(path string, parms map[string][]string) string {
 		}
 	}
 	qstring := strings.Join(qparms, "&")
-	dsn := fmt.Sprintf("%s?%s", path, url.QueryEscape(qstring))
+	dsn := fmt.Sprintf("file:%s?%s", path, url.QueryEscape(qstring))
 	return dsn
 }
 

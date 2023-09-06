@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
+	"runtime"
 	"runtime/debug"
 
 	"github.com/hvrt-vcs/hvrt/hvrt"
 	"github.com/hvrt-vcs/hvrt/log"
+	"github.com/hvrt-vcs/hvrt/vfs"
 	"github.com/spf13/cobra"
 	// "github.com/pelletier/go-toml/v2"
 	// "github.com/hvrt-vcs/hvrt/hvrt"
@@ -73,6 +76,14 @@ func WrapPositionalArgsAsCommandError(wrapped_positional_args_func cobra.Positio
 	}
 }
 
+func cwdRootDir() string {
+	if runtime.GOOS == "windows" {
+		return os.Getenv("SystemDrive")
+	} else {
+		return "/"
+	}
+}
+
 const (
 	ReturnSuccess         int = 0
 	ReturnGenericError    int = 1
@@ -91,30 +102,37 @@ var rootCmd = &cobra.Command{
 	Long:  `Havarti is a Hybrid VCS that works both distributed or centralized.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		var err error
-		HavartiState, err = hvrt.NewHavartiState(&rootFlags.WorkTree, rootFlags.RepoPath, "sqlite")
+
+		cwd, err := os.Getwd()
 		if err != nil {
 			return err
 		}
 
-		if unsafe, err := cmd.PersistentFlags().GetBool("unsafe"); err != nil {
+		if changeDir, err := cmd.Flags().GetString(changeDirFlag); err != nil {
+			return err
+		} else if changeDir != "" {
+			cwd, err = filepath.Abs(changeDir)
+			if err != nil {
+				return err
+			}
+		}
+
+		fs, _ := vfs.NewOSFS(cwdRootDir())
+		HavartiState, err = hvrt.NewHavartiState(fs, &cwd, &rootFlags.WorkTree, rootFlags.RepoPath, "sqlite")
+		if err != nil {
+			return err
+		}
+
+		if unsafe, err := cmd.Flags().GetBool("unsafe"); err != nil {
 			return err
 		} else {
 			HavartiState.AllowUnsafe = unsafe
 		}
 
-		if verbosity, err := cmd.PersistentFlags().GetCount("verbose"); err != nil {
+		if verbosity, err := cmd.Flags().GetCount("verbose"); err != nil {
 			return err
 		} else if verbosity > 0 {
 			HavartiState.Verbosity = verbosity
-		}
-
-		if changeDir, err := cmd.PersistentFlags().GetString(changeDirFlag); err != nil {
-			return err
-		} else if changeDir != "" {
-			cderr := os.Chdir(changeDir)
-			if cderr != nil {
-				return NewCommandError(ReturnArgumentError, cderr)
-			}
 		}
 
 		if HavartiState.Verbosity > 0 {

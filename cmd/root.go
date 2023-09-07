@@ -92,7 +92,12 @@ const (
 )
 
 const (
-	changeDirFlag = "change-directory"
+	changeDirFlag    = "change-directory"
+	workTreeFlag     = "work-tree"
+	unsafeFlag       = "unsafe"
+	verboseFlag      = "verbose"
+	verboseShortFlag = "v"
+	repoFlag         = "repo"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -178,11 +183,11 @@ var rootFlags = struct {
 }
 
 func init() {
-	rootCmd.PersistentFlags().CountP("verbose", "v", "Print more information. Can be specified multiple times to increase verbosity.")
-	rootCmd.PersistentFlags().Bool("unsafe", false, "Allow unsafe operations to proceed")
+	rootCmd.PersistentFlags().CountP(verboseFlag, verboseShortFlag, "Print more information. Can be specified multiple times to increase verbosity.")
+	rootCmd.PersistentFlags().Bool(unsafeFlag, false, "Allow unsafe operations to proceed")
 	rootCmd.PersistentFlags().StringVar(
 		&rootFlags.RepoPath,
-		"repo",
+		repoFlag,
 		rootFlags.RepoPath,
 		`Path to repo. Unlike git and some other VCS tools, hvrt does not need
 the repo data to live inside a main worktree. This allows multiple worktrees to
@@ -190,8 +195,8 @@ easily exist in parallel. Multiple worktrees can even point to the same branch
 at the same time.`,
 	)
 
-	rootCmd.PersistentFlags().StringVar(&rootFlags.WorkTree, "work-tree", rootFlags.WorkTree, "Path to work tree")
-	_ = rootCmd.MarkFlagDirname("work-tree")
+	rootCmd.PersistentFlags().StringVar(&rootFlags.WorkTree, workTreeFlag, rootFlags.WorkTree, "Path to work tree")
+	_ = rootCmd.MarkFlagDirname(workTreeFlag)
 
 	rootCmd.PersistentFlags().StringP(
 		changeDirFlag, "C",

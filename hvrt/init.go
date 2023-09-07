@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 //go:embed default.toml
@@ -159,4 +161,28 @@ func InitLocalAll(repo_file, work_tree, default_branch string) error {
 			)
 		},
 	)
+}
+
+var FSError = errors.New("Could not initialize due to issue with error")
+
+func (hs *HavartiState) InitLocalAll(default_branch string) error {
+	if hs.workTreeFS == nil {
+		return fmt.Errorf("worktree FS is nil: %w", FSError)
+	}
+
+	if hs.workTree == nil {
+		return errors.New("HavartiState worktree is nil")
+	}
+
+	dsn_url, err := hs.GetDSN()
+	if err != nil {
+		return err
+	}
+
+	switch hs._DBDriverName {
+	case sqliteshim.ShimName:
+		InitLocalAll(dsn_url.Path, *hs.workTree, default_branch)
+	}
+
+	return InitLocalAll(dsn_url.Path, *hs.workTree, default_branch)
 }

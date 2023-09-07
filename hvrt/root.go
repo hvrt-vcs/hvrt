@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 )
 
@@ -37,7 +38,7 @@ type HavartiState struct {
 	workTree *string
 
 	// the base URI to connect to database
-	dataSourceName string
+	dsn_url *url.URL
 
 	// Driver name for repository DB
 	_DBDriverName string
@@ -51,10 +52,18 @@ type HavartiState struct {
 
 // Function to return a new HavartiState
 func NewHavartiState(workTreeFS fs.FS, cwd *string, workTree *string, dataSourceName string, dbDriverName string) (*HavartiState, error) {
+	var err error
 	// FIXME: Stat worktree against the FS that was passed in
 	if workTree != nil {
-		if _, err := os.Stat(*workTree); errors.Is(err, fs.ErrNotExist) {
+		if _, err = os.Stat(*workTree); errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("workTree must be a valid directory: %w", err)
+		}
+	}
+
+	var dsn_url *url.URL = nil
+	if dataSourceName != "" {
+		if dsn_url, err = url.Parse(dataSourceName); err != nil {
+			return nil, err
 		}
 	}
 
@@ -62,7 +71,7 @@ func NewHavartiState(workTreeFS fs.FS, cwd *string, workTree *string, dataSource
 		workTreeFS:      workTreeFS,
 		originalWorkDir: cwd,
 		workTree:        workTree,
-		dataSourceName:  dataSourceName,
+		dsn_url:         dsn_url,
 		_DBDriverName:   dbDriverName,
 	}
 	return hvrtState, nil
@@ -84,8 +93,16 @@ func (hs *HavartiState) GetWorkTree() (string, error) {
 	}
 }
 
+func (hs *HavartiState) GetDSN() (*url.URL, error) {
+	if hs.dsn_url == nil {
+		return nil, MissingDSNError
+	} else {
+		return hs.dsn_url, nil
+	}
+}
+
 func (hs *HavartiState) ConnectToRepoDB(writable, create bool) (*sql.DB, error) {
-	if hs.dataSourceName == "" {
+	if dsn_url, err := hs.GetDSN(); err != nil {
 		return nil, MissingDSNError
 	} else {
 		// TODO: generalize this beyond just sqlite
@@ -96,12 +113,19 @@ func (hs *HavartiState) ConnectToRepoDB(writable, create bool) (*sql.DB, error) 
 		} else if writable {
 			parms["mode"][0] = "rw"
 		}
-		dsn := SqliteDSN(hs.dataSourceName, parms)
-		if repoDB, err := sql.Open(hs._DBDriverName, dsn); err != nil {
+
+		dsn, err := AddParmsToDSN(dsn_url, parms)
+		if err != nil {
 			return nil, err
-		} else {
-			return repoDB, nil
 		}
+
+		repoDB, err := sql.Open(hs._DBDriverName, dsn.String())
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: set sqlite pragmas here, such as enforcing foreign constraints, etc.
+		return repoDB, nil
 	}
 }
 

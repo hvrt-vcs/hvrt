@@ -71,6 +71,34 @@ func SqliteDSN(path string, parms map[string][]string) string {
 	return dsn
 }
 
+func AddParmsToDSN(dsn_url *url.URL, parms map[string][]string) (*url.URL, error) {
+	if dsn_url == nil {
+		return nil, fmt.Errorf("dsn_url is nil")
+	}
+	qvals := dsn_url.Query()
+	for key, vals := range parms {
+		for _, v := range vals {
+			qvals.Add(key, v)
+		}
+	}
+
+	new_url := &url.URL{
+		Scheme:      dsn_url.Scheme,
+		Opaque:      dsn_url.Opaque,
+		User:        dsn_url.User,
+		Host:        dsn_url.Host,
+		Path:        dsn_url.Path,
+		RawPath:     dsn_url.RawPath,
+		OmitHost:    dsn_url.OmitHost,
+		ForceQuery:  dsn_url.ForceQuery,
+		RawQuery:    qvals.Encode(),
+		Fragment:    dsn_url.Fragment,
+		RawFragment: dsn_url.RawFragment,
+	}
+
+	return new_url, nil
+}
+
 func CopyOps(ops map[string][]string) map[string][]string {
 	rmap := make(map[string][]string)
 	for key, val := range ops {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
-	"os"
 )
 
 type Thunk func()
@@ -54,8 +53,8 @@ type HavartiState struct {
 func NewHavartiState(workTreeFS fs.FS, cwd *string, workTree *string, dataSourceName string, dbDriverName string) (*HavartiState, error) {
 	var err error
 	// FIXME: Stat worktree against the FS that was passed in
-	if workTree != nil {
-		if _, err = os.Stat(*workTree); errors.Is(err, fs.ErrNotExist) {
+	if workTreeFS != nil && workTree != nil {
+		if _, err = fs.Stat(workTreeFS, *workTree); errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("workTree must be a valid directory: %w", err)
 		}
 	}
@@ -67,6 +66,7 @@ func NewHavartiState(workTreeFS fs.FS, cwd *string, workTree *string, dataSource
 		}
 	}
 
+	// It is currently not an error for both workTree and dsn_url to be nil.
 	hvrtState := &HavartiState{
 		workTreeFS:      workTreeFS,
 		originalWorkDir: cwd,
@@ -132,6 +132,18 @@ func (hs *HavartiState) ConnectToRepoDB(writable, create bool) (*sql.DB, error) 
 // Set HavartState workTree
 func (hs *HavartiState) SetWorkTree(workTree string) {
 	hs.workTree = &workTree
+}
+
+// Set HavartState to allow potentially unsafe operations during the duration of
+// the thunk. When the thunk returns, the state will be restored to its previous
+// value. If the value is changed during the duration of the thunk, that value
+// will be overwritten by the restored previous value. Any error returned by the
+// thunk is returned by this method.
+func (hs *HavartiState) AllowUnsafeTemporarily(thnk ThunkErr) error {
+	prevUnsafeVal := hs.AllowUnsafe
+	hs.AllowUnsafe = true
+	defer func() { hs.AllowUnsafe = prevUnsafeVal }()
+	return thnk()
 }
 
 func init() {

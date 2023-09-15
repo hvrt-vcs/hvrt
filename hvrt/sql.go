@@ -173,35 +173,75 @@ type HvrtConfig struct {
 	}
 }
 
+func setCwdTemporarily(newWorkingDir string, thnke ThunkErr) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	defer func() { os.Chdir(cwd) }()
+
+	return thnke()
+}
+
 func GetExistingRepoDB(work_tree string) (*sql.DB, error) {
 	db_uri, db_type, err := GetRepoDBUri(work_tree)
 	if err != nil {
 		return nil, err
 	}
-	db_uri = strings.TrimPrefix(db_uri, "file://")
+	// db_uri = strings.TrimPrefix(db_uri, "file://")
 
-	qparms := CopyOps(SqliteDefaultOpts)
-
-	// The default mode is "rwc", which will create the file if it doesn't
-	// already exist. This is NOT what we want. We want to fail loudly if the
-	// file does not exist already.
-	qparms["mode"] = []string{"rw"}
-
-	// work tree state is always sqlite
-	wt_db, err := sql.Open(SQLDialectToDrivers[db_type], SqliteDSN(db_uri, qparms))
+	dsn_url, err := url.Parse(db_uri)
 	if err != nil {
 		return nil, err
 	}
 
-	// sqlite will not throw an error regarding a DB file not exising until we
-	// actually attempt to interact with the database, so we need to explicitly
-	// check whether it exists. We do this after opening the database connection
-	// to avoid a race condition where someone else could delete the file
-	// between our existence check and the opening of the connection.
-	if _, err = os.Stat(db_uri); err != nil {
-		wt_db.Close()
+	qparms := make(map[string][]string)
+
+	switch db_type {
+	case "sqlite":
+		qparms = CopyOps(SqliteDefaultOpts)
+
+		// The default mode is "rwc", which will create the file if it doesn't
+		// already exist. This is NOT what we want. We want to fail loudly if the
+		// file does not exist already.
+		qparms["mode"] = []string{"rw"}
+	}
+
+	dsn_url, err = AddParmsToDSN(dsn_url, qparms)
+	if err != nil {
 		return nil, err
 	}
 
-	return wt_db, nil
+	// repo DB may be sqlite or postgres
+	var repo_db *sql.DB = nil
+
+	err = setCwdTemporarily(work_tree, func() error {
+		log.Debug.Printf("opening repo db: %s", dsn_url.String())
+
+		repo_db, err = sql.Open(SQLDialectToDrivers[db_type], dsn_url.String())
+		if err != nil {
+			return err
+		}
+
+		// sqlite will not throw an error regarding a DB file not exising until we
+		// actually attempt to interact with the database, so we need to explicitly
+		// check whether it exists. We do this after opening the database connection
+		// to avoid a race condition where someone else could delete the file
+		// between our existence check and the opening of the connection.
+		switch db_type {
+		case "sqlite":
+			_, err = os.Stat(dsn_url.Path)
+		}
+		if err != nil {
+			repo_db.Close()
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return repo_db, nil
 }

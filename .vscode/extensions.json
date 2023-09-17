@@ -10,5 +10,6 @@
 		"stkb.rewrap",
 		"tamasfe.even-better-toml",
 		"thinker.sort-json",
+		"amazonwebservices.aws-toolkit-vscode"
 	]
 }

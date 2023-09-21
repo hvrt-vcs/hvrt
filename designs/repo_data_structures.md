@@ -9,6 +9,8 @@ Some of the main data types in Havarti:
 * Commit - A commit is a pointer to a tree object and a list of header values.
   Both the tree reference (a hash) and the headers (the key/value pair strings)
   are hashed as part of the hash reference generation for the commit
+  - The key of a commit header can contain any character except the equals sign (`=`) and newline. Leading and trailing whitespace will be stripped. Although equals signs are allowed in the header value, newlines are not. Newlines must be encoded or escaped.
+  - When hashing, header keys and values are joined by an equals sign and headers are delimited by newlines.
 * Tree - a list of paths, file ids, and blob ids. Paths cannot/should not be
   repeated within the same tree. Blobs are just file contents, so those can be
   repeated if file contents match. A tree hash is calculated by hashing the
@@ -31,8 +33,8 @@ Some of the main data types in Havarti:
   - Within a SQL DB, a blob is a list of ordered chunks. Thus, it is possible
     for chunks to be shared across multiple blobs.
   - Is it worth making chunks a canonical part of the hash calculation and
-    merkle tree?
-* Annotation - Annotations are modifications to commits after the initial
+    merkle tree? This may create a weird situation where blob contents may match, but their hashes differ because they were chunked differently at different times. Perhaps there is a way to do this that isn't merely hashing chunk references to generate the blob hash.
+* Annotation - Annotations make modifications to commits after the initial
   commit. They are not included in hash calculations. They are metadata that
   allows non-destructively ammending commit data for fixes or clarification. For
   example, if a commit authorship was incorrectly attributed to a dev, an

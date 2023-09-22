@@ -5,6 +5,11 @@ Although Havarti is similar to other distributed version control systems in its
 designs, it differs enough that it is worth recording explicitly how it is
 structured under the hood.
 
+General data structure notes:
+* Hash algorithms are flexible in Havarti. For example, it is not tied down to a single algorithm like git is (i.e. sha1). The algorithm name is, along with the digest value, part of the lookup key for a data type. This is what makes it possible to swap algorithms at any time, even within the same repo. It is also used in the hash for parent types.
+* Hash ID - a UTF-8 string of the form `<data type>:<hash algorithm>:<hex digest>`. 
+  This is cast to bytes to calculate for composite types like trees and commits.
+
 Some of the main data types in Havarti:
 * Commit - A commit is a pointer to a tree object and a list of header values.
   Both the tree reference (a hash) and the headers (the key/value pair strings)

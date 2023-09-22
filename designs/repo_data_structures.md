@@ -35,12 +35,10 @@ Some of the main data types in Havarti:
   - Is it worth making chunks a canonical part of the hash calculation and
     merkle tree? This may create a weird situation where blob contents may match, but their hashes differ because they were chunked differently at different times. Perhaps there is a way to do this that isn't merely hashing chunk references to generate the blob hash.
 * Annotation - Annotations make modifications to commits after the initial
-  commit. They are not included in hash calculations. They are metadata that
-  allows non-destructively ammending commit data for fixes or clarification. For
+  commit. They are included in hash calculations for the current commit, but do not change previous commit hash calculations, so they are non destructive in nature. They can only change header data, not blob or tree data. One can think of annotations as non-destructively layer new headers ontop of old headers. For
   example, if a commit authorship was incorrectly attributed to a dev, an
-  annotation could layer this change on top of the commit without destroying the
+  annotation could layer this change on top of the original commit without destroying the
   original author data that goes into checking merkle tree integrity.
-  - As a side note, it may be worth making annotations as a specialized form of
-    commit so that it is recorded in the official merkle tree calculation.
+  - Open question: which annotation "wins" in a merge situation with annotations in both branches?
 * Hash ID - a UTF-8 string of the form `<data type>:<hash algorithm>:<hex digest>`. 
   This is cast to bytes to calculate for composite types like trees.

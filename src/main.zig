@@ -3,6 +3,18 @@ const sqlite3 = @cImport({
     @cInclude("sqlite3.h");
 });
 
+// Cannot embed outside package path (i.e. we cannot go up a directory with `../`)
+// const sql_path = "../hvrt/sql/sqlite/work_tree/read_blobs.sql";
+const sql_path = "test_embedding.sql";
+const embedded_sql = @embedFile(sql_path);
+
+// If we request a value from the map using a constant lookup key, will Zig
+// just reduce that at comp time? That way we can *never* have an incorrect
+// lookup at runtime based on a typo or something.
+const sql_files = std.ComptimeStringMap([]const u8, .{
+    .{ sql_path, embedded_sql },
+});
+
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
@@ -26,7 +38,13 @@ pub fn main() !void {
     // var db: *sqlite3.sqlite3 = null;
     const db_path = args[1];
 
-    std.debug.print("what is db_path: {s}", .{db_path});
+    std.debug.print("what is db_path: {s}\n", .{db_path});
+
+    std.debug.print("what is embedded sql path: {s}\n", .{sql_path});
+    std.debug.print("what is embedded sql value: {s}\n", .{embedded_sql});
+    std.debug.print("what is embedded sql path bytes: {any}\n", .{sql_path});
+    std.debug.print("what is embedded sql value bytes: {any}\n", .{embedded_sql});
+    std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
 
     // const rc = sqlite3.sqlite3_open(db_path, db);
     // defer sqlite3.sqlite3_close(db);

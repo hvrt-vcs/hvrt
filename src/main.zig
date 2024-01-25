@@ -35,6 +35,8 @@ pub fn main() !void {
         std.debug.print("  {s}\n", .{arg});
     }
 
+    // https://www.huy.rocks/everyday/01-04-2022-zig-strings-in-5-minutes
+    // https://ziglang.org/documentation/master/#String-Literals-and-Unicode-Code-Point-Literals
     // var db: *sqlite3.sqlite3 = null;
     const db_path = args[1];
 

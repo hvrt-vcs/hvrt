@@ -8,6 +8,8 @@ const c = @cImport({
 const sql_path = "test_embedding.sql";
 const embedded_sql = @embedFile(sql_path);
 
+const errors = error{AbnormalState};
+
 // If we request a value from the map using a constant lookup key, will Zig
 // just reduce that at comp time? That way we can *never* have an incorrect
 // lookup at runtime based on a typo or something.
@@ -39,19 +41,11 @@ pub fn main() !void {
 
     // https://www.huy.rocks/everyday/01-04-2022-zig-strings-in-5-minutes
     // https://ziglang.org/documentation/master/#String-Literals-and-Unicode-Code-Point-Literals
-    // var db: *c.sqlite3 = null;
+    var db: *c.sqlite3 = undefined;
 
-    const fallback = "fallback_value";
+    const db_path = if (args.len > 1) args[1] else ":memory:";
 
-    var db_path: []u8 = undefined;
-
-    if (args.len > 1) {
-        db_path = args[1];
-    } else {
-        db_path = @constCast(fallback[0..fallback.len]);
-    }
-
-    std.debug.print("what is db_path2: {s}\n", .{db_path});
+    std.debug.print("what is db_path: {s}\n", .{db_path});
 
     std.debug.print("what is embedded sql path: {s}\n", .{sql_path});
     std.debug.print("what is embedded sql value: {s}\n", .{embedded_sql});
@@ -59,13 +53,14 @@ pub fn main() !void {
     std.debug.print("what is embedded sql value bytes: {any}\n", .{embedded_sql});
     std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
 
-    // const rc = c.sqlite3_open(db_path, db);
-    // defer c.sqlite3_close(db);
+    const rc = c.sqlite3_open(db_path.ptr, @ptrCast(&db));
+    // const rc = c.sqlite3_open(db_path.ptr, &db);
+    defer _ = c.sqlite3_close(db);
 
-    // if (rc) {
-    //     std.debug.print("Can't open database: {s}\n", db_path);
-    //     return 1;
-    // }
+    if (rc != 0) {
+        std.debug.print("Can't open database: {s}\n", .{db_path});
+        return errors.AbnormalState;
+    }
 
     // // stdout is for the actual output of your application, for example if you
     // // are implementing gzip, then only the compressed bytes should be sent to

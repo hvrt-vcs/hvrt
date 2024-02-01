@@ -1,5 +1,5 @@
 const std = @import("std");
-const sqlite3 = @cImport({
+const c = @cImport({
     @cInclude("sqlite3.h");
 });
 
@@ -35,12 +35,23 @@ pub fn main() !void {
         std.debug.print("  {s}\n", .{arg});
     }
 
+    std.debug.print("The args are of type {}.\n", .{@TypeOf(args)});
+
     // https://www.huy.rocks/everyday/01-04-2022-zig-strings-in-5-minutes
     // https://ziglang.org/documentation/master/#String-Literals-and-Unicode-Code-Point-Literals
-    // var db: *sqlite3.sqlite3 = null;
-    const db_path = args[1];
+    // var db: *c.sqlite3 = null;
 
-    std.debug.print("what is db_path: {s}\n", .{db_path});
+    const fallback = "fallback_value";
+
+    var db_path: []u8 = undefined;
+
+    if (args.len > 1) {
+        db_path = args[1];
+    } else {
+        db_path = @constCast(fallback[0..fallback.len]);
+    }
+
+    std.debug.print("what is db_path2: {s}\n", .{db_path});
 
     std.debug.print("what is embedded sql path: {s}\n", .{sql_path});
     std.debug.print("what is embedded sql value: {s}\n", .{embedded_sql});
@@ -48,8 +59,8 @@ pub fn main() !void {
     std.debug.print("what is embedded sql value bytes: {any}\n", .{embedded_sql});
     std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
 
-    // const rc = sqlite3.sqlite3_open(db_path, db);
-    // defer sqlite3.sqlite3_close(db);
+    // const rc = c.sqlite3_open(db_path, db);
+    // defer c.sqlite3_close(db);
 
     // if (rc) {
     //     std.debug.print("Can't open database: {s}\n", db_path);

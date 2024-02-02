@@ -15,6 +15,22 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    const sqlite_include_path = "third_party/sqlite_build";
+
+    const sqlite = b.addStaticLibrary(.{
+        .name = "sqlite",
+        .target = target,
+        .optimize = optimize,
+    });
+    sqlite.addCSourceFile(.{
+        .file = .{ .path = "third_party/sqlite_build/sqlite3.c" },
+        .flags = &[_][]const u8{
+            "-std=c99",
+        },
+    });
+    sqlite.addIncludePath(.{ .path = sqlite_include_path });
+    sqlite.linkLibC();
+
     const exe = b.addExecutable(.{
         .name = "hvrt",
         // In this case the main source file is merely a path, however, in more
@@ -23,6 +39,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    exe.linkLibrary(sqlite);
+    exe.addIncludePath(.{ .path = sqlite_include_path });
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

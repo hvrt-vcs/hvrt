@@ -53,12 +53,18 @@ pub fn main() !void {
     std.debug.print("what is embedded sql value bytes: {any}\n", .{embedded_sql});
     std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
 
-    const rc = c.sqlite3_open(db_path.ptr, @ptrCast(&db));
-    // const rc = c.sqlite3_open(db_path.ptr, &db);
+    var rc = c.sqlite3_open(db_path.ptr, @ptrCast(&db));
     defer _ = c.sqlite3_close(db);
 
-    if (rc != 0) {
+    if (rc != c.SQLITE_OK) {
         std.debug.print("Can't open database: {s}\n", .{db_path});
+        return errors.AbnormalState;
+    }
+
+    rc = c.sqlite3_exec(db, embedded_sql, null, null, null);
+
+    if (rc != c.SQLITE_OK) {
+        std.debug.print("Cannot exec sql statement: {s}\n", .{embedded_sql});
         return errors.AbnormalState;
     }
 

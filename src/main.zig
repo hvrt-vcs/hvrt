@@ -3,12 +3,11 @@ const c = @cImport({
     @cInclude("sqlite3.h");
 });
 
-// Cannot embed outside package path (i.e. we cannot go up a directory with `../`)
-// const sql_path = "../hvrt/sql/sqlite/work_tree/read_blobs.sql";
-const sql_path = "test_embedding.sql";
+const sql_path = "sql/sqlite/work_tree/init.sql";
 const embedded_sql = @embedFile(sql_path);
 
-const errors = error{AbnormalState};
+const sqlite_errors = error{ SQLiteError, SQLiteExecError, SQLiteCantOpen };
+const errors = error{AbnormalState} || sqlite_errors;
 
 // If we request a value from the map using a constant lookup key, will Zig
 // just reduce that at comp time? That way we can *never* have an incorrect
@@ -17,7 +16,31 @@ const sql_files = std.ComptimeStringMap([]const u8, .{
     .{ sql_path, embedded_sql },
 });
 
+/// Open and return a pointer to a sqlite database or return an error if a
+/// database pointer cannot be opened for some reason.
+fn sqlite_open(filename: []const u8) !*c.sqlite3 {
+    var db: *c.sqlite3 = undefined;
+    const rc = c.sqlite3_open(filename.ptr, @ptrCast(&db));
+    errdefer _ = c.sqlite3_close(db);
+
+    if (rc == c.SQLITE_OK) {
+        return db;
+    } else {
+        // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
+        std.debug.print("SQLite failed with error code {d} which translates to message: '{s}'\n", .{ rc, c.sqlite3_errstr(rc) });
+
+        // FIXME: Create an comptime array or comptime map that contains SQLite
+        // errorcode ints mapped to Zig error values
+
+        // It is probably the error below
+        return sqlite_errors.SQLiteCantOpen;
+    }
+}
+
 pub fn main() !void {
+    // Roughly trying to follow this SQLite quickstart guide and translating it
+    // into Zig: https://www.sqlite.org/quickstart.html
+
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 
@@ -41,31 +64,24 @@ pub fn main() !void {
 
     // https://www.huy.rocks/everyday/01-04-2022-zig-strings-in-5-minutes
     // https://ziglang.org/documentation/master/#String-Literals-and-Unicode-Code-Point-Literals
-    var db: *c.sqlite3 = undefined;
 
     const db_path = if (args.len > 1) args[1] else ":memory:";
-
     std.debug.print("what is db_path: {s}\n", .{db_path});
 
     std.debug.print("what is embedded sql path: {s}\n", .{sql_path});
-    std.debug.print("what is embedded sql value: {s}\n", .{embedded_sql});
+    // std.debug.print("what is embedded sql value: {s}\n", .{embedded_sql});
     std.debug.print("what is embedded sql path bytes: {any}\n", .{sql_path});
-    std.debug.print("what is embedded sql value bytes: {any}\n", .{embedded_sql});
-    std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
+    // std.debug.print("what is embedded sql value bytes: {any}\n", .{embedded_sql});
+    // std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
 
-    var rc = c.sqlite3_open(db_path.ptr, @ptrCast(&db));
+    const db = try sqlite_open(db_path);
     defer _ = c.sqlite3_close(db);
 
-    if (rc != c.SQLITE_OK) {
-        std.debug.print("Can't open database: {s}\n", .{db_path});
-        return errors.AbnormalState;
-    }
-
-    rc = c.sqlite3_exec(db, embedded_sql, null, null, null);
+    var rc = c.sqlite3_exec(db, embedded_sql, null, null, null);
 
     if (rc != c.SQLITE_OK) {
-        std.debug.print("Cannot exec sql statement: {s}\n", .{embedded_sql});
-        return errors.AbnormalState;
+        std.debug.print("SQLite failed with error code {d} which translates to message: '{s}'\n", .{ rc, c.sqlite3_errstr(rc) });
+        return sqlite_errors.SQLiteExecError;
     }
 
     // // stdout is for the actual output of your application, for example if you

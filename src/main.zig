@@ -37,13 +37,12 @@ fn sqlite_open(filename: []const u8) !*c.sqlite3 {
     }
 }
 
+/// All that `main` does is retrieve args and a main allocator for the system,
+/// and pass those to `internalMain`. Afterwards, it catches any errors, deals
+/// with the error types it explicitly knows how to deal with, and if a
+/// different error slips though it just returns that a stack trace is printed
+/// and a generic exit code of 1 is returned in that case.
 pub fn main() !void {
-    // Roughly trying to follow this SQLite quickstart guide and translating it
-    // into Zig: https://www.sqlite.org/quickstart.html
-
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-
     // Args parsing from here: https://ziggit.dev/t/read-command-line-arguments/220/7
     // Get allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -54,7 +53,40 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    // Get and print them!
+    // The only place `exit` should ever be called directly is here in the `main` function
+    internalMain(args, allocator) catch |err| {
+        var exit_code: u8 = switch (err) {
+            sqlite_errors.SQLiteError => 3,
+            sqlite_errors.SQLiteCantOpen => 4,
+            else => {
+                // Any error other than the explicitly listed ones in the
+                // switch should just bubble up normally, triggering the
+                // regularly deferred functions above.
+                return err;
+            },
+        };
+
+        // The `exit` function won't call the deferred functions above, so we
+        // call them explicitly here before calling `exit`
+        std.process.argsFree(allocator, args);
+        _ = gpa.deinit();
+        std.process.exit(exit_code);
+    };
+}
+
+/// It is the responsibility of the caller of `internalMain` to deallocate and
+/// deinit args and alloc, if necessary.
+pub fn internalMain(args: [][:0]u8, alloc: std.mem.Allocator) !void {
+    // `alloc` will be used eventually to replace libc allocation for SQLite
+    // and other third party libraries.
+    _ = alloc;
+
+    // Roughly trying to follow this SQLite quickstart guide and translating it
+    // into Zig: https://www.sqlite.org/quickstart.html
+
+    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
+    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    // Get and print args!
     std.debug.print("There are {d} args:\n", .{args.len});
     for (args) |arg| {
         std.debug.print("  {s}\n", .{arg});
@@ -102,3 +134,11 @@ test "simple test" {
     try list.append(42);
     try std.testing.expectEqual(@as(i32, 42), list.pop());
 }
+
+// test "invoke without args" {
+//     var list = std.ArrayList(i32).init(std.testing.allocator);
+//     defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
+//     try list.append(42);
+//     const basic_args = [_][:0]u8{"test_prog"};
+//     try std.testing.expectEqual(undefined, internalMain(basic_args, std.testing.allocator));
+// }

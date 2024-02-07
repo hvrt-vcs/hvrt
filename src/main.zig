@@ -37,6 +37,23 @@ fn sqlite_open(filename: []const u8) !*c.sqlite3 {
     }
 }
 
+/// Open and return a pointer to a sqlite database or return an error if a
+/// database pointer cannot be opened for some reason.
+fn sqlite_close(db: ?*c.sqlite3) !void {
+    const rc = c.sqlite3_close(db);
+
+    if (rc != c.SQLITE_OK) {
+        // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
+        std.debug.print("SQLite close failed with error code {d} which translates to message: '{s}'\n", .{ rc, c.sqlite3_errstr(rc) });
+
+        // FIXME: Create an comptime array or comptime map that contains SQLite
+        // errorcode ints mapped to Zig error values
+
+        // It is probably the error below
+        return sqlite_errors.SQLiteError;
+    }
+}
+
 /// All that `main` does is retrieve args and a main allocator for the system,
 /// and pass those to `internalMain`. Afterwards, it catches any errors, deals
 /// with the error types it explicitly knows how to deal with, and if a
@@ -107,7 +124,7 @@ pub fn internalMain(args: [][:0]u8, alloc: std.mem.Allocator) !void {
     // std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
 
     const db = try sqlite_open(db_path);
-    defer _ = c.sqlite3_close(db);
+    defer sqlite_close(db) catch unreachable;
 
     var rc = c.sqlite3_exec(db, embedded_sql, null, null, null);
 

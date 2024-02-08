@@ -16,42 +16,37 @@ const sql_files = std.ComptimeStringMap([]const u8, .{
     .{ sql_path, embedded_sql },
 });
 
+fn sqliteReturnCodeToError(code: c_int) !void {
+    if (code != c.SQLITE_OK) {
+        // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
+        std.debug.print("SQLite failed with error code {d} which translates to message: '{s}'\n", .{ code, c.sqlite3_errstr(code) });
+    }
+
+    switch (code) {
+        c.SQLITE_OK => return,
+        c.SQLITE_ERROR => return sqlite_errors.SQLiteError,
+        c.SQLITE_CANTOPEN => return sqlite_errors.SQLiteCantOpen,
+        else => return sqlite_errors.SQLiteError,
+    }
+}
+
 /// Open and return a pointer to a sqlite database or return an error if a
 /// database pointer cannot be opened for some reason.
 fn sqlite_open(filename: []const u8) !*c.sqlite3 {
     var db: *c.sqlite3 = undefined;
+
     const rc = c.sqlite3_open(filename.ptr, @ptrCast(&db));
     errdefer _ = c.sqlite3_close(db);
 
-    if (rc == c.SQLITE_OK) {
-        return db;
-    } else {
-        // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
-        std.debug.print("SQLite failed with error code {d} which translates to message: '{s}'\n", .{ rc, c.sqlite3_errstr(rc) });
-
-        // FIXME: Create an comptime array or comptime map that contains SQLite
-        // errorcode ints mapped to Zig error values
-
-        // It is probably the error below
-        return sqlite_errors.SQLiteCantOpen;
-    }
+    try sqliteReturnCodeToError(rc);
+    return db;
 }
 
 /// Open and return a pointer to a sqlite database or return an error if a
 /// database pointer cannot be opened for some reason.
 fn sqlite_close(db: ?*c.sqlite3) !void {
     const rc = c.sqlite3_close(db);
-
-    if (rc != c.SQLITE_OK) {
-        // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
-        std.debug.print("SQLite close failed with error code {d} which translates to message: '{s}'\n", .{ rc, c.sqlite3_errstr(rc) });
-
-        // FIXME: Create an comptime array or comptime map that contains SQLite
-        // errorcode ints mapped to Zig error values
-
-        // It is probably the error below
-        return sqlite_errors.SQLiteError;
-    }
+    try sqliteReturnCodeToError(rc);
 }
 
 /// All that `main` does is retrieve args and a main allocator for the system,
@@ -127,11 +122,7 @@ pub fn internalMain(args: [][:0]u8, alloc: std.mem.Allocator) !void {
     defer sqlite_close(db) catch unreachable;
 
     var rc = c.sqlite3_exec(db, embedded_sql, null, null, null);
-
-    if (rc != c.SQLITE_OK) {
-        std.debug.print("SQLite failed with error code {d} which translates to message: '{s}'\n", .{ rc, c.sqlite3_errstr(rc) });
-        return sqlite_errors.SQLiteExecError;
-    }
+    try sqliteReturnCodeToError(rc);
 
     // // stdout is for the actual output of your application, for example if you
     // // are implementing gzip, then only the compressed bytes should be sent to

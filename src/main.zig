@@ -88,7 +88,7 @@ pub fn main() !void {
 
 /// It is the responsibility of the caller of `internalMain` to deallocate and
 /// deinit args and alloc, if necessary.
-pub fn internalMain(args: [][:0]u8, alloc: std.mem.Allocator) !void {
+pub fn internalMain(args: [][]const u8, alloc: std.mem.Allocator) !void {
     // `alloc` will be used eventually to replace libc allocation for SQLite
     // and other third party libraries.
     _ = alloc;
@@ -143,10 +143,12 @@ test "simple test" {
     try std.testing.expectEqual(@as(i32, 42), list.pop());
 }
 
-// test "invoke without args" {
-//     var list = std.ArrayList(i32).init(std.testing.allocator);
-//     defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-//     try list.append(42);
-//     const basic_args = [_][:0]u8{"test_prog"};
-//     try std.testing.expectEqual(undefined, internalMain(basic_args, std.testing.allocator));
-// }
+test "invoke without args" {
+    var list = std.ArrayList(i32).init(std.testing.allocator);
+    // var str_array = try std.testing.allocator.alloc([*]u8, 1);
+    // _ = str_array;
+    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
+    try list.append(42);
+    const basic_args = [_][]const u8{"test_prog"};
+    try std.testing.expectEqual(undefined, internalMain(&basic_args, std.testing.allocator));
+}

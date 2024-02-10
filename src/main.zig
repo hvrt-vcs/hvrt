@@ -88,7 +88,7 @@ pub fn main() !void {
 
 /// It is the responsibility of the caller of `internalMain` to deallocate and
 /// deinit args and alloc, if necessary.
-pub fn internalMain(args: [][:0]const u8, alloc: std.mem.Allocator) !void {
+pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void {
     // `alloc` will be used eventually to replace libc allocation for SQLite
     // and other third party libraries.
     _ = alloc;
@@ -144,28 +144,6 @@ test "simple test" {
 }
 
 test "invoke without args" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    var str_array = try std.testing.allocator.alloc([]u8, 1);
-    defer std.testing.allocator.free(str_array); // try commenting this out and see if zig detects the memory leak!
-    var str_list = std.ArrayList([]u8).init(std.testing.allocator);
-    std.debug.print("what is type of str_list: {any}\n", .{@TypeOf(str_list)});
-    std.debug.print("what is type of str_list.items: {any}\n", .{@TypeOf(str_list.items)});
-    std.debug.print("what is type of str_list.items.len: {any}\n", .{@TypeOf(str_list.items.len)});
-    std.debug.print("what is value of str_list.items.len: {any}\n", .{str_list.items.len});
-    std.debug.print("what is type of str_list address of: {any}\n", .{@TypeOf(&str_list)});
-    const prog_name = "fake_prog_name";
-    var prog_name_copy = std.testing.allocator.alloc(u8, prog_name.len);
-    defer std.testing.allocator.free(prog_name_copy); // try commenting this out and see if zig detects the memory leak!
-
-    @memcpy(prog_name_copy[0..prog_name.len], prog_name);
-    str_list.append(prog_name_copy);
-
-    const basic_args = [_][:0]const u8{"test_prog"};
-    std.debug.print("what is basic args: {s}\n", .{basic_args});
-    std.debug.print("what is basic args bytes: {any}\n", .{basic_args});
-    std.debug.print("what is type of basic args: {any}\n", .{@TypeOf(basic_args)});
-    std.debug.print("what is type of basic args address of: {any}\n", .{@TypeOf(&basic_args)});
-    // try std.testing.expectEqual(undefined, internalMain(&basic_args, std.testing.allocator));
+    const basic_args = [1][:0]const u8{"test_prog_name"};
+    try internalMain(&basic_args, std.testing.allocator);
 }

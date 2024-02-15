@@ -57,6 +57,20 @@ fn sqlite3_close(db: ?*sqlite3_db) !void {
     try sqliteReturnCodeToError(rc);
 }
 
+/// Execute a SQL statement held in a string.
+fn sqlite3_exec(db: ?*sqlite3_db, sql: [:0]const u8, callback: ?*const fn (?*anyopaque, c_int, [*c][*c]u8, [*c][*c]u8) callconv(.C) c_int) !void {
+    var errmsg: [100]u8 = undefined;
+
+    // FIXME: Figure out pointer cast for local byte array
+    // const rc = c.sqlite3_exec(db, sql, callback, null, @alignCast(@ptrCast(&errmsg)));
+
+    const rc = c.sqlite3_exec(db, sql, callback, null, null);
+    sqliteReturnCodeToError(rc) catch |err| {
+        std.debug.print("sqlite failed with error message: {s}\n", .{errmsg});
+        return err;
+    };
+}
+
 /// All that `main` does is retrieve args and a main allocator for the system,
 /// and pass those to `internalMain`. Afterwards, it catches any errors, deals
 /// with the error types it explicitly knows how to deal with, and if a
@@ -134,8 +148,7 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
     const db = try sqlite3_open(db_path);
     defer sqlite3_close(db) catch unreachable;
 
-    var rc = c.sqlite3_exec(db, embedded_sql, null, null, null);
-    try sqliteReturnCodeToError(rc);
+    try sqlite3_exec(db, embedded_sql, null);
 
     // // stdout is for the actual output of your application, for example if you
     // // are implementing gzip, then only the compressed bytes should be sent to

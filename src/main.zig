@@ -30,21 +30,29 @@ fn sqliteReturnCodeToError(code: c_int) !void {
     }
 }
 
+/// Alias opaque struct_sqlite3 type.
+const sqlite3_db = c.sqlite3;
+
 /// Open and return a pointer to a sqlite database or return an error if a
 /// database pointer cannot be opened for some reason.
-fn sqlite_open(filename: []const u8) !*c.sqlite3 {
-    var db: *c.sqlite3 = undefined;
+fn sqlite3_open(filename: []const u8) !*sqlite3_db {
+    var db_optional: ?*c.sqlite3 = null;
 
-    const rc = c.sqlite3_open(filename.ptr, @ptrCast(&db));
-    errdefer _ = c.sqlite3_close(db);
+    const rc = c.sqlite3_open(filename.ptr, @ptrCast(&db_optional));
+    errdefer sqlite3_close(db_optional) catch unreachable;
 
     try sqliteReturnCodeToError(rc);
-    return db;
+    if (db_optional) |db| {
+        return db;
+    } else {
+        std.debug.print("SQLite did not indicate an error, but db_optional is still null: {any}\n", .{db_optional});
+        return sqlite_errors.SQLiteError;
+    }
 }
 
-/// Open and return a pointer to a sqlite database or return an error if a
-/// database pointer cannot be opened for some reason.
-fn sqlite_close(db: ?*c.sqlite3) !void {
+/// Close and free a pointer to a sqlite database or return an error if the
+/// given database pointer cannot be closed for some reason.
+fn sqlite3_close(db: ?*sqlite3_db) !void {
     const rc = c.sqlite3_close(db);
     try sqliteReturnCodeToError(rc);
 }
@@ -52,38 +60,42 @@ fn sqlite_close(db: ?*c.sqlite3) !void {
 /// All that `main` does is retrieve args and a main allocator for the system,
 /// and pass those to `internalMain`. Afterwards, it catches any errors, deals
 /// with the error types it explicitly knows how to deal with, and if a
-/// different error slips though it just returns that a stack trace is printed
-/// and a generic exit code of 1 is returned in that case.
+/// different error slips though it just prints a stack trace and exits with a
+/// generic exit code of 1.
 pub fn main() !void {
-    // Args parsing from here: https://ziggit.dev/t/read-command-line-arguments/220/7
-    // Get allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
 
-    // Parse args into string array (error union needs 'try')
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    // assume successful exit until we know otherwise
+    var status_code: u8 = 0;
 
-    // The only place `exit` should ever be called directly is here in the `main` function
-    internalMain(args, allocator) catch |err| {
-        var exit_code: u8 = switch (err) {
-            sqlite_errors.SQLiteError => 3,
-            sqlite_errors.SQLiteCantOpen => 4,
-            else => {
-                // Any error other than the explicitly listed ones in the
-                // switch should just bubble up normally, triggering the
-                // regularly deferred functions above.
-                return err;
-            },
+    {
+        // Args parsing from here: https://ziggit.dev/t/read-command-line-arguments/220/7
+        // Get allocator
+        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+        const allocator = gpa.allocator();
+        defer _ = gpa.deinit();
+
+        // Parse args into string array (error union needs 'try')
+        const args = try std.process.argsAlloc(allocator);
+        defer std.process.argsFree(allocator, args);
+
+        // The only place `exit` should ever be called directly is here in the `main` function
+        internalMain(args, allocator) catch |err| {
+            status_code = switch (err) {
+                sqlite_errors.SQLiteError => 3,
+                sqlite_errors.SQLiteCantOpen => 4,
+                else => {
+                    // Any error other than the explicitly listed ones in the
+                    // switch should just bubble up normally, printing a stack
+                    // trace.
+                    return err;
+                },
+            };
         };
+    }
 
-        // The `exit` function won't call the deferred functions above, so we
-        // call them explicitly here before calling `exit`
-        std.process.argsFree(allocator, args);
-        _ = gpa.deinit();
-        std.process.exit(exit_code);
-    };
+    // All resources are cleaned up after the block above, so now we can safely
+    // call the `exit` function, which does not return.
+    std.process.exit(status_code);
 }
 
 /// It is the responsibility of the caller of `internalMain` to deallocate and
@@ -98,6 +110,7 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
 
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+
     // Get and print args!
     std.debug.print("There are {d} args:\n", .{args.len});
     for (args) |arg| {
@@ -118,8 +131,8 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
     // std.debug.print("what is embedded sql value bytes: {any}\n", .{embedded_sql});
     // std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
 
-    const db = try sqlite_open(db_path);
-    defer sqlite_close(db) catch unreachable;
+    const db = try sqlite3_open(db_path);
+    defer sqlite3_close(db) catch unreachable;
 
     var rc = c.sqlite3_exec(db, embedded_sql, null, null, null);
     try sqliteReturnCodeToError(rc);

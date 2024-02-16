@@ -9,7 +9,114 @@ const embedded_sql = @embedFile(sql_path);
 const sqlite3_abort_error = error{SQLITE_ABORT};
 const sqlite3_abort_errors = error{SQLITE_ABORT_ROLLBACK} || sqlite3_abort_error;
 
-const sqlite_errors = error{ SQLiteError, SQLiteExecError, SQLiteCantOpen };
+const sqlite_errors = error{
+    // Primary codes
+    SQLITE_ABORT,
+    SQLITE_AUTH,
+    SQLITE_BUSY,
+    SQLITE_CANTOPEN,
+    SQLITE_CONSTRAINT,
+    SQLITE_CORRUPT,
+    SQLITE_EMPTY,
+    SQLITE_ERROR,
+    SQLITE_FORMAT,
+    SQLITE_FULL,
+    SQLITE_INTERNAL,
+    SQLITE_INTERRUPT,
+    SQLITE_IOERR,
+    SQLITE_LOCKED,
+    SQLITE_MISMATCH,
+    SQLITE_MISUSE,
+    SQLITE_NOLFS,
+    SQLITE_NOMEM,
+    SQLITE_NOTADB,
+    SQLITE_NOTFOUND,
+    SQLITE_NOTICE,
+    SQLITE_PERM,
+    SQLITE_PROTOCOL,
+    SQLITE_RANGE,
+    SQLITE_READONLY,
+    SQLITE_SCHEMA,
+    SQLITE_TOOBIG,
+    SQLITE_WARNING,
+
+    // Extended codes
+    SQLITE_ABORT_ROLLBACK,
+    SQLITE_AUTH_USER,
+    SQLITE_BUSY_RECOVERY,
+    SQLITE_BUSY_SNAPSHOT,
+    SQLITE_BUSY_TIMEOUT,
+    SQLITE_CANTOPEN_CONVPATH,
+    SQLITE_CANTOPEN_DIRTYWAL,
+    SQLITE_CANTOPEN_FULLPATH,
+    SQLITE_CANTOPEN_ISDIR,
+    SQLITE_CANTOPEN_NOTEMPDIR,
+    SQLITE_CANTOPEN_SYMLINK,
+    SQLITE_CONSTRAINT_CHECK,
+    SQLITE_CONSTRAINT_COMMITHOOK,
+    SQLITE_CONSTRAINT_DATATYPE,
+    SQLITE_CONSTRAINT_FOREIGNKEY,
+    SQLITE_CONSTRAINT_FUNCTION,
+    SQLITE_CONSTRAINT_NOTNULL,
+    SQLITE_CONSTRAINT_PINNED,
+    SQLITE_CONSTRAINT_PRIMARYKEY,
+    SQLITE_CONSTRAINT_ROWID,
+    SQLITE_CONSTRAINT_TRIGGER,
+    SQLITE_CONSTRAINT_UNIQUE,
+    SQLITE_CONSTRAINT_VTAB,
+    SQLITE_CORRUPT_INDEX,
+    SQLITE_CORRUPT_SEQUENCE,
+    SQLITE_CORRUPT_VTAB,
+    SQLITE_ERROR_MISSING_COLLSEQ,
+    SQLITE_ERROR_RETRY,
+    SQLITE_ERROR_SNAPSHOT,
+    SQLITE_IOERR_ACCESS,
+    SQLITE_IOERR_AUTH,
+    SQLITE_IOERR_BEGIN_ATOMIC,
+    SQLITE_IOERR_BLOCKED,
+    SQLITE_IOERR_CHECKRESERVEDLOCK,
+    SQLITE_IOERR_CLOSE,
+    SQLITE_IOERR_COMMIT_ATOMIC,
+    SQLITE_IOERR_CONVPATH,
+    SQLITE_IOERR_CORRUPTFS,
+    SQLITE_IOERR_DATA,
+    SQLITE_IOERR_DELETE,
+    SQLITE_IOERR_DELETE_NOENT,
+    SQLITE_IOERR_DIR_CLOSE,
+    SQLITE_IOERR_DIR_FSYNC,
+    SQLITE_IOERR_FSTAT,
+    SQLITE_IOERR_FSYNC,
+    SQLITE_IOERR_GETTEMPPATH,
+    SQLITE_IOERR_LOCK,
+    SQLITE_IOERR_MMAP,
+    SQLITE_IOERR_NOMEM,
+    SQLITE_IOERR_RDLOCK,
+    SQLITE_IOERR_READ,
+    SQLITE_IOERR_ROLLBACK_ATOMIC,
+    SQLITE_IOERR_SEEK,
+    SQLITE_IOERR_SHMLOCK,
+    SQLITE_IOERR_SHMMAP,
+    SQLITE_IOERR_SHMOPEN,
+    SQLITE_IOERR_SHMSIZE,
+    SQLITE_IOERR_SHORT_READ,
+    SQLITE_IOERR_TRUNCATE,
+    SQLITE_IOERR_UNLOCK,
+    SQLITE_IOERR_VNODE,
+    SQLITE_IOERR_WRITE,
+    SQLITE_LOCKED_SHAREDCACHE,
+    SQLITE_LOCKED_VTAB,
+    SQLITE_NOTICE_RECOVER_ROLLBACK,
+    SQLITE_NOTICE_RECOVER_WAL,
+    SQLITE_OK_LOAD_PERMANENTLY,
+    SQLITE_READONLY_CANTINIT,
+    SQLITE_READONLY_CANTLOCK,
+    SQLITE_READONLY_DBMOVED,
+    SQLITE_READONLY_DIRECTORY,
+    SQLITE_READONLY_RECOVERY,
+    SQLITE_READONLY_ROLLBACK,
+    SQLITE_WARNING_AUTOINDEX,
+};
+
 const errors = error{AbnormalState} || sqlite_errors;
 
 const ResultCode = enum(c_int) {
@@ -139,12 +246,117 @@ fn sqliteReturnCodeToError(db_optional: ?*sqlite3_db, code: c_int) !void {
         }
     }
 
-    switch (code) {
-        c.SQLITE_OK => return,
-        c.SQLITE_ERROR => return sqlite_errors.SQLiteError,
-        c.SQLITE_CANTOPEN => return sqlite_errors.SQLiteCantOpen,
-        else => return sqlite_errors.SQLiteError,
-    }
+    return switch (code) {
+        // non-error result codes
+        c.SQLITE_OK, c.SQLITE_DONE, c.SQLITE_ROW => return,
+
+        // Primary codes
+        c.SQLITE_ABORT => sqlite_errors.SQLITE_ABORT,
+        c.SQLITE_AUTH => sqlite_errors.SQLITE_AUTH,
+        c.SQLITE_BUSY => sqlite_errors.SQLITE_BUSY,
+        c.SQLITE_CANTOPEN => sqlite_errors.SQLITE_CANTOPEN,
+        c.SQLITE_CONSTRAINT => sqlite_errors.SQLITE_CONSTRAINT,
+        c.SQLITE_CORRUPT => sqlite_errors.SQLITE_CORRUPT,
+        c.SQLITE_EMPTY => sqlite_errors.SQLITE_EMPTY,
+        c.SQLITE_ERROR => sqlite_errors.SQLITE_ERROR,
+        c.SQLITE_FORMAT => sqlite_errors.SQLITE_FORMAT,
+        c.SQLITE_FULL => sqlite_errors.SQLITE_FULL,
+        c.SQLITE_INTERNAL => sqlite_errors.SQLITE_INTERNAL,
+        c.SQLITE_INTERRUPT => sqlite_errors.SQLITE_INTERRUPT,
+        c.SQLITE_IOERR => sqlite_errors.SQLITE_IOERR,
+        c.SQLITE_LOCKED => sqlite_errors.SQLITE_LOCKED,
+        c.SQLITE_MISMATCH => sqlite_errors.SQLITE_MISMATCH,
+        c.SQLITE_MISUSE => sqlite_errors.SQLITE_MISUSE,
+        c.SQLITE_NOLFS => sqlite_errors.SQLITE_NOLFS,
+        c.SQLITE_NOMEM => sqlite_errors.SQLITE_NOMEM,
+        c.SQLITE_NOTADB => sqlite_errors.SQLITE_NOTADB,
+        c.SQLITE_NOTFOUND => sqlite_errors.SQLITE_NOTFOUND,
+        c.SQLITE_NOTICE => sqlite_errors.SQLITE_NOTICE,
+        c.SQLITE_PERM => sqlite_errors.SQLITE_PERM,
+        c.SQLITE_PROTOCOL => sqlite_errors.SQLITE_PROTOCOL,
+        c.SQLITE_RANGE => sqlite_errors.SQLITE_RANGE,
+        c.SQLITE_READONLY => sqlite_errors.SQLITE_READONLY,
+        c.SQLITE_SCHEMA => sqlite_errors.SQLITE_SCHEMA,
+        c.SQLITE_TOOBIG => sqlite_errors.SQLITE_TOOBIG,
+        c.SQLITE_WARNING => sqlite_errors.SQLITE_WARNING,
+
+        // Extended codes
+        c.SQLITE_ABORT_ROLLBACK => sqlite_errors.SQLITE_ABORT_ROLLBACK,
+        c.SQLITE_AUTH_USER => sqlite_errors.SQLITE_AUTH_USER,
+        c.SQLITE_BUSY_RECOVERY => sqlite_errors.SQLITE_BUSY_RECOVERY,
+        c.SQLITE_BUSY_SNAPSHOT => sqlite_errors.SQLITE_BUSY_SNAPSHOT,
+        c.SQLITE_BUSY_TIMEOUT => sqlite_errors.SQLITE_BUSY_TIMEOUT,
+        c.SQLITE_CANTOPEN_CONVPATH => sqlite_errors.SQLITE_CANTOPEN_CONVPATH,
+        c.SQLITE_CANTOPEN_DIRTYWAL => sqlite_errors.SQLITE_CANTOPEN_DIRTYWAL,
+        c.SQLITE_CANTOPEN_FULLPATH => sqlite_errors.SQLITE_CANTOPEN_FULLPATH,
+        c.SQLITE_CANTOPEN_ISDIR => sqlite_errors.SQLITE_CANTOPEN_ISDIR,
+        c.SQLITE_CANTOPEN_NOTEMPDIR => sqlite_errors.SQLITE_CANTOPEN_NOTEMPDIR,
+        c.SQLITE_CANTOPEN_SYMLINK => sqlite_errors.SQLITE_CANTOPEN_SYMLINK,
+        c.SQLITE_CONSTRAINT_CHECK => sqlite_errors.SQLITE_CONSTRAINT_CHECK,
+        c.SQLITE_CONSTRAINT_COMMITHOOK => sqlite_errors.SQLITE_CONSTRAINT_COMMITHOOK,
+        c.SQLITE_CONSTRAINT_DATATYPE => sqlite_errors.SQLITE_CONSTRAINT_DATATYPE,
+        c.SQLITE_CONSTRAINT_FOREIGNKEY => sqlite_errors.SQLITE_CONSTRAINT_FOREIGNKEY,
+        c.SQLITE_CONSTRAINT_FUNCTION => sqlite_errors.SQLITE_CONSTRAINT_FUNCTION,
+        c.SQLITE_CONSTRAINT_NOTNULL => sqlite_errors.SQLITE_CONSTRAINT_NOTNULL,
+        c.SQLITE_CONSTRAINT_PINNED => sqlite_errors.SQLITE_CONSTRAINT_PINNED,
+        c.SQLITE_CONSTRAINT_PRIMARYKEY => sqlite_errors.SQLITE_CONSTRAINT_PRIMARYKEY,
+        c.SQLITE_CONSTRAINT_ROWID => sqlite_errors.SQLITE_CONSTRAINT_ROWID,
+        c.SQLITE_CONSTRAINT_TRIGGER => sqlite_errors.SQLITE_CONSTRAINT_TRIGGER,
+        c.SQLITE_CONSTRAINT_UNIQUE => sqlite_errors.SQLITE_CONSTRAINT_UNIQUE,
+        c.SQLITE_CONSTRAINT_VTAB => sqlite_errors.SQLITE_CONSTRAINT_VTAB,
+        c.SQLITE_CORRUPT_INDEX => sqlite_errors.SQLITE_CORRUPT_INDEX,
+        c.SQLITE_CORRUPT_SEQUENCE => sqlite_errors.SQLITE_CORRUPT_SEQUENCE,
+        c.SQLITE_CORRUPT_VTAB => sqlite_errors.SQLITE_CORRUPT_VTAB,
+        c.SQLITE_ERROR_MISSING_COLLSEQ => error.SQLITE_ERROR_MISSING_COLLSEQ,
+        c.SQLITE_ERROR_RETRY => error.SQLITE_ERROR_RETRY,
+        c.SQLITE_ERROR_SNAPSHOT => error.SQLITE_ERROR_SNAPSHOT,
+        c.SQLITE_IOERR_ACCESS => sqlite_errors.SQLITE_IOERR_ACCESS,
+        c.SQLITE_IOERR_AUTH => sqlite_errors.SQLITE_IOERR_AUTH,
+        c.SQLITE_IOERR_BEGIN_ATOMIC => sqlite_errors.SQLITE_IOERR_BEGIN_ATOMIC,
+        c.SQLITE_IOERR_BLOCKED => sqlite_errors.SQLITE_IOERR_BLOCKED,
+        c.SQLITE_IOERR_CHECKRESERVEDLOCK => sqlite_errors.SQLITE_IOERR_CHECKRESERVEDLOCK,
+        c.SQLITE_IOERR_CLOSE => sqlite_errors.SQLITE_IOERR_CLOSE,
+        c.SQLITE_IOERR_COMMIT_ATOMIC => sqlite_errors.SQLITE_IOERR_COMMIT_ATOMIC,
+        c.SQLITE_IOERR_CONVPATH => sqlite_errors.SQLITE_IOERR_CONVPATH,
+        c.SQLITE_IOERR_CORRUPTFS => sqlite_errors.SQLITE_IOERR_CORRUPTFS,
+        c.SQLITE_IOERR_DATA => sqlite_errors.SQLITE_IOERR_DATA,
+        c.SQLITE_IOERR_DELETE => sqlite_errors.SQLITE_IOERR_DELETE,
+        c.SQLITE_IOERR_DELETE_NOENT => sqlite_errors.SQLITE_IOERR_DELETE_NOENT,
+        c.SQLITE_IOERR_DIR_CLOSE => sqlite_errors.SQLITE_IOERR_DIR_CLOSE,
+        c.SQLITE_IOERR_DIR_FSYNC => sqlite_errors.SQLITE_IOERR_DIR_FSYNC,
+        c.SQLITE_IOERR_FSTAT => sqlite_errors.SQLITE_IOERR_FSTAT,
+        c.SQLITE_IOERR_FSYNC => sqlite_errors.SQLITE_IOERR_FSYNC,
+        c.SQLITE_IOERR_GETTEMPPATH => sqlite_errors.SQLITE_IOERR_GETTEMPPATH,
+        c.SQLITE_IOERR_LOCK => sqlite_errors.SQLITE_IOERR_LOCK,
+        c.SQLITE_IOERR_MMAP => sqlite_errors.SQLITE_IOERR_MMAP,
+        c.SQLITE_IOERR_NOMEM => sqlite_errors.SQLITE_IOERR_NOMEM,
+        c.SQLITE_IOERR_RDLOCK => sqlite_errors.SQLITE_IOERR_RDLOCK,
+        c.SQLITE_IOERR_READ => sqlite_errors.SQLITE_IOERR_READ,
+        c.SQLITE_IOERR_ROLLBACK_ATOMIC => sqlite_errors.SQLITE_IOERR_ROLLBACK_ATOMIC,
+        c.SQLITE_IOERR_SEEK => sqlite_errors.SQLITE_IOERR_SEEK,
+        c.SQLITE_IOERR_SHMLOCK => sqlite_errors.SQLITE_IOERR_SHMLOCK,
+        c.SQLITE_IOERR_SHMMAP => sqlite_errors.SQLITE_IOERR_SHMMAP,
+        c.SQLITE_IOERR_SHMOPEN => sqlite_errors.SQLITE_IOERR_SHMOPEN,
+        c.SQLITE_IOERR_SHMSIZE => sqlite_errors.SQLITE_IOERR_SHMSIZE,
+        c.SQLITE_IOERR_SHORT_READ => sqlite_errors.SQLITE_IOERR_SHORT_READ,
+        c.SQLITE_IOERR_TRUNCATE => sqlite_errors.SQLITE_IOERR_TRUNCATE,
+        c.SQLITE_IOERR_UNLOCK => sqlite_errors.SQLITE_IOERR_UNLOCK,
+        c.SQLITE_IOERR_VNODE => sqlite_errors.SQLITE_IOERR_VNODE,
+        c.SQLITE_IOERR_WRITE => sqlite_errors.SQLITE_IOERR_WRITE,
+        c.SQLITE_LOCKED_SHAREDCACHE => sqlite_errors.SQLITE_LOCKED_SHAREDCACHE,
+        c.SQLITE_LOCKED_VTAB => sqlite_errors.SQLITE_LOCKED_VTAB,
+        c.SQLITE_NOTICE_RECOVER_ROLLBACK => sqlite_errors.SQLITE_NOTICE_RECOVER_ROLLBACK,
+        c.SQLITE_NOTICE_RECOVER_WAL => sqlite_errors.SQLITE_NOTICE_RECOVER_WAL,
+        c.SQLITE_OK_LOAD_PERMANENTLY => sqlite_errors.SQLITE_OK_LOAD_PERMANENTLY,
+        c.SQLITE_READONLY_CANTINIT => sqlite_errors.SQLITE_READONLY_CANTINIT,
+        c.SQLITE_READONLY_CANTLOCK => sqlite_errors.SQLITE_READONLY_CANTLOCK,
+        c.SQLITE_READONLY_DBMOVED => sqlite_errors.SQLITE_READONLY_DBMOVED,
+        c.SQLITE_READONLY_DIRECTORY => sqlite_errors.SQLITE_READONLY_DIRECTORY,
+        c.SQLITE_READONLY_RECOVERY => sqlite_errors.SQLITE_READONLY_RECOVERY,
+        c.SQLITE_READONLY_ROLLBACK => sqlite_errors.SQLITE_READONLY_ROLLBACK,
+        c.SQLITE_WARNING_AUTOINDEX => sqlite_errors.SQLITE_WARNING_AUTOINDEX,
+        else => sqlite_errors.SQLITE_ERROR,
+    };
 }
 
 /// Alias opaque struct_sqlite3 type.
@@ -168,7 +380,7 @@ fn sqlite3_open(filename: []const u8) !*sqlite3_db {
         return db;
     } else {
         std.debug.print("SQLite did not indicate an error, but db_optional is still null: {any}\n", .{db_optional});
-        return sqlite_errors.SQLiteError;
+        unreachable;
     }
 }
 
@@ -179,18 +391,25 @@ fn sqlite3_close(db: ?*sqlite3_db) !void {
     try sqliteReturnCodeToError(db, rc);
 }
 
-/// Execute a SQL statement held in a string.
-fn sqlite3_exec(db: ?*sqlite3_db, sql: [:0]const u8, callback: ?*const fn (?*anyopaque, c_int, [*c][*c]u8, [*c][*c]u8) callconv(.C) c_int) !void {
-    var errmsg: [100]u8 = undefined;
+/// Prepare a sql statement
+fn sqlite3_prepare(db: ?*sqlite3_db, stmt: [:0]const u8) !*c.sqlite3_stmt {
+    var stmt_opt: ?*c.sqlite3_stmt = null;
 
-    // FIXME: Figure out pointer cast for local byte array
-    // const rc = c.sqlite3_exec(db, sql, callback, null, @alignCast(@ptrCast(&errmsg)));
+    const rc = c.sqlite3_prepare_v2(db, stmt.ptr, @intCast(stmt.len), &stmt_opt, null);
+    try sqliteReturnCodeToError(db, rc);
 
-    const rc = c.sqlite3_exec(db, sql, callback, null, null);
-    sqliteReturnCodeToError(db, rc) catch |err| {
-        std.debug.print("sqlite failed with error message: {s}\n", .{errmsg});
-        return err;
-    };
+    if (stmt_opt) |stmt_ptr| {
+        return stmt_ptr;
+    } else {
+        std.debug.print("SQLite did not indicate an error, but stmt_opt is still null: {any}\n", .{stmt_opt});
+        unreachable;
+    }
+}
+
+/// Finalize (i.e. "free") a prepared sql statement
+fn sqlite3_finalize(stmt_opt: ?*c.sqlite3_stmt) !void {
+    const rc = c.sqlite3_finalize(stmt_opt);
+    try sqliteReturnCodeToError(null, rc);
 }
 
 /// All that `main` does is retrieve args and a main allocator for the system,
@@ -217,8 +436,8 @@ pub fn main() !void {
         // The only place `exit` should ever be called directly is here in the `main` function
         internalMain(args, allocator) catch |err| {
             status_code = switch (err) {
-                sqlite_errors.SQLiteError => 3,
-                sqlite_errors.SQLiteCantOpen => 4,
+                sqlite_errors.SQLITE_ERROR => 3,
+                sqlite_errors.SQLITE_CANTOPEN => 4,
                 else => {
                     // Any error other than the explicitly listed ones in the
                     // switch should just bubble up normally, printing a stack
@@ -270,7 +489,8 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
     const db = try sqlite3_open(db_path);
     defer sqlite3_close(db) catch unreachable;
 
-    try sqlite3_exec(db, embedded_sql, null);
+    const prepared_stmt = try sqlite3_prepare(db, embedded_sql);
+    defer sqlite3_finalize(prepared_stmt) catch unreachable;
 
     // // stdout is for the actual output of your application, for example if you
     // // are implementing gzip, then only the compressed bytes should be sent to

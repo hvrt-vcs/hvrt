@@ -406,6 +406,20 @@ fn sqlite3_prepare(db: ?*sqlite3_db, stmt: [:0]const u8) !*c.sqlite3_stmt {
     }
 }
 
+/// Use comptime magic to bind parameters for SQLite prepared statements. This
+/// can't stop the caller from binding to prepared statements with values of
+/// the incorrect type to parameter indices. See docs here for the bind
+/// interface: https://www.sqlite.org/c3ref/bind_blob.html
+fn sqlite3_bind(stmt_opt: *c.sqlite3_stmt, index: usize, value: anytype) !void {
+    const rc = switch (@TypeOf(value)) {
+        u8, i8, u16, i16, i32 => c.sqlite3_bind_int(stmt_opt, index, value),
+        u32, i64 => c.sqlite3_bind_int64(stmt_opt, index, value),
+        // TODO: add bind interfaces for all other supported types.
+    };
+
+    try sqliteReturnCodeToError(rc);
+}
+
 /// Finalize (i.e. "free") a prepared sql statement
 fn sqlite3_finalize(stmt_opt: ?*c.sqlite3_stmt) !void {
     const rc = c.sqlite3_finalize(stmt_opt);

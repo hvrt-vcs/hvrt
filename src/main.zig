@@ -395,7 +395,7 @@ fn sqlite3_close(db: ?*sqlite3_db) !void {
 fn sqlite3_prepare(db: ?*sqlite3_db, stmt: [:0]const u8) !*c.sqlite3_stmt {
     var stmt_opt: ?*c.sqlite3_stmt = null;
 
-    const rc = c.sqlite3_prepare_v2(db, stmt.ptr, @intCast(stmt.len), &stmt_opt, null);
+    const rc = c.sqlite3_prepare_v2(db, stmt.ptr, @intCast(stmt.len + 1), &stmt_opt, null);
     try sqliteReturnCodeToError(db, rc);
 
     if (stmt_opt) |stmt_ptr| {
@@ -406,18 +406,41 @@ fn sqlite3_prepare(db: ?*sqlite3_db, stmt: [:0]const u8) !*c.sqlite3_stmt {
     }
 }
 
-/// Use comptime magic to bind parameters for SQLite prepared statements. This
-/// can't stop the caller from binding to prepared statements with values of
-/// the incorrect type to parameter indices. See docs here for the bind
-/// interface: https://www.sqlite.org/c3ref/bind_blob.html
-fn sqlite3_bind(stmt_opt: *c.sqlite3_stmt, index: usize, value: anytype) !void {
+/// Use comptime magic to bind parameters for SQLite prepared statements based
+/// on the type passed in. This can't stop the caller from making the mistake
+/// of binding values of the incorrect type to parameter indices. See docs here
+/// for the bind interface: https://www.sqlite.org/c3ref/bind_blob.html
+fn sqlite3_bind(stmt: *c.sqlite3_stmt, index: u16, value: anytype) !void {
     const rc = switch (@TypeOf(value)) {
-        u8, i8, u16, i16, i32 => c.sqlite3_bind_int(stmt_opt, index, value),
-        u32, i64 => c.sqlite3_bind_int64(stmt_opt, index, value),
-        // TODO: add bind interfaces for all other supported types.
+        @TypeOf(null) => c.sqlite3_bind_null(stmt, index),
+        f16, f32, f64, comptime_float => c.sqlite3_bind_double(stmt, index, value),
+        u8, i8, u16, i16, i32, u32, i64, comptime_int => c.sqlite3_bind_int64(stmt, index, value),
+
+        // Using text64 should make it so that we don't need to do any casting
+        // to pass the len of the slice. Since it is null terminated, we add
+        // one to the len for the terminator.
+        [:0]u8, [:0]const u8 => c.sqlite3_bind_text64(stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8),
+
+        // If a u8 slice is not null terminated, we assume it is meant to be treated as a blob
+        []const u8 => c.sqlite3_bind_blob64(stmt, index, value.ptr, value.len, c.SQLITE_TRANSIENT),
+
+        // Failure
+        else => {
+            std.debug.print("Not given a type that can be bound to SQLite: {any}", .{@TypeOf(value)});
+            @compileError("Not given a type that can be bound to SQLite");
+        },
     };
 
-    try sqliteReturnCodeToError(rc);
+    try sqliteReturnCodeToError(null, rc);
+}
+
+fn sqlite3_bind_text(stmt: *c.sqlite3_stmt, index: u16, value: [:0]const u8) !void {
+    // Using text64 should make it so that we don't need to do any casting
+    // to pass the len of the slice. Since it is null terminated, we add
+    // one to the len for the terminator.
+    const rc = c.sqlite3_bind_text64(stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8);
+
+    try sqliteReturnCodeToError(null, rc);
 }
 
 /// Finalize (i.e. "free") a prepared sql statement
@@ -503,8 +526,24 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
     const db = try sqlite3_open(db_path);
     defer sqlite3_close(db) catch unreachable;
 
+    // Preparing a statement will only evaluate one statement (semicolon
+    // terminated) at a time. So we can't just compile the whole init script
+    // and run it. Will need to either split the script into multiple pieces,
+    // or add some logic to iterate over the statements/detect when parameters
+    // need to be bound. See link here for an example of this logic:
+    // https://github.com/praeclarum/sqlite-net/issues/84
     const prepared_stmt = try sqlite3_prepare(db, embedded_sql);
     defer sqlite3_finalize(prepared_stmt) catch unreachable;
+
+    // Version
+    const version = "0.1.0";
+
+    std.debug.print("How do you print a type? {any}\n", .{@TypeOf(version)});
+    std.debug.print("How do you print a typeinfo? {any}\n", .{@typeInfo(@TypeOf(version))});
+    // try sqlite3_bind_text(prepared_stmt, 1, version);
+
+    // // default branch
+    // try sqlite3_bind(prepared_stmt, 2, "master");
 
     // // stdout is for the actual output of your application, for example if you
     // // are implementing gzip, then only the compressed bytes should be sent to

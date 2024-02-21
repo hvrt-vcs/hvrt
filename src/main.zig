@@ -3,8 +3,14 @@ const c = @cImport({
     @cInclude("sqlite3.h");
 });
 
-const sql_path = "sql/sqlite/work_tree/init.sql";
-const embedded_sql = @embedFile(sql_path);
+const sql_path1 = "sql/sqlite/work_tree/init/tables.sql";
+const embedded_sql1 = @embedFile(sql_path1);
+
+const sql_path2 = "sql/sqlite/work_tree/init/version.sql";
+const embedded_sql2 = @embedFile(sql_path2);
+
+const sql_path3 = "sql/sqlite/work_tree/init/branch.sql";
+const embedded_sql3 = @embedFile(sql_path3);
 
 const sqlite3_abort_error = error{SQLITE_ABORT};
 const sqlite3_abort_errors = error{SQLITE_ABORT_ROLLBACK} || sqlite3_abort_error;
@@ -121,126 +127,127 @@ const errors = error{AbnormalState} || sqlite_errors;
 
 const ResultCode = enum(c_int) {
     // Primary codes
-    ABORT = c.SQLITE_ABORT,
-    AUTH = c.SQLITE_AUTH,
-    BUSY = c.SQLITE_BUSY,
-    CANTOPEN = c.SQLITE_CANTOPEN,
-    CONSTRAINT = c.SQLITE_CONSTRAINT,
-    CORRUPT = c.SQLITE_CORRUPT,
-    DONE = c.SQLITE_DONE, // non-error result code
-    EMPTY = c.SQLITE_EMPTY,
-    ERROR = c.SQLITE_ERROR,
-    FORMAT = c.SQLITE_FORMAT,
-    FULL = c.SQLITE_FULL,
-    INTERNAL = c.SQLITE_INTERNAL,
-    INTERRUPT = c.SQLITE_INTERRUPT,
-    IOERR = c.SQLITE_IOERR,
-    LOCKED = c.SQLITE_LOCKED,
-    MISMATCH = c.SQLITE_MISMATCH,
-    MISUSE = c.SQLITE_MISUSE,
-    NOLFS = c.SQLITE_NOLFS,
-    NOMEM = c.SQLITE_NOMEM,
-    NOTADB = c.SQLITE_NOTADB,
-    NOTFOUND = c.SQLITE_NOTFOUND,
-    NOTICE = c.SQLITE_NOTICE,
-    OK = c.SQLITE_OK, // non-error result code
-    PERM = c.SQLITE_PERM,
-    PROTOCOL = c.SQLITE_PROTOCOL,
-    RANGE = c.SQLITE_RANGE,
-    READONLY = c.SQLITE_READONLY,
-    ROW = c.SQLITE_ROW, // non-error result code
-    SCHEMA = c.SQLITE_SCHEMA,
-    TOOBIG = c.SQLITE_TOOBIG,
-    WARNING = c.SQLITE_WARNING,
+    SQLITE_ABORT = c.SQLITE_ABORT,
+    SQLITE_AUTH = c.SQLITE_AUTH,
+    SQLITE_BUSY = c.SQLITE_BUSY,
+    SQLITE_CANTOPEN = c.SQLITE_CANTOPEN,
+    SQLITE_CONSTRAINT = c.SQLITE_CONSTRAINT,
+    SQLITE_CORRUPT = c.SQLITE_CORRUPT,
+    SQLITE_DONE = c.SQLITE_DONE, // non-error result code
+    SQLITE_EMPTY = c.SQLITE_EMPTY,
+    SQLITE_ERROR = c.SQLITE_ERROR,
+    SQLITE_FORMAT = c.SQLITE_FORMAT,
+    SQLITE_FULL = c.SQLITE_FULL,
+    SQLITE_INTERNAL = c.SQLITE_INTERNAL,
+    SQLITE_INTERRUPT = c.SQLITE_INTERRUPT,
+    SQLITE_IOERR = c.SQLITE_IOERR,
+    SQLITE_LOCKED = c.SQLITE_LOCKED,
+    SQLITE_MISMATCH = c.SQLITE_MISMATCH,
+    SQLITE_MISUSE = c.SQLITE_MISUSE,
+    SQLITE_NOLFS = c.SQLITE_NOLFS,
+    SQLITE_NOMEM = c.SQLITE_NOMEM,
+    SQLITE_NOTADB = c.SQLITE_NOTADB,
+    SQLITE_NOTFOUND = c.SQLITE_NOTFOUND,
+    SQLITE_NOTICE = c.SQLITE_NOTICE,
+    SQLITE_OK = c.SQLITE_OK, // non-error result code
+    SQLITE_PERM = c.SQLITE_PERM,
+    SQLITE_PROTOCOL = c.SQLITE_PROTOCOL,
+    SQLITE_RANGE = c.SQLITE_RANGE,
+    SQLITE_READONLY = c.SQLITE_READONLY,
+    SQLITE_ROW = c.SQLITE_ROW, // non-error result code
+    SQLITE_SCHEMA = c.SQLITE_SCHEMA,
+    SQLITE_TOOBIG = c.SQLITE_TOOBIG,
+    SQLITE_WARNING = c.SQLITE_WARNING,
 
     // Extended codes
-    ABORT_ROLLBACK = c.SQLITE_ABORT_ROLLBACK,
-    AUTH_USER = c.SQLITE_AUTH_USER,
-    BUSY_RECOVERY = c.SQLITE_BUSY_RECOVERY,
-    BUSY_SNAPSHOT = c.SQLITE_BUSY_SNAPSHOT,
-    BUSY_TIMEOUT = c.SQLITE_BUSY_TIMEOUT,
-    CANTOPEN_CONVPATH = c.SQLITE_CANTOPEN_CONVPATH,
-    CANTOPEN_DIRTYWAL = c.SQLITE_CANTOPEN_DIRTYWAL,
-    CANTOPEN_FULLPATH = c.SQLITE_CANTOPEN_FULLPATH,
-    CANTOPEN_ISDIR = c.SQLITE_CANTOPEN_ISDIR,
-    CANTOPEN_NOTEMPDIR = c.SQLITE_CANTOPEN_NOTEMPDIR,
-    CANTOPEN_SYMLINK = c.SQLITE_CANTOPEN_SYMLINK,
-    CONSTRAINT_CHECK = c.SQLITE_CONSTRAINT_CHECK,
-    CONSTRAINT_COMMITHOOK = c.SQLITE_CONSTRAINT_COMMITHOOK,
-    CONSTRAINT_DATATYPE = c.SQLITE_CONSTRAINT_DATATYPE,
-    CONSTRAINT_FOREIGNKEY = c.SQLITE_CONSTRAINT_FOREIGNKEY,
-    CONSTRAINT_FUNCTION = c.SQLITE_CONSTRAINT_FUNCTION,
-    CONSTRAINT_NOTNULL = c.SQLITE_CONSTRAINT_NOTNULL,
-    CONSTRAINT_PINNED = c.SQLITE_CONSTRAINT_PINNED,
-    CONSTRAINT_PRIMARYKEY = c.SQLITE_CONSTRAINT_PRIMARYKEY,
-    CONSTRAINT_ROWID = c.SQLITE_CONSTRAINT_ROWID,
-    CONSTRAINT_TRIGGER = c.SQLITE_CONSTRAINT_TRIGGER,
-    CONSTRAINT_UNIQUE = c.SQLITE_CONSTRAINT_UNIQUE,
-    CONSTRAINT_VTAB = c.SQLITE_CONSTRAINT_VTAB,
-    CORRUPT_INDEX = c.SQLITE_CORRUPT_INDEX,
-    CORRUPT_SEQUENCE = c.SQLITE_CORRUPT_SEQUENCE,
-    CORRUPT_VTAB = c.SQLITE_CORRUPT_VTAB,
-    ERROR_MISSING_COLLSEQ = c.SQLITE_ERROR_MISSING_COLLSEQ,
-    ERROR_RETRY = c.SQLITE_ERROR_RETRY,
-    ERROR_SNAPSHOT = c.SQLITE_ERROR_SNAPSHOT,
-    IOERR_ACCESS = c.SQLITE_IOERR_ACCESS,
-    IOERR_AUTH = c.SQLITE_IOERR_AUTH,
-    IOERR_BEGIN_ATOMIC = c.SQLITE_IOERR_BEGIN_ATOMIC,
-    IOERR_BLOCKED = c.SQLITE_IOERR_BLOCKED,
-    IOERR_CHECKRESERVEDLOCK = c.SQLITE_IOERR_CHECKRESERVEDLOCK,
-    IOERR_CLOSE = c.SQLITE_IOERR_CLOSE,
-    IOERR_COMMIT_ATOMIC = c.SQLITE_IOERR_COMMIT_ATOMIC,
-    IOERR_CONVPATH = c.SQLITE_IOERR_CONVPATH,
-    IOERR_CORRUPTFS = c.SQLITE_IOERR_CORRUPTFS,
-    IOERR_DATA = c.SQLITE_IOERR_DATA,
-    IOERR_DELETE = c.SQLITE_IOERR_DELETE,
-    IOERR_DELETE_NOENT = c.SQLITE_IOERR_DELETE_NOENT,
-    IOERR_DIR_CLOSE = c.SQLITE_IOERR_DIR_CLOSE,
-    IOERR_DIR_FSYNC = c.SQLITE_IOERR_DIR_FSYNC,
-    IOERR_FSTAT = c.SQLITE_IOERR_FSTAT,
-    IOERR_FSYNC = c.SQLITE_IOERR_FSYNC,
-    IOERR_GETTEMPPATH = c.SQLITE_IOERR_GETTEMPPATH,
-    IOERR_LOCK = c.SQLITE_IOERR_LOCK,
-    IOERR_MMAP = c.SQLITE_IOERR_MMAP,
-    IOERR_NOMEM = c.SQLITE_IOERR_NOMEM,
-    IOERR_RDLOCK = c.SQLITE_IOERR_RDLOCK,
-    IOERR_READ = c.SQLITE_IOERR_READ,
-    IOERR_ROLLBACK_ATOMIC = c.SQLITE_IOERR_ROLLBACK_ATOMIC,
-    IOERR_SEEK = c.SQLITE_IOERR_SEEK,
-    IOERR_SHMLOCK = c.SQLITE_IOERR_SHMLOCK,
-    IOERR_SHMMAP = c.SQLITE_IOERR_SHMMAP,
-    IOERR_SHMOPEN = c.SQLITE_IOERR_SHMOPEN,
-    IOERR_SHMSIZE = c.SQLITE_IOERR_SHMSIZE,
-    IOERR_SHORT_READ = c.SQLITE_IOERR_SHORT_READ,
-    IOERR_TRUNCATE = c.SQLITE_IOERR_TRUNCATE,
-    IOERR_UNLOCK = c.SQLITE_IOERR_UNLOCK,
-    IOERR_VNODE = c.SQLITE_IOERR_VNODE,
-    IOERR_WRITE = c.SQLITE_IOERR_WRITE,
-    LOCKED_SHAREDCACHE = c.SQLITE_LOCKED_SHAREDCACHE,
-    LOCKED_VTAB = c.SQLITE_LOCKED_VTAB,
-    NOTICE_RECOVER_ROLLBACK = c.SQLITE_NOTICE_RECOVER_ROLLBACK,
-    NOTICE_RECOVER_WAL = c.SQLITE_NOTICE_RECOVER_WAL,
-    OK_LOAD_PERMANENTLY = c.SQLITE_OK_LOAD_PERMANENTLY,
-    READONLY_CANTINIT = c.SQLITE_READONLY_CANTINIT,
-    READONLY_CANTLOCK = c.SQLITE_READONLY_CANTLOCK,
-    READONLY_DBMOVED = c.SQLITE_READONLY_DBMOVED,
-    READONLY_DIRECTORY = c.SQLITE_READONLY_DIRECTORY,
-    READONLY_RECOVERY = c.SQLITE_READONLY_RECOVERY,
-    READONLY_ROLLBACK = c.SQLITE_READONLY_ROLLBACK,
-    WARNING_AUTOINDEX = c.SQLITE_WARNING_AUTOINDEX,
+    SQLITE_ABORT_ROLLBACK = c.SQLITE_ABORT_ROLLBACK,
+    SQLITE_AUTH_USER = c.SQLITE_AUTH_USER,
+    SQLITE_BUSY_RECOVERY = c.SQLITE_BUSY_RECOVERY,
+    SQLITE_BUSY_SNAPSHOT = c.SQLITE_BUSY_SNAPSHOT,
+    SQLITE_BUSY_TIMEOUT = c.SQLITE_BUSY_TIMEOUT,
+    SQLITE_CANTOPEN_CONVPATH = c.SQLITE_CANTOPEN_CONVPATH,
+    SQLITE_CANTOPEN_DIRTYWAL = c.SQLITE_CANTOPEN_DIRTYWAL,
+    SQLITE_CANTOPEN_FULLPATH = c.SQLITE_CANTOPEN_FULLPATH,
+    SQLITE_CANTOPEN_ISDIR = c.SQLITE_CANTOPEN_ISDIR,
+    SQLITE_CANTOPEN_NOTEMPDIR = c.SQLITE_CANTOPEN_NOTEMPDIR,
+    SQLITE_CANTOPEN_SYMLINK = c.SQLITE_CANTOPEN_SYMLINK,
+    SQLITE_CONSTRAINT_CHECK = c.SQLITE_CONSTRAINT_CHECK,
+    SQLITE_CONSTRAINT_COMMITHOOK = c.SQLITE_CONSTRAINT_COMMITHOOK,
+    SQLITE_CONSTRAINT_DATATYPE = c.SQLITE_CONSTRAINT_DATATYPE,
+    SQLITE_CONSTRAINT_FOREIGNKEY = c.SQLITE_CONSTRAINT_FOREIGNKEY,
+    SQLITE_CONSTRAINT_FUNCTION = c.SQLITE_CONSTRAINT_FUNCTION,
+    SQLITE_CONSTRAINT_NOTNULL = c.SQLITE_CONSTRAINT_NOTNULL,
+    SQLITE_CONSTRAINT_PINNED = c.SQLITE_CONSTRAINT_PINNED,
+    SQLITE_CONSTRAINT_PRIMARYKEY = c.SQLITE_CONSTRAINT_PRIMARYKEY,
+    SQLITE_CONSTRAINT_ROWID = c.SQLITE_CONSTRAINT_ROWID,
+    SQLITE_CONSTRAINT_TRIGGER = c.SQLITE_CONSTRAINT_TRIGGER,
+    SQLITE_CONSTRAINT_UNIQUE = c.SQLITE_CONSTRAINT_UNIQUE,
+    SQLITE_CONSTRAINT_VTAB = c.SQLITE_CONSTRAINT_VTAB,
+    SQLITE_CORRUPT_INDEX = c.SQLITE_CORRUPT_INDEX,
+    SQLITE_CORRUPT_SEQUENCE = c.SQLITE_CORRUPT_SEQUENCE,
+    SQLITE_CORRUPT_VTAB = c.SQLITE_CORRUPT_VTAB,
+    SQLITE_ERROR_MISSING_COLLSEQ = c.SQLITE_ERROR_MISSING_COLLSEQ,
+    SQLITE_ERROR_RETRY = c.SQLITE_ERROR_RETRY,
+    SQLITE_ERROR_SNAPSHOT = c.SQLITE_ERROR_SNAPSHOT,
+    SQLITE_IOERR_ACCESS = c.SQLITE_IOERR_ACCESS,
+    SQLITE_IOERR_AUTH = c.SQLITE_IOERR_AUTH,
+    SQLITE_IOERR_BEGIN_ATOMIC = c.SQLITE_IOERR_BEGIN_ATOMIC,
+    SQLITE_IOERR_BLOCKED = c.SQLITE_IOERR_BLOCKED,
+    SQLITE_IOERR_CHECKRESERVEDLOCK = c.SQLITE_IOERR_CHECKRESERVEDLOCK,
+    SQLITE_IOERR_CLOSE = c.SQLITE_IOERR_CLOSE,
+    SQLITE_IOERR_COMMIT_ATOMIC = c.SQLITE_IOERR_COMMIT_ATOMIC,
+    SQLITE_IOERR_CONVPATH = c.SQLITE_IOERR_CONVPATH,
+    SQLITE_IOERR_CORRUPTFS = c.SQLITE_IOERR_CORRUPTFS,
+    SQLITE_IOERR_DATA = c.SQLITE_IOERR_DATA,
+    SQLITE_IOERR_DELETE = c.SQLITE_IOERR_DELETE,
+    SQLITE_IOERR_DELETE_NOENT = c.SQLITE_IOERR_DELETE_NOENT,
+    SQLITE_IOERR_DIR_CLOSE = c.SQLITE_IOERR_DIR_CLOSE,
+    SQLITE_IOERR_DIR_FSYNC = c.SQLITE_IOERR_DIR_FSYNC,
+    SQLITE_IOERR_FSTAT = c.SQLITE_IOERR_FSTAT,
+    SQLITE_IOERR_FSYNC = c.SQLITE_IOERR_FSYNC,
+    SQLITE_IOERR_GETTEMPPATH = c.SQLITE_IOERR_GETTEMPPATH,
+    SQLITE_IOERR_LOCK = c.SQLITE_IOERR_LOCK,
+    SQLITE_IOERR_MMAP = c.SQLITE_IOERR_MMAP,
+    SQLITE_IOERR_NOMEM = c.SQLITE_IOERR_NOMEM,
+    SQLITE_IOERR_RDLOCK = c.SQLITE_IOERR_RDLOCK,
+    SQLITE_IOERR_READ = c.SQLITE_IOERR_READ,
+    SQLITE_IOERR_ROLLBACK_ATOMIC = c.SQLITE_IOERR_ROLLBACK_ATOMIC,
+    SQLITE_IOERR_SEEK = c.SQLITE_IOERR_SEEK,
+    SQLITE_IOERR_SHMLOCK = c.SQLITE_IOERR_SHMLOCK,
+    SQLITE_IOERR_SHMMAP = c.SQLITE_IOERR_SHMMAP,
+    SQLITE_IOERR_SHMOPEN = c.SQLITE_IOERR_SHMOPEN,
+    SQLITE_IOERR_SHMSIZE = c.SQLITE_IOERR_SHMSIZE,
+    SQLITE_IOERR_SHORT_READ = c.SQLITE_IOERR_SHORT_READ,
+    SQLITE_IOERR_TRUNCATE = c.SQLITE_IOERR_TRUNCATE,
+    SQLITE_IOERR_UNLOCK = c.SQLITE_IOERR_UNLOCK,
+    SQLITE_IOERR_VNODE = c.SQLITE_IOERR_VNODE,
+    SQLITE_IOERR_WRITE = c.SQLITE_IOERR_WRITE,
+    SQLITE_LOCKED_SHAREDCACHE = c.SQLITE_LOCKED_SHAREDCACHE,
+    SQLITE_LOCKED_VTAB = c.SQLITE_LOCKED_VTAB,
+    SQLITE_NOTICE_RECOVER_ROLLBACK = c.SQLITE_NOTICE_RECOVER_ROLLBACK,
+    SQLITE_NOTICE_RECOVER_WAL = c.SQLITE_NOTICE_RECOVER_WAL,
+    SQLITE_OK_LOAD_PERMANENTLY = c.SQLITE_OK_LOAD_PERMANENTLY,
+    SQLITE_READONLY_CANTINIT = c.SQLITE_READONLY_CANTINIT,
+    SQLITE_READONLY_CANTLOCK = c.SQLITE_READONLY_CANTLOCK,
+    SQLITE_READONLY_DBMOVED = c.SQLITE_READONLY_DBMOVED,
+    SQLITE_READONLY_DIRECTORY = c.SQLITE_READONLY_DIRECTORY,
+    SQLITE_READONLY_RECOVERY = c.SQLITE_READONLY_RECOVERY,
+    SQLITE_READONLY_ROLLBACK = c.SQLITE_READONLY_ROLLBACK,
+    SQLITE_WARNING_AUTOINDEX = c.SQLITE_WARNING_AUTOINDEX,
 };
 
 // If we request a value from the map using a constant lookup key, will Zig
 // just reduce that at comp time? That way we can *never* have an incorrect
 // lookup at runtime based on a typo or something.
 const sql_files = std.ComptimeStringMap([]const u8, .{
-    .{ sql_path, embedded_sql },
+    .{ sql_path1, embedded_sql1 },
 });
 
 fn sqliteReturnCodeToError(db_optional: ?*sqlite3_db, code: c_int) !void {
     if (code != c.SQLITE_OK) {
         // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
-        std.debug.print("SQLite failed with error code {d} which translates to message: '{s}'\n", .{ code, c.sqlite3_errstr(code) });
+        const err_enum: ResultCode = @enumFromInt(code);
+        std.debug.print("SQLite returned code {d} ({any}) with message: '{s}'\n", .{ code, err_enum, c.sqlite3_errstr(code) });
         if (db_optional) |db| {
             std.debug.print("SQLite message for non-null DB pointer: '{s}'\n", .{c.sqlite3_errmsg(db)});
         }
@@ -391,6 +398,11 @@ fn sqlite3_close(db: ?*sqlite3_db) !void {
     try sqliteReturnCodeToError(db, rc);
 }
 
+fn sqlite3_exec(db: *sqlite3_db, stmt: [:0]const u8) !void {
+    const rc = c.sqlite3_exec(db, stmt.ptr, null, null, null);
+    try sqliteReturnCodeToError(db, rc);
+}
+
 /// Prepare a sql statement
 fn sqlite3_prepare(db: ?*sqlite3_db, stmt: [:0]const u8) !*c.sqlite3_stmt {
     var stmt_opt: ?*c.sqlite3_stmt = null;
@@ -437,7 +449,9 @@ fn sqlite3_bind(stmt: *c.sqlite3_stmt, index: u16, value: anytype) !void {
 fn sqlite3_bind_text(stmt: *c.sqlite3_stmt, index: u16, value: [:0]const u8) !void {
     // Using text64 should make it so that we don't need to do any casting
     // to pass the len of the slice. Since it is null terminated, we add
-    // one to the len for the terminator.
+    // one to the len for the null terminator. Using `c.SQLITE_TRANSIENT`
+    // ensures that SQLite makes a its own copy of the string before returning
+    // from the function.
     const rc = c.sqlite3_bind_text64(stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8);
 
     try sqliteReturnCodeToError(null, rc);
@@ -517,14 +531,16 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
     const db_path = if (args.len > 1) args[1] else ":memory:";
     std.debug.print("what is db_path: {s}\n", .{db_path});
 
-    std.debug.print("what is embedded sql path: {s}\n", .{sql_path});
+    std.debug.print("what is embedded sql path: {s}\n", .{sql_path1});
     // std.debug.print("what is embedded sql value: {s}\n", .{embedded_sql});
-    std.debug.print("what is embedded sql path bytes: {any}\n", .{sql_path});
+    std.debug.print("what is embedded sql path bytes: {any}\n", .{sql_path1});
     // std.debug.print("what is embedded sql value bytes: {any}\n", .{embedded_sql});
     // std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
 
     const db = try sqlite3_open(db_path);
     defer sqlite3_close(db) catch unreachable;
+
+    try sqlite3_exec(db, embedded_sql1);
 
     // Preparing a statement will only evaluate one statement (semicolon
     // terminated) at a time. So we can't just compile the whole init script
@@ -532,15 +548,12 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
     // or add some logic to iterate over the statements/detect when parameters
     // need to be bound. See link here for an example of this logic:
     // https://github.com/praeclarum/sqlite-net/issues/84
-    const prepared_stmt = try sqlite3_prepare(db, embedded_sql);
-    defer sqlite3_finalize(prepared_stmt) catch unreachable;
+    const prepared_stmt1 = try sqlite3_prepare(db, embedded_sql2);
+    defer sqlite3_finalize(prepared_stmt1) catch unreachable;
 
     // Version
     const version = "0.1.0";
-
-    std.debug.print("How do you print a type? {any}\n", .{@TypeOf(version)});
-    std.debug.print("How do you print a typeinfo? {any}\n", .{@typeInfo(@TypeOf(version))});
-    // try sqlite3_bind_text(prepared_stmt, 1, version);
+    try sqlite3_bind_text(prepared_stmt1, 1, version);
 
     // // default branch
     // try sqlite3_bind(prepared_stmt, 2, "master");
@@ -565,6 +578,9 @@ test "simple test" {
 }
 
 test "invoke without args" {
-    const basic_args = [1][:0]const u8{"test_prog_name"};
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    const basic_args = [_][:0]const u8{"test_prog_name"};
     try internalMain(&basic_args, std.testing.allocator);
 }

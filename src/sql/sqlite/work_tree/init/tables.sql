@@ -12,10 +12,6 @@ CREATE TABLE vcs_version (
 	PRIMARY KEY ("id" AUTOINCREMENT)
 );
 
--- Insert the version as a parameter value when we run this init script.
-INSERT INTO vcs_version ("id", "version", "created_at", "modified_at")
-	VALUES (1, $1, strftime("%s", CURRENT_TIMESTAMP), strftime("%s", CURRENT_TIMESTAMP));
-
 CREATE TABLE blobs (
 	-- XXX: The `blobs` and `blob_chunks` tables should be identical to the same
 	-- tables in the repo so that when we create commits from the stage, all
@@ -162,5 +158,3 @@ CREATE TABLE current_tag (
 	PRIMARY KEY ("id")
 );
 
--- Insert default branch when we run this init script.
-INSERT INTO "current_tag" ("id", "name", "is_branch") VALUES (1, $2, TRUE);

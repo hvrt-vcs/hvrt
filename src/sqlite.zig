@@ -1,6 +1,13 @@
 const std = @import("std");
 const c = @import("c.zig");
 
+/// Alias opaque sqlite3 type.
+pub const DataBase = c.sqlite3;
+
+/// Alias opaque sqlite3_stmt type.
+pub const PreparedStatement = c.sqlite3_stmt;
+
+/// All SQLite error codes as Zig errors
 pub const errors = error{
     // Primary codes
     SQLITE_ABORT,
@@ -109,6 +116,7 @@ pub const errors = error{
     SQLITE_WARNING_AUTOINDEX,
 };
 
+/// Map Result codes as an enum
 pub const ResultCode = enum(c_int) {
     // Primary codes
     SQLITE_ABORT = c.SQLITE_ABORT,
@@ -344,10 +352,6 @@ fn returnCodeToError(code: ResultCode) !void {
         ResultCode.SQLITE_WARNING_AUTOINDEX => errors.SQLITE_WARNING_AUTOINDEX,
     };
 }
-
-/// Alias opaque sqlite types.
-pub const DataBase = c.sqlite3;
-pub const PreparedStatement = c.sqlite3_stmt;
 
 /// Open and return a pointer to a sqlite database or return an error if a
 /// database pointer cannot be opened for some reason.

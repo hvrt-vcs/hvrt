@@ -228,8 +228,8 @@ pub const ResultCode = enum(c_int) {
     SQLITE_WARNING_AUTOINDEX = c.SQLITE_WARNING_AUTOINDEX,
 };
 
-fn checkReturnCode(db_optional: ?*DataBase, code: c_int) !void {
-    returnCodeToError(@enumFromInt(code)) catch |err| {
+fn checkReturnCode(db_optional: ?*DataBase, code: c_int) !ResultCode {
+    return returnCodeToError(@enumFromInt(code)) catch |err| {
         // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
         std.debug.print("SQLite returned code '{any}' ({d}) with message: '{s}'\n", .{ @errorName(err), code, c.sqlite3_errstr(code) });
         if (db_optional) |db| {
@@ -240,10 +240,10 @@ fn checkReturnCode(db_optional: ?*DataBase, code: c_int) !void {
     };
 }
 
-fn returnCodeToError(code: ResultCode) !void {
+fn returnCodeToError(code: ResultCode) !ResultCode {
     return switch (code) {
         // non-error result codes
-        ResultCode.SQLITE_OK, ResultCode.SQLITE_DONE, ResultCode.SQLITE_ROW => return,
+        ResultCode.SQLITE_OK, ResultCode.SQLITE_DONE, ResultCode.SQLITE_ROW => code,
 
         // Primary codes
         ResultCode.SQLITE_ABORT => errors.SQLITE_ABORT,
@@ -361,11 +361,11 @@ pub fn open(filename: []const u8) !*DataBase {
 
     rc = c.sqlite3_open(filename.ptr, &db_optional);
     errdefer close(db_optional) catch unreachable;
-    try checkReturnCode(db_optional, rc);
+    _ = try checkReturnCode(db_optional, rc);
 
     // Enable extended error codes
     rc = c.sqlite3_extended_result_codes(db_optional, 1);
-    try checkReturnCode(db_optional, rc);
+    _ = try checkReturnCode(db_optional, rc);
 
     if (db_optional) |db| {
         return db;
@@ -379,12 +379,12 @@ pub fn open(filename: []const u8) !*DataBase {
 /// given database pointer cannot be closed for some reason.
 pub fn close(db: ?*DataBase) !void {
     const rc = c.sqlite3_close(db);
-    try checkReturnCode(db, rc);
+    _ = try checkReturnCode(db, rc);
 }
 
 pub fn exec(db: *DataBase, stmt: [:0]const u8) !void {
     const rc = c.sqlite3_exec(db, stmt.ptr, null, null, null);
-    try checkReturnCode(db, rc);
+    _ = try checkReturnCode(db, rc);
 }
 
 /// Prepare a sql statement
@@ -392,7 +392,7 @@ pub fn prepare(db: ?*DataBase, stmt: [:0]const u8) !*PreparedStatement {
     var stmt_opt: ?*PreparedStatement = null;
 
     const rc = c.sqlite3_prepare_v2(db, stmt.ptr, @intCast(stmt.len + 1), &stmt_opt, null);
-    try checkReturnCode(db, rc);
+    _ = try checkReturnCode(db, rc);
 
     if (stmt_opt) |stmt_ptr| {
         return stmt_ptr;
@@ -427,7 +427,13 @@ pub fn bind(stmt: *PreparedStatement, index: u16, value: anytype) !void {
         },
     };
 
-    try checkReturnCode(null, rc);
+    _ = try checkReturnCode(null, rc);
+}
+
+pub fn step(stmt: *PreparedStatement) !ResultCode {
+    const int_code = c.sqlite3_step(stmt);
+
+    return checkReturnCode(null, int_code);
 }
 
 pub fn bind_text(stmt: *PreparedStatement, index: u16, value: [:0]const u8) !void {
@@ -438,13 +444,13 @@ pub fn bind_text(stmt: *PreparedStatement, index: u16, value: [:0]const u8) !voi
     // from the function.
     const rc = c.sqlite3_bind_text64(stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8);
 
-    try checkReturnCode(null, rc);
+    _ = try checkReturnCode(null, rc);
 }
 
 /// Finalize (i.e. "free") a prepared sql statement
 pub fn finalize(stmt_opt: ?*PreparedStatement) !void {
     const rc = c.sqlite3_finalize(stmt_opt);
-    try checkReturnCode(null, rc);
+    _ = try checkReturnCode(null, rc);
 }
 
 test "sqlite3.h include" {

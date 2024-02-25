@@ -102,6 +102,18 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
     const version = "0.1.0";
     try sqlite.bind_text(prepared_stmt1, 1, version);
 
+    rows: while (sqlite.step(prepared_stmt1)) |rc| {
+        std.debug.print("What is the Result code? {any}\n", .{rc});
+    } else |err| {
+        std.debug.print("What is the error? {any}\n", .{err});
+
+        if (err != error.StopIteration) {
+            // Address error, then jump back to beginning and try again
+            break :rows;
+        }
+    }
+
+    std.debug.print("Did we insert the version?\n", .{});
     // // default branch
     // try sqlite3_bind(prepared_stmt, 2, "master");
 

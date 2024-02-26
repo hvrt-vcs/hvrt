@@ -1,14 +1,7 @@
 const std = @import("std");
 const sqlite = @import("sqlite.zig");
 
-const sql_path1 = "sql/sqlite/work_tree/init/tables.sql";
-const embedded_sql1 = @embedFile(sql_path1);
-
-const sql_path2 = "sql/sqlite/work_tree/init/version.sql";
-const embedded_sql2 = @embedFile(sql_path2);
-
-const sql_path3 = "sql/sqlite/work_tree/init/branch.sql";
-const embedded_sql3 = @embedFile(sql_path3);
+const sql = @import("sql/index.zig");
 
 /// All that `main` does is retrieve args and a main allocator for the system,
 /// and pass those to `internalMain`. Afterwards, it catches any errors, deals
@@ -22,10 +15,14 @@ pub fn main() !void {
 
     {
         // Args parsing from here: https://ziggit.dev/t/read-command-line-arguments/220/7
+
         // Get allocator
-        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-        const allocator = gpa.allocator();
-        defer _ = gpa.deinit();
+        // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+        // const allocator = gpa.allocator();
+        // defer _ = gpa.deinit();
+
+        // Vastly faster, but less safe than DebugAllocator/current GeneralPurposeAllocator.
+        const allocator = std.heap.c_allocator;
 
         // Parse args into string array (error union needs 'try')
         const args = try std.process.argsAlloc(allocator);
@@ -78,16 +75,12 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
     const db_path = if (args.len > 1) args[1] else ":memory:";
     std.debug.print("what is db_path: {s}\n", .{db_path});
 
-    std.debug.print("what is embedded sql path: {s}\n", .{sql_path1});
-    // std.debug.print("what is embedded sql value: {s}\n", .{embedded_sql});
-    std.debug.print("what is embedded sql path bytes: {any}\n", .{sql_path1});
-    // std.debug.print("what is embedded sql value bytes: {any}\n", .{embedded_sql});
-    // std.debug.print("what is sql files ComptimeStringMap: {any}\n", .{sql_files.kvs});
-
     const db = try sqlite.open(db_path);
     defer sqlite.close(db) catch unreachable;
 
-    try sqlite.exec(db, embedded_sql1);
+    const sqlfiles = sql.sqlite;
+
+    try sqlite.exec(db, sqlfiles.work_tree.init.tables);
 
     // Preparing a statement will only evaluate one statement (semicolon
     // terminated) at a time. So we can't just compile the whole init script
@@ -95,7 +88,7 @@ pub fn internalMain(args: []const [:0]const u8, alloc: std.mem.Allocator) !void 
     // or add some logic to iterate over the statements/detect when parameters
     // need to be bound. See link here for an example of this logic:
     // https://github.com/praeclarum/sqlite-net/issues/84
-    const prepared_stmt1 = try sqlite.prepare(db, embedded_sql2);
+    const prepared_stmt1 = try sqlite.prepare(db, sqlfiles.work_tree.init.version);
     defer sqlite.finalize(prepared_stmt1) catch unreachable;
 
     // Version

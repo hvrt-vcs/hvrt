@@ -1,44 +1,45 @@
 const std = @import("std");
 
-/// TODO: separate repo and worktree into two different types
-/// worktree is always going to be SQLite, for the forseeable future, so it
-/// doesn't make sense to force repo only DBs like postgres to fill out those
-/// fields as well. I'm punting this for today because it is getting late :).
-pub const SQLFiles = struct {
-    repo: struct {
-        init: [:0]const u8,
+/// Although a type is defined for WorkTree, the worktree DB is always going to
+/// be SQLite, for the forseeable future.
+pub const WorkTree = struct {
+    clear: [:0]const u8,
 
-        commit: struct {
-            blob: [:0]const u8,
-            blob_chunk: [:0]const u8,
-            chunk: [:0]const u8,
-            header: [:0]const u8,
-        },
+    read_blob_chunks: [:0]const u8,
+    read_blobs: [:0]const u8,
+    read_chunks: [:0]const u8,
+    read_head_commit: [:0]const u8,
+
+    add: struct {
+        blob: [:0]const u8,
+        blob_chunk: [:0]const u8,
+        file: [:0]const u8,
     },
-    work_tree: struct {
-        clear: [:0]const u8,
 
-        read_blob_chunks: [:0]const u8,
-        read_blobs: [:0]const u8,
-        read_chunks: [:0]const u8,
-        read_head_commit: [:0]const u8,
-
-        add: struct {
-            blob: [:0]const u8,
-            blob_chunk: [:0]const u8,
-            file: [:0]const u8,
-        },
-
-        init: struct {
-            branch: [:0]const u8,
-            tables: [:0]const u8,
-            version: [:0]const u8,
-        },
+    init: struct {
+        branch: [:0]const u8,
+        tables: [:0]const u8,
+        version: [:0]const u8,
     },
 };
 
-pub const sqlite: SQLFiles = .{
-    .repo = .{
+/// A Repo can be implemented in any SQL database that supports foreign key
+/// constraints, unique (string) keys, and transacitons. For now, only sqlite
+/// is being implemented. Once that is fully working, a DB abstraction layer
+/// can be defined and other DBs like postgres can be implemented.
+pub const Repo = struct {
+    init: [:0]const u8,
+
+    commit: struct {
+        blob: [:0]const u8,
+        blob_chunk: [:0]const u8,
+        chunk: [:0]const u8,
+        header: [:0]const u8,
+    },
+};
+
+pub const sqlite = .{
+    .repo = Repo{
         .init = @embedFile("sql/sqlite/repo/init.sql"),
 
         .commit = .{
@@ -48,7 +49,7 @@ pub const sqlite: SQLFiles = .{
             .header = @embedFile("sql/sqlite/repo/commit/header.sql"),
         },
     },
-    .work_tree = .{
+    .work_tree = WorkTree{
         .clear = @embedFile("sql/sqlite/work_tree/clear.sql"),
 
         .read_blob_chunks = @embedFile("sql/sqlite/work_tree/read_blob_chunks.sql"),
@@ -71,12 +72,10 @@ pub const sqlite: SQLFiles = .{
 };
 
 /// TODO: add postgres support
-pub const postgres: SQLFiles = @compileError("PostgreSQL is not implemented yet.");
+pub const postgres = .{ .repo = @compileError("PostgreSQL is not implemented yet.") };
 
 test "check if sqlfiles compiles" {
-    // std.debug.print("\nWhat does SQLFiles look like? {}\n", .{SQLFiles});
-    // std.debug.print("\nWhat does sqlite look like? {}\n", .{sqlite});
-    // std.debug.print("\nWhat does postgres look like? {}\n", .{postgres});
-
-    try std.testing.expectEqual(SQLFiles, @TypeOf(sqlite));
+    try std.testing.expectEqual(WorkTree, @TypeOf(sqlite.work_tree));
+    try std.testing.expectEqual(Repo, @TypeOf(sqlite.repo));
+    // try std.testing.expectEqual(Repo, @TypeOf(postgres.repo));
 }

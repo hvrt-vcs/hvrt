@@ -1,7 +1,7 @@
 const std = @import("std");
 const sqlite = @import("sqlite.zig");
 
-const sql = @import("sql/index.zig");
+const sql = @import("sql.zig");
 
 /// All that `main` does is retrieve args and a main allocator for the system,
 /// and pass those to `internalMain`. Afterwards, it catches any errors, deals

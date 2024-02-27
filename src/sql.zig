@@ -39,33 +39,33 @@ pub const SQLFiles = struct {
 
 pub const sqlite: SQLFiles = .{
     .repo = .{
-        .init = @embedFile("sqlite/repo/init.sql"),
+        .init = @embedFile("sql/sqlite/repo/init.sql"),
 
         .commit = .{
-            .blob = @embedFile("sqlite/repo/commit/blob.sql"),
-            .blob_chunk = @embedFile("sqlite/repo/commit/blob_chunk.sql"),
-            .chunk = @embedFile("sqlite/repo/commit/chunk.sql"),
-            .header = @embedFile("sqlite/repo/commit/header.sql"),
+            .blob = @embedFile("sql/sqlite/repo/commit/blob.sql"),
+            .blob_chunk = @embedFile("sql/sqlite/repo/commit/blob_chunk.sql"),
+            .chunk = @embedFile("sql/sqlite/repo/commit/chunk.sql"),
+            .header = @embedFile("sql/sqlite/repo/commit/header.sql"),
         },
     },
     .work_tree = .{
-        .clear = @embedFile("sqlite/work_tree/clear.sql"),
+        .clear = @embedFile("sql/sqlite/work_tree/clear.sql"),
 
-        .read_blob_chunks = @embedFile("sqlite/work_tree/read_blob_chunks.sql"),
-        .read_blobs = @embedFile("sqlite/work_tree/read_blobs.sql"),
-        .read_chunks = @embedFile("sqlite/work_tree/read_chunks.sql"),
-        .read_head_commit = @embedFile("sqlite/work_tree/read_head_commit.sql"),
+        .read_blob_chunks = @embedFile("sql/sqlite/work_tree/read_blob_chunks.sql"),
+        .read_blobs = @embedFile("sql/sqlite/work_tree/read_blobs.sql"),
+        .read_chunks = @embedFile("sql/sqlite/work_tree/read_chunks.sql"),
+        .read_head_commit = @embedFile("sql/sqlite/work_tree/read_head_commit.sql"),
 
         .add = .{
-            .blob = @embedFile("sqlite/work_tree/add/blob.sql"),
-            .blob_chunk = @embedFile("sqlite/work_tree/add/blob_chunk.sql"),
-            .file = @embedFile("sqlite/work_tree/add/file.sql"),
+            .blob = @embedFile("sql/sqlite/work_tree/add/blob.sql"),
+            .blob_chunk = @embedFile("sql/sqlite/work_tree/add/blob_chunk.sql"),
+            .file = @embedFile("sql/sqlite/work_tree/add/file.sql"),
         },
 
         .init = .{
-            .branch = @embedFile("sqlite/work_tree/init/branch.sql"),
-            .tables = @embedFile("sqlite/work_tree/init/tables.sql"),
-            .version = @embedFile("sqlite/work_tree/init/version.sql"),
+            .branch = @embedFile("sql/sqlite/work_tree/init/branch.sql"),
+            .tables = @embedFile("sql/sqlite/work_tree/init/tables.sql"),
+            .version = @embedFile("sql/sqlite/work_tree/init/version.sql"),
         },
     },
 };

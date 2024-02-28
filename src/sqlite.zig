@@ -465,7 +465,7 @@ fn errorFromResultCode(code: ResultCode) !ResultCode {
 
 /// Open and return a pointer to a sqlite database or return an error if a
 /// database pointer cannot be opened for some reason.
-pub fn open(filename: []const u8) !*DataBase {
+pub fn open(filename: [:0]const u8) !*DataBase {
     var db_optional: ?*DataBase = null;
     var rc: c_int = 0;
 

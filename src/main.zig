@@ -48,7 +48,7 @@ pub fn main() !void {
     std.process.exit(status_code);
 }
 
-test "invoke without init sub-command" {
+test "invoke with init sub-command" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
     try tmp_dir.dir.setAsCwd();

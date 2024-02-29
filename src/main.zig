@@ -48,10 +48,26 @@ pub fn main() !void {
     std.process.exit(status_code);
 }
 
+test "invoke without init sub-command" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    try tmp_dir.dir.setAsCwd();
+    defer std.fs.cwd().setAsCwd() catch unreachable;
+
+    const basic_args = [_][:0]const u8{ "test_prog_name", "init" };
+    try cmd.internalMain(&basic_args, std.testing.allocator);
+}
+
 test "invoke without args" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
+    try tmp_dir.dir.setAsCwd();
+    defer std.fs.cwd().setAsCwd() catch unreachable;
 
     const basic_args = [_][:0]const u8{"test_prog_name"};
-    try cmd.internalMain(&basic_args, std.testing.allocator);
+    cmd.internalMain(&basic_args, std.testing.allocator) catch |err| {
+        const expected_error = error.ArgumentError;
+        const actual_error_union: anyerror!void = err;
+        try std.testing.expectError(expected_error, actual_error_union);
+    };
 }

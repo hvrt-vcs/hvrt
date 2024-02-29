@@ -469,7 +469,9 @@ pub fn open(filename: [:0]const u8) !*DataBase {
     var db_optional: ?*DataBase = null;
     var rc: c_int = 0;
 
-    rc = c.sqlite3_open(filename.ptr, &db_optional);
+    const flags: c_int = c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE | c.SQLITE_OPEN_URI;
+
+    rc = c.sqlite3_open_v2(filename.ptr, &db_optional, flags, null);
     errdefer close(db_optional) catch unreachable;
     _ = try checkReturnCode(db_optional, rc);
 

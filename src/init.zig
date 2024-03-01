@@ -14,7 +14,7 @@ const version = @embedFile("embedded/VERSION.txt");
 
 /// It is the responsibility of the caller of `init` to deallocate and
 /// deinit dir_path and alloc, if necessary.
-pub fn init(dir_path: []const u8, alloc: std.mem.Allocator) !void {
+pub fn init(alloc: std.mem.Allocator, dir_path: []const u8) !void {
 
     // const path = try std.fs.path.join(alloc, .{ dir_path, ".hvrt" });
     const path_parts = [_][]const u8{ dir_path, hvrt_dirname };

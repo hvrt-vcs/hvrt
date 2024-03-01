@@ -29,7 +29,7 @@ pub fn main() !void {
         defer std.process.argsFree(allocator, args);
 
         // The only place `exit` should ever be called directly is here in the `main` function
-        cmd.internalMain(args, allocator) catch |err| {
+        cmd.internalMain(allocator, args) catch |err| {
             status_code = switch (err) {
                 sqlite.errors.SQLITE_ERROR => 3,
                 sqlite.errors.SQLITE_CANTOPEN => 4,
@@ -49,23 +49,24 @@ pub fn main() !void {
 }
 
 test "invoke with init sub-command" {
-    var tmp_dir = std.testing.tmpDir(.{});
-    defer tmp_dir.cleanup();
-    try tmp_dir.dir.setAsCwd();
-    defer std.fs.cwd().setAsCwd() catch unreachable;
+    const alloc = std.testing.allocator;
 
-    const basic_args = [_][:0]const u8{ "test_prog_name", "init" };
-    try cmd.internalMain(&basic_args, std.testing.allocator);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var tmp_path = try tmp.dir.realpathAlloc(alloc, ".");
+    defer alloc.free(tmp_path);
+
+    const tmp_pathz = try alloc.dupeZ(u8, tmp_path);
+    defer alloc.free(tmp_pathz);
+
+    const basic_args = [_][:0]const u8{ "test_prog_name", "init", tmp_pathz };
+    try cmd.internalMain(alloc, &basic_args);
 }
 
 test "invoke without args" {
-    var tmp_dir = std.testing.tmpDir(.{});
-    defer tmp_dir.cleanup();
-    try tmp_dir.dir.setAsCwd();
-    defer std.fs.cwd().setAsCwd() catch unreachable;
-
     const basic_args = [_][:0]const u8{"test_prog_name"};
-    cmd.internalMain(&basic_args, std.testing.allocator) catch |err| {
+    cmd.internalMain(std.testing.allocator, &basic_args) catch |err| {
         const expected_error = error.ArgumentError;
         const actual_error_union: anyerror!void = err;
         try std.testing.expectError(expected_error, actual_error_union);

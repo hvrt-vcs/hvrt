@@ -231,40 +231,33 @@ pub const ResultCode = enum(c_int) {
 pub const Transaction = struct {
     const Self = @This();
     const default_name = "default_savepoint_name";
+    const buf_sz = 128;
 
-    alloc: std.mem.Allocator,
     db: *DataBase,
     name: []const u8,
 
-    pub fn init(alloc: std.mem.Allocator, db: *DataBase, name: ?[]const u8) !Transaction {
-        const local_name = try alloc.dupeZ(u8, name orelse default_name);
-        errdefer alloc.free(local_name);
+    pub fn init(db: *DataBase, name: ?[]const u8) !Transaction {
+        const local_name = name orelse default_name;
+        const self = .{ .db = db, .name = local_name };
 
-        const trans_stmt = try std.fmt.allocPrintZ(alloc, "SAVEPOINT {s};", .{local_name});
-        defer alloc.free(trans_stmt);
+        var stmt_buf: [buf_sz]u8 = undefined;
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "SAVEPOINT {s};", .{self.name});
 
         try exec(db, trans_stmt);
-        return .{ .db = db, .alloc = alloc, .name = local_name };
+        return self;
+        // return .{ .db = db, .alloc = alloc, .name = local_name };
     }
 
-    pub fn commit(self: *Self) !void {
-        const trans_stmt = try std.fmt.allocPrintZ(self.alloc, "RELEASE SAVEPOINT {s};", .{self.name});
-        defer self.alloc.free(trans_stmt);
-
+    pub fn commit(self: *const Self) !void {
+        var stmt_buf: [buf_sz]u8 = undefined;
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "RELEASE SAVEPOINT {s};", .{self.name});
         try exec(self.db, trans_stmt);
-        self.deinit();
     }
 
-    pub fn rollback(self: *Self) !void {
-        const trans_stmt = try std.fmt.allocPrintZ(self.alloc, "ROLLBACK TO SAVEPOINT {s};", .{self.name});
-        defer self.alloc.free(trans_stmt);
-
+    pub fn rollback(self: *const Self) !void {
+        var stmt_buf: [buf_sz]u8 = undefined;
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "ROLLBACK TO SAVEPOINT {s};", .{self.name});
         try exec(self.db, trans_stmt);
-        self.deinit();
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.alloc.free(self.name);
     }
 };
 

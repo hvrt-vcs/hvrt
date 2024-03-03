@@ -17,12 +17,7 @@ pub fn internalMain(alloc: std.mem.Allocator, args: []const [:0]const u8) !void 
             const repo_dir = try std.process.getCwdAlloc(alloc);
             defer alloc.free(repo_dir);
 
-            var files: []const [:0]const u8 = undefined;
-            if (args.len > 2) {
-                files = args[2..];
-            } else {
-                return error.ArgumentError;
-            }
+            var files = if (args.len > 2) args[2..] else args[1..];
 
             try add.add(alloc, repo_dir, files);
             try notImplemented(sub_cmd);

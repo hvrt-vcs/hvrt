@@ -48,20 +48,54 @@ pub fn main() !void {
     std.process.exit(status_code);
 }
 
-test "invoke with init sub-command" {
-    const alloc = std.testing.allocator;
+const test_alloc = std.testing.allocator;
 
+fn test_init(tmp: *std.testing.TmpDir) !void {
+    var tmp_path = try tmp.dir.realpathAlloc(test_alloc, ".");
+    defer test_alloc.free(tmp_path);
+
+    const tmp_pathz = try test_alloc.dupeZ(u8, tmp_path);
+    defer test_alloc.free(tmp_pathz);
+
+    const basic_args = [_][:0]const u8{ "hvrt", "init", tmp_pathz };
+    try cmd.internalMain(test_alloc, &basic_args);
+}
+
+fn test_add(tmp: *std.testing.TmpDir) !void {
+    var tmp_path = try tmp.dir.realpathAlloc(test_alloc, ".");
+    defer test_alloc.free(tmp_path);
+
+    const tmp_pathz = try test_alloc.dupeZ(u8, tmp_path);
+    defer test_alloc.free(tmp_pathz);
+
+    const files = [_][:0]const u8{ "foo.txt", "bar.txt" };
+
+    for (&files) |file| {
+        std.debug.print("\nWhat is filename? {s}\n", .{file});
+
+        var fp = try tmp.dir.createFile(file, .{ .exclusive = true });
+        defer fp.close();
+
+        try fp.writer().print("The filename of this file is '{s}'.", .{file});
+    }
+
+    const basic_args = [_][:0]const u8{ "hvrt", "add", tmp_pathz, files[0], files[1] };
+    try cmd.internalMain(test_alloc, &basic_args);
+}
+
+test "invoke with init sub-command" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    var tmp_path = try tmp.dir.realpathAlloc(alloc, ".");
-    defer alloc.free(tmp_path);
+    try test_init(&tmp);
+}
 
-    const tmp_pathz = try alloc.dupeZ(u8, tmp_path);
-    defer alloc.free(tmp_pathz);
+test "invoke with add sub-command" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
 
-    const basic_args = [_][:0]const u8{ "test_prog_name", "init", tmp_pathz };
-    try cmd.internalMain(alloc, &basic_args);
+    try test_init(&tmp);
+    try test_add(&tmp);
 }
 
 test "invoke without args" {

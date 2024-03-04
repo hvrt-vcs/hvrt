@@ -14,13 +14,12 @@ pub fn internalMain(alloc: std.mem.Allocator, args: []const [:0]const u8) !void 
 
             try init.init(alloc, repo_dir);
         } else if (std.mem.eql(u8, sub_cmd, "add")) {
-            const repo_dir = try std.process.getCwdAlloc(alloc);
+            const repo_dir = if (args.len > 2) try std.fs.realpathAlloc(alloc, args[2]) else try std.process.getCwdAlloc(alloc);
             defer alloc.free(repo_dir);
 
-            var files = if (args.len > 2) args[2..] else args[1..];
+            const files = if (args.len > 3) args[3..] else args[2..];
 
             try add.add(alloc, repo_dir, files);
-            try notImplemented(sub_cmd);
         } else if (std.mem.eql(u8, sub_cmd, "commit")) {
             try notImplemented(sub_cmd);
         } else if (std.mem.eql(u8, sub_cmd, "mv")) {

@@ -21,10 +21,5 @@
 # Go workspace file
 go.work
 
-dist/
-.hvrt/
-
-# Jetbrains editors
-.idea/
-*.o
-*.so
+/dist/
+/.hvrt/

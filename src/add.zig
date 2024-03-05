@@ -31,12 +31,17 @@ pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []con
     defer sqlite.finalize(blob_stmt) catch unreachable;
 
     {
-        const tx = try sqlite.Transaction.init(db, null);
+        const tx = try sqlite.Transaction.init(db, "add_cmd");
         errdefer tx.rollback() catch |err| {
             std.debug.panic("Caught error when attempting to rollback transaction named '{s}': {any}", .{ tx.name, err });
         };
 
         for (files) |file| {
+            const file_tx = try sqlite.Transaction.init(db, "add_single_file");
+            errdefer file_tx.rollback() catch |err| {
+                std.debug.panic("Caught error when attempting to rollback transaction named '{s}': {any}", .{ tx.name, err });
+            };
+
             const file_path_parts = [_][]const u8{ abs_repo_path, file };
             const abs_path = try std.fs.path.joinZ(alloc, &file_path_parts);
             defer alloc.free(abs_path);
@@ -44,7 +49,25 @@ pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []con
             std.debug.print("\nWhat is the file name? {s}\n", .{file});
             std.debug.print("\nWhat is the absolute path? {s}\n", .{abs_path});
 
+            const f_in = try std.fs.openFileAbsolute(abs_path, .{ .lock = .shared });
+
+            var f_in_buffed = std.io.bufferedReader(f_in);
+            _ = f_in_buffed;
+
+            // TODO: use heap memory and a chunk size pulled from config
+            const big_buf = 1024;
+            var buffer: [big_buf]u8 = undefined;
+            var buf_writer = std.io.fixedBufferStream(&buffer);
+
+            var hash = std.crypto.hash.sha3.Sha3_256.init(.{});
+
+            const mwriter = std.io.multiWriter(.{ hash.writer(), buf_writer.writer() });
+            _ = mwriter;
+
             // TODO: actually add files to work tree DB
+
+            // try to commit if everything went well
+            try file_tx.commit();
         }
 
         // try to commit if everything went well

@@ -240,12 +240,15 @@ pub const Transaction = struct {
         const local_name = name orelse default_name;
         const self = .{ .db = db, .name = local_name };
 
+        // XXX: We add extra spaces at the end to ensure that if the name fails
+        // because it is too long, it will fail now (before executing anything)
+        // instead of failing later when attempting to rollback a bad
+        // statement.
         var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "SAVEPOINT {s};", .{self.name});
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "SAVEPOINT {s};            ", .{self.name});
 
         try exec(db, trans_stmt);
         return self;
-        // return .{ .db = db, .alloc = alloc, .name = local_name };
     }
 
     pub fn commit(self: *const Self) !void {

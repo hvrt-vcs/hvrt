@@ -8,6 +8,8 @@ const sql = @import("sql.zig");
 const hvrt_dirname = ".hvrt";
 const work_tree_db_name = "work_tree_state.sqlite";
 
+const default_buffer_size = 1024 * 4;
+
 /// It is the responsibility of the caller of `init` to deallocate and
 /// deinit dir_path and alloc, if necessary.
 pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []const u8) !void {
@@ -49,20 +51,28 @@ pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []con
             std.debug.print("\nWhat is the file name? {s}\n", .{file});
             std.debug.print("\nWhat is the absolute path? {s}\n", .{abs_path});
 
-            const f_in = try std.fs.openFileAbsolute(abs_path, .{ .lock = .shared });
-
-            var f_in_buffed = std.io.bufferedReader(f_in);
+            var f_in = try std.fs.openFileAbsolute(abs_path, .{ .lock = .shared });
+            var f_in_buffed = std.io.bufferedReader(f_in.reader());
             _ = f_in_buffed;
 
             // TODO: use heap memory and a chunk size pulled from config
-            const big_buf = 1024;
-            var buffer: [big_buf]u8 = undefined;
+            var buffer: [default_buffer_size]u8 = undefined;
             var buf_writer = std.io.fixedBufferStream(&buffer);
 
+            const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;
             var hash = std.crypto.hash.sha3.Sha3_256.init(.{});
 
-            const mwriter = std.io.multiWriter(.{ hash.writer(), buf_writer.writer() });
-            _ = mwriter;
+            var mwriter = std.io.multiWriter(.{ hash.writer(), buf_writer.writer() });
+
+            var fifo = std.fifo.LinearFifo(u8, .{ .Static = default_buffer_size }).init();
+
+            try fifo.pump(f_in, mwriter);
+
+            var digest_buf: [digest_length]u8 = undefined;
+            hash.final(digest_buf);
+
+            var digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
+            std.debug.print("WHat is the hash contents of {s}? {s}", .{ file, digest_hex });
 
             // TODO: actually add files to work tree DB
 

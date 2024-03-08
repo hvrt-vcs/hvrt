@@ -234,16 +234,22 @@ pub const Transaction = struct {
     const buf_sz = 128;
 
     db: *DataBase,
-    name: []const u8,
+    name: [:0]const u8,
 
-    pub fn init(db: *DataBase, name: ?[]const u8) !Transaction {
+    /// Creates an (optionally) named transaction. This does not use parameter
+    /// binding or escaping, so the name should be a valid SQLite identifier.
+    pub fn init(db: *DataBase, name: ?[:0]const u8) !Transaction {
         const local_name = name orelse default_name;
         const self = .{ .db = db, .name = local_name };
+
+        // Attempt to check if the name is a keyword.
+        const rc = c.sqlite3_keyword_check(self.name.ptr, 0);
+        _ = try errorFromResultCode(@enumFromInt(rc));
 
         // XXX: We add extra spaces at the end to ensure that if the name fails
         // because it is too long, it will fail now (before executing anything)
         // instead of failing later when attempting to rollback a bad
-        // statement.
+        // statement, or commit a good statement.
         var stmt_buf: [buf_sz]u8 = undefined;
         const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "SAVEPOINT {s};            ", .{self.name});
 

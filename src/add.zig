@@ -41,38 +41,44 @@ pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []con
         for (files) |file| {
             const file_tx = try sqlite.Transaction.init(db, "add_single_file");
             errdefer file_tx.rollback() catch |err| {
-                std.debug.panic("Caught error when attempting to rollback transaction named '{s}': {any}", .{ tx.name, err });
+                std.debug.panic("Transaction '{s}' rollback failed: {any}", .{ tx.name, err });
             };
 
             const file_path_parts = [_][]const u8{ abs_repo_path, file };
             const abs_path = try std.fs.path.joinZ(alloc, &file_path_parts);
             defer alloc.free(abs_path);
 
-            std.debug.print("\nWhat is the file name? {s}\n", .{file});
-            std.debug.print("\nWhat is the absolute path? {s}\n", .{abs_path});
+            std.debug.print("What is the file name? {s}\n", .{file});
+            std.debug.print("What is the absolute path? {s}\n", .{abs_path});
 
             var f_in = try std.fs.openFileAbsolute(abs_path, .{ .lock = .shared });
             var f_in_buffed = std.io.bufferedReader(f_in.reader());
             _ = f_in_buffed;
 
             // TODO: use heap memory and a chunk size pulled from config
-            var buffer: [default_buffer_size]u8 = undefined;
-            var buf_writer = std.io.fixedBufferStream(&buffer);
+            // var buffer: [default_buffer_size]u8 = undefined;
+            const buffer = try alloc.alloc(u8, default_buffer_size);
+            defer alloc.free(buffer);
+            var buf_writer = std.io.fixedBufferStream(buffer);
 
             const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;
             var hash = std.crypto.hash.sha3.Sha3_256.init(.{});
 
             var mwriter = std.io.multiWriter(.{ hash.writer(), buf_writer.writer() });
 
-            var fifo = std.fifo.LinearFifo(u8, .{ .Static = default_buffer_size }).init();
+            const fifo_buf = try alloc.alloc(u8, default_buffer_size);
+            defer alloc.free(fifo_buf);
 
-            try fifo.pump(f_in, mwriter);
+            var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
+
+            try fifo.pump(f_in, mwriter.writer());
 
             var digest_buf: [digest_length]u8 = undefined;
-            hash.final(digest_buf);
+            hash.final(&digest_buf);
 
             var digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
-            std.debug.print("WHat is the hash contents of {s}? {s}", .{ file, digest_hex });
+            std.debug.print("What is the contents of {s}? '{s}'\n", .{ file, buf_writer.getWritten() });
+            std.debug.print("What is the hash contents of {s}? {s}\n", .{ file, digest_hex });
 
             // TODO: actually add files to work tree DB
 

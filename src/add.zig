@@ -53,7 +53,6 @@ pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []con
 
             var f_in = try std.fs.openFileAbsolute(abs_path, .{ .lock = .shared });
             var f_in_buffed = std.io.bufferedReader(f_in.reader());
-            _ = f_in_buffed;
 
             // TODO: use heap memory and a chunk size pulled from config
             // var buffer: [default_buffer_size]u8 = undefined;
@@ -64,6 +63,11 @@ pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []con
             const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;
             var hash = std.crypto.hash.sha3.Sha3_256.init(.{});
 
+            // TODO: use LimitedReader below so that we only read the default chunk size for
+            // each chunk DB entry.
+            var lr = std.io.limitedReader(f_in_buffed.reader(), default_buffer_size);
+            _ = lr;
+
             var mwriter = std.io.multiWriter(.{ hash.writer(), buf_writer.writer() });
 
             const fifo_buf = try alloc.alloc(u8, default_buffer_size);
@@ -71,7 +75,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []con
 
             var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
 
-            try fifo.pump(f_in, mwriter.writer());
+            try fifo.pump(f_in_buffed.reader(), mwriter.writer());
 
             var digest_buf: [digest_length]u8 = undefined;
             hash.final(&digest_buf);

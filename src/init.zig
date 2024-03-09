@@ -56,18 +56,37 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     // Version
     try sqlite.bind_text(prepared_stmt1, 1, version);
 
-    rows: while (sqlite.step(prepared_stmt1)) |rc| {
+    rows1: while (sqlite.step(prepared_stmt1)) |rc| {
         std.debug.print("What is the Result code? {any}\n", .{rc});
     } else |err| {
         std.debug.print("What is the error? {any}\n", .{err});
 
         if (err != error.StopIteration) {
             // Address error, then jump back to beginning and try again
-            break :rows;
+            break :rows1;
         }
     }
 
     std.debug.print("Did we insert the version?\n", .{});
+
+    const prepared_stmt2 = try sqlite.prepare(db, sqlfiles.work_tree.init.branch);
+    defer sqlite.finalize(prepared_stmt2) catch unreachable;
+
+    // default branch
+    try sqlite.bind_text(prepared_stmt2, 1, "master");
+
+    rows2: while (sqlite.step(prepared_stmt2)) |rc| {
+        std.debug.print("What is the Result code? {any}\n", .{rc});
+    } else |err| {
+        std.debug.print("What is the error? {any}\n", .{err});
+
+        if (err != error.StopIteration) {
+            // Address error, then jump back to beginning and try again
+            break :rows2;
+        }
+    }
+
+    std.debug.print("Did we insert the default branch name?\n", .{});
     // // default branch
     // try sqlite3_bind(prepared_stmt, 2, "master");
 

@@ -10,9 +10,9 @@ const work_tree_db_name = "work_tree_state.sqlite";
 
 const default_buffer_size = 1024 * 4;
 
-/// It is the responsibility of the caller of `init` to deallocate and
-/// deinit dir_path and alloc, if necessary.
-pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []const u8) !void {
+/// It is the responsibility of the caller of `add` to deallocate and
+/// deinit alloc, repo_path, and files, if necessary.
+pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0]const u8) !void {
     const abs_repo_path = try std.fs.realpathAlloc(alloc, repo_path);
     defer alloc.free(abs_repo_path);
 

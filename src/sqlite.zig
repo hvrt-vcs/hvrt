@@ -4,12 +4,68 @@ const c = @import("c.zig");
 /// Alias opaque sqlite3 type.
 pub const DataBaseAlias = c.sqlite3;
 
+/// Alias opaque sqlite3_stmt type.
+pub const PreparedStatementAlias = c.sqlite3_stmt;
+
 pub const DataBase = struct {
     db: *c.sqlite3,
+
+    /// Open and return a sqlite database or return an error if a database
+    /// cannot be opened for some reason.
+    pub fn open(filename: [:0]const u8) !DataBase {
+        var db_optional: ?*c.sqlite3 = null;
+        var rc: c_int = 0;
+
+        const flags: c_int = c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE | c.SQLITE_OPEN_URI;
+
+        rc = c.sqlite3_open_v2(filename.ptr, &db_optional, flags, null);
+        errdefer if (db_optional) |db| DataBase.close(.{ .db = db }) catch unreachable;
+        _ = try ResultCode.fromInt(rc).check(db_optional);
+
+        // Enable extended error codes
+        rc = c.sqlite3_extended_result_codes(db_optional, 1);
+        _ = try ResultCode.fromInt(rc).check(db_optional);
+
+        if (db_optional) |db| {
+            return .{ .db = db };
+        } else {
+            std.debug.panic("SQLite did not indicate an error, but db_optional is still null when opening file: {s}\n", .{filename});
+        }
+    }
+
+    /// Close and free a sqlite database or return an error if the given database
+    /// cannot be closed for some reason.
+    pub fn close(db: DataBase) !void {
+        const rc = c.sqlite3_close(db.db);
+        _ = try ResultCode.fromInt(rc).check(db.db);
+    }
 };
 
-/// Alias opaque sqlite3_stmt type.
-pub const PreparedStatement = c.sqlite3_stmt;
+pub const Statement = struct {
+    db: DataBase,
+    stmt: *c.sqlite3_stmt,
+
+    /// Prepare a sql statement. `finalize` must eventually be called or a
+    /// resources will be leaked.
+    pub fn prepare(db: DataBase, stmt: [:0]const u8) !Statement {
+        var stmt_opt: ?*c.sqlite3_stmt = null;
+
+        const rc = c.sqlite3_prepare_v2(db.db, stmt.ptr, @intCast(stmt.len + 1), &stmt_opt, null);
+        _ = try ResultCode.fromInt(rc).check(db);
+
+        if (stmt_opt) |stmt_ptr| {
+            return .{ .stmt = stmt_ptr, .db = db };
+        } else {
+            std.debug.panic("SQLite did not indicate an error, but stmt_opt is still null: {s}\n", .{stmt});
+        }
+    }
+
+    /// Finalize (i.e. "free") a prepared sql statement
+    pub fn finalize(stmt: Statement) !void {
+        const rc = c.sqlite3_finalize(stmt.stmt);
+        _ = try ResultCode.fromInt(rc).check(stmt.db.db);
+    }
+};
 
 /// All SQLite error codes as Zig errors
 pub const errors = error{
@@ -553,8 +609,8 @@ pub fn exec(db: *DataBaseAlias, stmt: [:0]const u8) !void {
 }
 
 /// Prepare a sql statement
-pub fn prepare(db: ?*DataBaseAlias, stmt: [:0]const u8) !*PreparedStatement {
-    var stmt_opt: ?*PreparedStatement = null;
+pub fn prepare(db: ?*DataBaseAlias, stmt: [:0]const u8) !*PreparedStatementAlias {
+    var stmt_opt: ?*PreparedStatementAlias = null;
 
     const rc = c.sqlite3_prepare_v2(db, stmt.ptr, @intCast(stmt.len + 1), &stmt_opt, null);
     _ = try ResultCode.fromInt(rc).check(db);
@@ -571,7 +627,7 @@ pub fn prepare(db: ?*DataBaseAlias, stmt: [:0]const u8) !*PreparedStatement {
 /// on the type passed in. This can't stop the caller from making the mistake
 /// of binding values of the incorrect type to parameter indices. See docs here
 /// for the bind interface: https://www.sqlite.org/c3ref/bind_blob.html
-pub fn bind(stmt: *PreparedStatement, index: u16, value: anytype) !void {
+pub fn bind(stmt: *PreparedStatementAlias, index: u16, value: anytype) !void {
     const rc = switch (@TypeOf(value)) {
         @TypeOf(null) => c.sqlite3_bind_null(stmt, index),
         f16, f32, f64, comptime_float => c.sqlite3_bind_double(stmt, index, value),
@@ -596,7 +652,7 @@ pub fn bind(stmt: *PreparedStatement, index: u16, value: anytype) !void {
 }
 
 /// Return all result codes except `SQLITE_DONE`
-pub fn step(stmt: *PreparedStatement) !ResultCode {
+pub fn step(stmt: *PreparedStatementAlias) !ResultCode {
     const code = ResultCode.fromInt(c.sqlite3_step(stmt));
 
     if (code == ResultCode.SQLITE_DONE) {
@@ -609,7 +665,7 @@ pub fn step(stmt: *PreparedStatement) !ResultCode {
     }
 }
 
-pub fn bind_text(stmt: *PreparedStatement, index: u16, value: [:0]const u8) !void {
+pub fn bind_text(stmt: *PreparedStatementAlias, index: u16, value: [:0]const u8) !void {
     // Using text64 should make it so that we don't need to do any casting
     // to pass the len of the slice. Since it is null terminated, we add
     // one to the len for the null terminator. Using `c.SQLITE_TRANSIENT`
@@ -621,7 +677,7 @@ pub fn bind_text(stmt: *PreparedStatement, index: u16, value: [:0]const u8) !voi
 }
 
 /// Finalize (i.e. "free") a prepared sql statement
-pub fn finalize(stmt_opt: ?*PreparedStatement) !void {
+pub fn finalize(stmt_opt: ?*PreparedStatementAlias) !void {
     const rc = c.sqlite3_finalize(stmt_opt);
     _ = try ResultCode.fromInt(rc).check(null);
 }

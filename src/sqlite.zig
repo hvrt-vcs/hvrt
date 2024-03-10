@@ -2,7 +2,11 @@ const std = @import("std");
 const c = @import("c.zig");
 
 /// Alias opaque sqlite3 type.
-pub const DataBase = c.sqlite3;
+pub const DataBaseAlias = c.sqlite3;
+
+pub const DataBase = struct {
+    db: *c.sqlite3,
+};
 
 /// Alias opaque sqlite3_stmt type.
 pub const PreparedStatement = c.sqlite3_stmt;
@@ -226,6 +230,249 @@ pub const ResultCode = enum(c_int) {
     SQLITE_READONLY_RECOVERY = c.SQLITE_READONLY_RECOVERY,
     SQLITE_READONLY_ROLLBACK = c.SQLITE_READONLY_ROLLBACK,
     SQLITE_WARNING_AUTOINDEX = c.SQLITE_WARNING_AUTOINDEX,
+
+    pub fn check(code: ResultCode, db_optional: ?*DataBaseAlias) !ResultCode {
+        return code.toError() catch |err| {
+            // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
+            std.debug.print("SQLite returned code '{s}' ({d}) with message: '{s}'\n", .{ @errorName(err), code.toInt(), c.sqlite3_errstr(code.toInt()) });
+            if (db_optional) |db| {
+                std.debug.print("SQLite message for non-null DB pointer: '{s}'\n", .{c.sqlite3_errmsg(db)});
+            }
+
+            return err;
+        };
+    }
+
+    pub fn fromInt(int: anytype) ResultCode {
+        return @enumFromInt(int);
+    }
+
+    pub fn toInt(code: ResultCode) c_int {
+        return @intFromEnum(code);
+    }
+
+    pub fn fromError(err: @TypeOf(errors.SQLITE_ERROR)) ResultCode {
+        return switch (err) {
+            // Primary codes
+            errors.SQLITE_ABORT => ResultCode.SQLITE_ABORT,
+            errors.SQLITE_AUTH => ResultCode.SQLITE_AUTH,
+            errors.SQLITE_BUSY => ResultCode.SQLITE_BUSY,
+            errors.SQLITE_CANTOPEN => ResultCode.SQLITE_CANTOPEN,
+            errors.SQLITE_CONSTRAINT => ResultCode.SQLITE_CONSTRAINT,
+            errors.SQLITE_CORRUPT => ResultCode.SQLITE_CORRUPT,
+            errors.SQLITE_EMPTY => ResultCode.SQLITE_EMPTY,
+            errors.SQLITE_ERROR => ResultCode.SQLITE_ERROR,
+            errors.SQLITE_FORMAT => ResultCode.SQLITE_FORMAT,
+            errors.SQLITE_FULL => ResultCode.SQLITE_FULL,
+            errors.SQLITE_INTERNAL => ResultCode.SQLITE_INTERNAL,
+            errors.SQLITE_INTERRUPT => ResultCode.SQLITE_INTERRUPT,
+            errors.SQLITE_IOERR => ResultCode.SQLITE_IOERR,
+            errors.SQLITE_LOCKED => ResultCode.SQLITE_LOCKED,
+            errors.SQLITE_MISMATCH => ResultCode.SQLITE_MISMATCH,
+            errors.SQLITE_MISUSE => ResultCode.SQLITE_MISUSE,
+            errors.SQLITE_NOLFS => ResultCode.SQLITE_NOLFS,
+            errors.SQLITE_NOMEM => ResultCode.SQLITE_NOMEM,
+            errors.SQLITE_NOTADB => ResultCode.SQLITE_NOTADB,
+            errors.SQLITE_NOTFOUND => ResultCode.SQLITE_NOTFOUND,
+            errors.SQLITE_NOTICE => ResultCode.SQLITE_NOTICE,
+            errors.SQLITE_PERM => ResultCode.SQLITE_PERM,
+            errors.SQLITE_PROTOCOL => ResultCode.SQLITE_PROTOCOL,
+            errors.SQLITE_RANGE => ResultCode.SQLITE_RANGE,
+            errors.SQLITE_READONLY => ResultCode.SQLITE_READONLY,
+            errors.SQLITE_SCHEMA => ResultCode.SQLITE_SCHEMA,
+            errors.SQLITE_TOOBIG => ResultCode.SQLITE_TOOBIG,
+            errors.SQLITE_WARNING => ResultCode.SQLITE_WARNING,
+
+            // Extended codes
+            errors.SQLITE_ABORT_ROLLBACK => ResultCode.SQLITE_ABORT_ROLLBACK,
+            errors.SQLITE_AUTH_USER => ResultCode.SQLITE_AUTH_USER,
+            errors.SQLITE_BUSY_RECOVERY => ResultCode.SQLITE_BUSY_RECOVERY,
+            errors.SQLITE_BUSY_SNAPSHOT => ResultCode.SQLITE_BUSY_SNAPSHOT,
+            errors.SQLITE_BUSY_TIMEOUT => ResultCode.SQLITE_BUSY_TIMEOUT,
+            errors.SQLITE_CANTOPEN_CONVPATH => ResultCode.SQLITE_CANTOPEN_CONVPATH,
+            errors.SQLITE_CANTOPEN_DIRTYWAL => ResultCode.SQLITE_CANTOPEN_DIRTYWAL,
+            errors.SQLITE_CANTOPEN_FULLPATH => ResultCode.SQLITE_CANTOPEN_FULLPATH,
+            errors.SQLITE_CANTOPEN_ISDIR => ResultCode.SQLITE_CANTOPEN_ISDIR,
+            errors.SQLITE_CANTOPEN_NOTEMPDIR => ResultCode.SQLITE_CANTOPEN_NOTEMPDIR,
+            errors.SQLITE_CANTOPEN_SYMLINK => ResultCode.SQLITE_CANTOPEN_SYMLINK,
+            errors.SQLITE_CONSTRAINT_CHECK => ResultCode.SQLITE_CONSTRAINT_CHECK,
+            errors.SQLITE_CONSTRAINT_COMMITHOOK => ResultCode.SQLITE_CONSTRAINT_COMMITHOOK,
+            errors.SQLITE_CONSTRAINT_DATATYPE => ResultCode.SQLITE_CONSTRAINT_DATATYPE,
+            errors.SQLITE_CONSTRAINT_FOREIGNKEY => ResultCode.SQLITE_CONSTRAINT_FOREIGNKEY,
+            errors.SQLITE_CONSTRAINT_FUNCTION => ResultCode.SQLITE_CONSTRAINT_FUNCTION,
+            errors.SQLITE_CONSTRAINT_NOTNULL => ResultCode.SQLITE_CONSTRAINT_NOTNULL,
+            errors.SQLITE_CONSTRAINT_PINNED => ResultCode.SQLITE_CONSTRAINT_PINNED,
+            errors.SQLITE_CONSTRAINT_PRIMARYKEY => ResultCode.SQLITE_CONSTRAINT_PRIMARYKEY,
+            errors.SQLITE_CONSTRAINT_ROWID => ResultCode.SQLITE_CONSTRAINT_ROWID,
+            errors.SQLITE_CONSTRAINT_TRIGGER => ResultCode.SQLITE_CONSTRAINT_TRIGGER,
+            errors.SQLITE_CONSTRAINT_UNIQUE => ResultCode.SQLITE_CONSTRAINT_UNIQUE,
+            errors.SQLITE_CONSTRAINT_VTAB => ResultCode.SQLITE_CONSTRAINT_VTAB,
+            errors.SQLITE_CORRUPT_INDEX => ResultCode.SQLITE_CORRUPT_INDEX,
+            errors.SQLITE_CORRUPT_SEQUENCE => ResultCode.SQLITE_CORRUPT_SEQUENCE,
+            errors.SQLITE_CORRUPT_VTAB => ResultCode.SQLITE_CORRUPT_VTAB,
+            errors.SQLITE_ERROR_MISSING_COLLSEQ => ResultCode.SQLITE_ERROR_MISSING_COLLSEQ,
+            errors.SQLITE_ERROR_RETRY => ResultCode.SQLITE_ERROR_RETRY,
+            errors.SQLITE_ERROR_SNAPSHOT => ResultCode.SQLITE_ERROR_SNAPSHOT,
+            errors.SQLITE_IOERR_ACCESS => ResultCode.SQLITE_IOERR_ACCESS,
+            errors.SQLITE_IOERR_AUTH => ResultCode.SQLITE_IOERR_AUTH,
+            errors.SQLITE_IOERR_BEGIN_ATOMIC => ResultCode.SQLITE_IOERR_BEGIN_ATOMIC,
+            errors.SQLITE_IOERR_BLOCKED => ResultCode.SQLITE_IOERR_BLOCKED,
+            errors.SQLITE_IOERR_CHECKRESERVEDLOCK => ResultCode.SQLITE_IOERR_CHECKRESERVEDLOCK,
+            errors.SQLITE_IOERR_CLOSE => ResultCode.SQLITE_IOERR_CLOSE,
+            errors.SQLITE_IOERR_COMMIT_ATOMIC => ResultCode.SQLITE_IOERR_COMMIT_ATOMIC,
+            errors.SQLITE_IOERR_CONVPATH => ResultCode.SQLITE_IOERR_CONVPATH,
+            errors.SQLITE_IOERR_CORRUPTFS => ResultCode.SQLITE_IOERR_CORRUPTFS,
+            errors.SQLITE_IOERR_DATA => ResultCode.SQLITE_IOERR_DATA,
+            errors.SQLITE_IOERR_DELETE => ResultCode.SQLITE_IOERR_DELETE,
+            errors.SQLITE_IOERR_DELETE_NOENT => ResultCode.SQLITE_IOERR_DELETE_NOENT,
+            errors.SQLITE_IOERR_DIR_CLOSE => ResultCode.SQLITE_IOERR_DIR_CLOSE,
+            errors.SQLITE_IOERR_DIR_FSYNC => ResultCode.SQLITE_IOERR_DIR_FSYNC,
+            errors.SQLITE_IOERR_FSTAT => ResultCode.SQLITE_IOERR_FSTAT,
+            errors.SQLITE_IOERR_FSYNC => ResultCode.SQLITE_IOERR_FSYNC,
+            errors.SQLITE_IOERR_GETTEMPPATH => ResultCode.SQLITE_IOERR_GETTEMPPATH,
+            errors.SQLITE_IOERR_LOCK => ResultCode.SQLITE_IOERR_LOCK,
+            errors.SQLITE_IOERR_MMAP => ResultCode.SQLITE_IOERR_MMAP,
+            errors.SQLITE_IOERR_NOMEM => ResultCode.SQLITE_IOERR_NOMEM,
+            errors.SQLITE_IOERR_RDLOCK => ResultCode.SQLITE_IOERR_RDLOCK,
+            errors.SQLITE_IOERR_READ => ResultCode.SQLITE_IOERR_READ,
+            errors.SQLITE_IOERR_ROLLBACK_ATOMIC => ResultCode.SQLITE_IOERR_ROLLBACK_ATOMIC,
+            errors.SQLITE_IOERR_SEEK => ResultCode.SQLITE_IOERR_SEEK,
+            errors.SQLITE_IOERR_SHMLOCK => ResultCode.SQLITE_IOERR_SHMLOCK,
+            errors.SQLITE_IOERR_SHMMAP => ResultCode.SQLITE_IOERR_SHMMAP,
+            errors.SQLITE_IOERR_SHMOPEN => ResultCode.SQLITE_IOERR_SHMOPEN,
+            errors.SQLITE_IOERR_SHMSIZE => ResultCode.SQLITE_IOERR_SHMSIZE,
+            errors.SQLITE_IOERR_SHORT_READ => ResultCode.SQLITE_IOERR_SHORT_READ,
+            errors.SQLITE_IOERR_TRUNCATE => ResultCode.SQLITE_IOERR_TRUNCATE,
+            errors.SQLITE_IOERR_UNLOCK => ResultCode.SQLITE_IOERR_UNLOCK,
+            errors.SQLITE_IOERR_VNODE => ResultCode.SQLITE_IOERR_VNODE,
+            errors.SQLITE_IOERR_WRITE => ResultCode.SQLITE_IOERR_WRITE,
+            errors.SQLITE_LOCKED_SHAREDCACHE => ResultCode.SQLITE_LOCKED_SHAREDCACHE,
+            errors.SQLITE_LOCKED_VTAB => ResultCode.SQLITE_LOCKED_VTAB,
+            errors.SQLITE_NOTICE_RECOVER_ROLLBACK => ResultCode.SQLITE_NOTICE_RECOVER_ROLLBACK,
+            errors.SQLITE_NOTICE_RECOVER_WAL => ResultCode.SQLITE_NOTICE_RECOVER_WAL,
+            errors.SQLITE_OK_LOAD_PERMANENTLY => ResultCode.SQLITE_OK_LOAD_PERMANENTLY,
+            errors.SQLITE_READONLY_CANTINIT => ResultCode.SQLITE_READONLY_CANTINIT,
+            errors.SQLITE_READONLY_CANTLOCK => ResultCode.SQLITE_READONLY_CANTLOCK,
+            errors.SQLITE_READONLY_DBMOVED => ResultCode.SQLITE_READONLY_DBMOVED,
+            errors.SQLITE_READONLY_DIRECTORY => ResultCode.SQLITE_READONLY_DIRECTORY,
+            errors.SQLITE_READONLY_RECOVERY => ResultCode.SQLITE_READONLY_RECOVERY,
+            errors.SQLITE_READONLY_ROLLBACK => ResultCode.SQLITE_READONLY_ROLLBACK,
+            errors.SQLITE_WARNING_AUTOINDEX => ResultCode.SQLITE_WARNING_AUTOINDEX,
+        };
+    }
+
+    pub fn toError(code: ResultCode) !ResultCode {
+        return switch (code) {
+            // non-error result codes
+            ResultCode.SQLITE_OK, ResultCode.SQLITE_DONE, ResultCode.SQLITE_ROW => code,
+
+            // Primary codes
+            ResultCode.SQLITE_ABORT => errors.SQLITE_ABORT,
+            ResultCode.SQLITE_AUTH => errors.SQLITE_AUTH,
+            ResultCode.SQLITE_BUSY => errors.SQLITE_BUSY,
+            ResultCode.SQLITE_CANTOPEN => errors.SQLITE_CANTOPEN,
+            ResultCode.SQLITE_CONSTRAINT => errors.SQLITE_CONSTRAINT,
+            ResultCode.SQLITE_CORRUPT => errors.SQLITE_CORRUPT,
+            ResultCode.SQLITE_EMPTY => errors.SQLITE_EMPTY,
+            ResultCode.SQLITE_ERROR => errors.SQLITE_ERROR,
+            ResultCode.SQLITE_FORMAT => errors.SQLITE_FORMAT,
+            ResultCode.SQLITE_FULL => errors.SQLITE_FULL,
+            ResultCode.SQLITE_INTERNAL => errors.SQLITE_INTERNAL,
+            ResultCode.SQLITE_INTERRUPT => errors.SQLITE_INTERRUPT,
+            ResultCode.SQLITE_IOERR => errors.SQLITE_IOERR,
+            ResultCode.SQLITE_LOCKED => errors.SQLITE_LOCKED,
+            ResultCode.SQLITE_MISMATCH => errors.SQLITE_MISMATCH,
+            ResultCode.SQLITE_MISUSE => errors.SQLITE_MISUSE,
+            ResultCode.SQLITE_NOLFS => errors.SQLITE_NOLFS,
+            ResultCode.SQLITE_NOMEM => errors.SQLITE_NOMEM,
+            ResultCode.SQLITE_NOTADB => errors.SQLITE_NOTADB,
+            ResultCode.SQLITE_NOTFOUND => errors.SQLITE_NOTFOUND,
+            ResultCode.SQLITE_NOTICE => errors.SQLITE_NOTICE,
+            ResultCode.SQLITE_PERM => errors.SQLITE_PERM,
+            ResultCode.SQLITE_PROTOCOL => errors.SQLITE_PROTOCOL,
+            ResultCode.SQLITE_RANGE => errors.SQLITE_RANGE,
+            ResultCode.SQLITE_READONLY => errors.SQLITE_READONLY,
+            ResultCode.SQLITE_SCHEMA => errors.SQLITE_SCHEMA,
+            ResultCode.SQLITE_TOOBIG => errors.SQLITE_TOOBIG,
+            ResultCode.SQLITE_WARNING => errors.SQLITE_WARNING,
+
+            // Extended codes
+            ResultCode.SQLITE_ABORT_ROLLBACK => errors.SQLITE_ABORT_ROLLBACK,
+            ResultCode.SQLITE_AUTH_USER => errors.SQLITE_AUTH_USER,
+            ResultCode.SQLITE_BUSY_RECOVERY => errors.SQLITE_BUSY_RECOVERY,
+            ResultCode.SQLITE_BUSY_SNAPSHOT => errors.SQLITE_BUSY_SNAPSHOT,
+            ResultCode.SQLITE_BUSY_TIMEOUT => errors.SQLITE_BUSY_TIMEOUT,
+            ResultCode.SQLITE_CANTOPEN_CONVPATH => errors.SQLITE_CANTOPEN_CONVPATH,
+            ResultCode.SQLITE_CANTOPEN_DIRTYWAL => errors.SQLITE_CANTOPEN_DIRTYWAL,
+            ResultCode.SQLITE_CANTOPEN_FULLPATH => errors.SQLITE_CANTOPEN_FULLPATH,
+            ResultCode.SQLITE_CANTOPEN_ISDIR => errors.SQLITE_CANTOPEN_ISDIR,
+            ResultCode.SQLITE_CANTOPEN_NOTEMPDIR => errors.SQLITE_CANTOPEN_NOTEMPDIR,
+            ResultCode.SQLITE_CANTOPEN_SYMLINK => errors.SQLITE_CANTOPEN_SYMLINK,
+            ResultCode.SQLITE_CONSTRAINT_CHECK => errors.SQLITE_CONSTRAINT_CHECK,
+            ResultCode.SQLITE_CONSTRAINT_COMMITHOOK => errors.SQLITE_CONSTRAINT_COMMITHOOK,
+            ResultCode.SQLITE_CONSTRAINT_DATATYPE => errors.SQLITE_CONSTRAINT_DATATYPE,
+            ResultCode.SQLITE_CONSTRAINT_FOREIGNKEY => errors.SQLITE_CONSTRAINT_FOREIGNKEY,
+            ResultCode.SQLITE_CONSTRAINT_FUNCTION => errors.SQLITE_CONSTRAINT_FUNCTION,
+            ResultCode.SQLITE_CONSTRAINT_NOTNULL => errors.SQLITE_CONSTRAINT_NOTNULL,
+            ResultCode.SQLITE_CONSTRAINT_PINNED => errors.SQLITE_CONSTRAINT_PINNED,
+            ResultCode.SQLITE_CONSTRAINT_PRIMARYKEY => errors.SQLITE_CONSTRAINT_PRIMARYKEY,
+            ResultCode.SQLITE_CONSTRAINT_ROWID => errors.SQLITE_CONSTRAINT_ROWID,
+            ResultCode.SQLITE_CONSTRAINT_TRIGGER => errors.SQLITE_CONSTRAINT_TRIGGER,
+            ResultCode.SQLITE_CONSTRAINT_UNIQUE => errors.SQLITE_CONSTRAINT_UNIQUE,
+            ResultCode.SQLITE_CONSTRAINT_VTAB => errors.SQLITE_CONSTRAINT_VTAB,
+            ResultCode.SQLITE_CORRUPT_INDEX => errors.SQLITE_CORRUPT_INDEX,
+            ResultCode.SQLITE_CORRUPT_SEQUENCE => errors.SQLITE_CORRUPT_SEQUENCE,
+            ResultCode.SQLITE_CORRUPT_VTAB => errors.SQLITE_CORRUPT_VTAB,
+            ResultCode.SQLITE_ERROR_MISSING_COLLSEQ => error.SQLITE_ERROR_MISSING_COLLSEQ,
+            ResultCode.SQLITE_ERROR_RETRY => error.SQLITE_ERROR_RETRY,
+            ResultCode.SQLITE_ERROR_SNAPSHOT => error.SQLITE_ERROR_SNAPSHOT,
+            ResultCode.SQLITE_IOERR_ACCESS => errors.SQLITE_IOERR_ACCESS,
+            ResultCode.SQLITE_IOERR_AUTH => errors.SQLITE_IOERR_AUTH,
+            ResultCode.SQLITE_IOERR_BEGIN_ATOMIC => errors.SQLITE_IOERR_BEGIN_ATOMIC,
+            ResultCode.SQLITE_IOERR_BLOCKED => errors.SQLITE_IOERR_BLOCKED,
+            ResultCode.SQLITE_IOERR_CHECKRESERVEDLOCK => errors.SQLITE_IOERR_CHECKRESERVEDLOCK,
+            ResultCode.SQLITE_IOERR_CLOSE => errors.SQLITE_IOERR_CLOSE,
+            ResultCode.SQLITE_IOERR_COMMIT_ATOMIC => errors.SQLITE_IOERR_COMMIT_ATOMIC,
+            ResultCode.SQLITE_IOERR_CONVPATH => errors.SQLITE_IOERR_CONVPATH,
+            ResultCode.SQLITE_IOERR_CORRUPTFS => errors.SQLITE_IOERR_CORRUPTFS,
+            ResultCode.SQLITE_IOERR_DATA => errors.SQLITE_IOERR_DATA,
+            ResultCode.SQLITE_IOERR_DELETE => errors.SQLITE_IOERR_DELETE,
+            ResultCode.SQLITE_IOERR_DELETE_NOENT => errors.SQLITE_IOERR_DELETE_NOENT,
+            ResultCode.SQLITE_IOERR_DIR_CLOSE => errors.SQLITE_IOERR_DIR_CLOSE,
+            ResultCode.SQLITE_IOERR_DIR_FSYNC => errors.SQLITE_IOERR_DIR_FSYNC,
+            ResultCode.SQLITE_IOERR_FSTAT => errors.SQLITE_IOERR_FSTAT,
+            ResultCode.SQLITE_IOERR_FSYNC => errors.SQLITE_IOERR_FSYNC,
+            ResultCode.SQLITE_IOERR_GETTEMPPATH => errors.SQLITE_IOERR_GETTEMPPATH,
+            ResultCode.SQLITE_IOERR_LOCK => errors.SQLITE_IOERR_LOCK,
+            ResultCode.SQLITE_IOERR_MMAP => errors.SQLITE_IOERR_MMAP,
+            ResultCode.SQLITE_IOERR_NOMEM => errors.SQLITE_IOERR_NOMEM,
+            ResultCode.SQLITE_IOERR_RDLOCK => errors.SQLITE_IOERR_RDLOCK,
+            ResultCode.SQLITE_IOERR_READ => errors.SQLITE_IOERR_READ,
+            ResultCode.SQLITE_IOERR_ROLLBACK_ATOMIC => errors.SQLITE_IOERR_ROLLBACK_ATOMIC,
+            ResultCode.SQLITE_IOERR_SEEK => errors.SQLITE_IOERR_SEEK,
+            ResultCode.SQLITE_IOERR_SHMLOCK => errors.SQLITE_IOERR_SHMLOCK,
+            ResultCode.SQLITE_IOERR_SHMMAP => errors.SQLITE_IOERR_SHMMAP,
+            ResultCode.SQLITE_IOERR_SHMOPEN => errors.SQLITE_IOERR_SHMOPEN,
+            ResultCode.SQLITE_IOERR_SHMSIZE => errors.SQLITE_IOERR_SHMSIZE,
+            ResultCode.SQLITE_IOERR_SHORT_READ => errors.SQLITE_IOERR_SHORT_READ,
+            ResultCode.SQLITE_IOERR_TRUNCATE => errors.SQLITE_IOERR_TRUNCATE,
+            ResultCode.SQLITE_IOERR_UNLOCK => errors.SQLITE_IOERR_UNLOCK,
+            ResultCode.SQLITE_IOERR_VNODE => errors.SQLITE_IOERR_VNODE,
+            ResultCode.SQLITE_IOERR_WRITE => errors.SQLITE_IOERR_WRITE,
+            ResultCode.SQLITE_LOCKED_SHAREDCACHE => errors.SQLITE_LOCKED_SHAREDCACHE,
+            ResultCode.SQLITE_LOCKED_VTAB => errors.SQLITE_LOCKED_VTAB,
+            ResultCode.SQLITE_NOTICE_RECOVER_ROLLBACK => errors.SQLITE_NOTICE_RECOVER_ROLLBACK,
+            ResultCode.SQLITE_NOTICE_RECOVER_WAL => errors.SQLITE_NOTICE_RECOVER_WAL,
+            ResultCode.SQLITE_OK_LOAD_PERMANENTLY => errors.SQLITE_OK_LOAD_PERMANENTLY,
+            ResultCode.SQLITE_READONLY_CANTINIT => errors.SQLITE_READONLY_CANTINIT,
+            ResultCode.SQLITE_READONLY_CANTLOCK => errors.SQLITE_READONLY_CANTLOCK,
+            ResultCode.SQLITE_READONLY_DBMOVED => errors.SQLITE_READONLY_DBMOVED,
+            ResultCode.SQLITE_READONLY_DIRECTORY => errors.SQLITE_READONLY_DIRECTORY,
+            ResultCode.SQLITE_READONLY_RECOVERY => errors.SQLITE_READONLY_RECOVERY,
+            ResultCode.SQLITE_READONLY_ROLLBACK => errors.SQLITE_READONLY_ROLLBACK,
+            ResultCode.SQLITE_WARNING_AUTOINDEX => errors.SQLITE_WARNING_AUTOINDEX,
+        };
+    }
 };
 
 pub const Transaction = struct {
@@ -233,18 +480,18 @@ pub const Transaction = struct {
     const default_name = "default_savepoint_name";
     const buf_sz = 128;
 
-    db: *DataBase,
+    db: *DataBaseAlias,
     name: [:0]const u8,
 
     /// Creates an (optionally) named transaction. This does not use parameter
     /// binding or escaping, so the name should be a valid SQLite identifier.
-    pub fn init(db: *DataBase, name: ?[:0]const u8) !Transaction {
+    pub fn init(db: *DataBaseAlias, name: ?[:0]const u8) !Transaction {
         const local_name = name orelse default_name;
         const self = .{ .db = db, .name = local_name };
 
         // Attempt to check if the name is a keyword.
         const rc = c.sqlite3_keyword_check(self.name.ptr, 0);
-        _ = try errorFromResultCode(@enumFromInt(rc));
+        _ = try ResultCode.fromInt(rc).check(db);
 
         // XXX: We add extra spaces at the end to ensure that if the name fails
         // because it is too long, it will fail now (before executing anything)
@@ -270,283 +517,47 @@ pub const Transaction = struct {
     }
 };
 
-fn checkReturnCode(db_optional: ?*DataBase, code: c_int) !ResultCode {
-    return errorFromResultCode(@enumFromInt(code)) catch |err| {
-        // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
-        std.debug.print("SQLite returned code '{s}' ({d}) with message: '{s}'\n", .{ @errorName(err), code, c.sqlite3_errstr(code) });
-        if (db_optional) |db| {
-            std.debug.print("SQLite message for non-null DB pointer: '{s}'\n", .{c.sqlite3_errmsg(db)});
-        }
-
-        return err;
-    };
-}
-
-fn resultCodeFromError(err: @TypeOf(errors.SQLITE_ERROR)) ResultCode {
-    return switch (err) {
-        // Primary codes
-        errors.SQLITE_ABORT => ResultCode.SQLITE_ABORT,
-        errors.SQLITE_AUTH => ResultCode.SQLITE_AUTH,
-        errors.SQLITE_BUSY => ResultCode.SQLITE_BUSY,
-        errors.SQLITE_CANTOPEN => ResultCode.SQLITE_CANTOPEN,
-        errors.SQLITE_CONSTRAINT => ResultCode.SQLITE_CONSTRAINT,
-        errors.SQLITE_CORRUPT => ResultCode.SQLITE_CORRUPT,
-        errors.SQLITE_EMPTY => ResultCode.SQLITE_EMPTY,
-        errors.SQLITE_ERROR => ResultCode.SQLITE_ERROR,
-        errors.SQLITE_FORMAT => ResultCode.SQLITE_FORMAT,
-        errors.SQLITE_FULL => ResultCode.SQLITE_FULL,
-        errors.SQLITE_INTERNAL => ResultCode.SQLITE_INTERNAL,
-        errors.SQLITE_INTERRUPT => ResultCode.SQLITE_INTERRUPT,
-        errors.SQLITE_IOERR => ResultCode.SQLITE_IOERR,
-        errors.SQLITE_LOCKED => ResultCode.SQLITE_LOCKED,
-        errors.SQLITE_MISMATCH => ResultCode.SQLITE_MISMATCH,
-        errors.SQLITE_MISUSE => ResultCode.SQLITE_MISUSE,
-        errors.SQLITE_NOLFS => ResultCode.SQLITE_NOLFS,
-        errors.SQLITE_NOMEM => ResultCode.SQLITE_NOMEM,
-        errors.SQLITE_NOTADB => ResultCode.SQLITE_NOTADB,
-        errors.SQLITE_NOTFOUND => ResultCode.SQLITE_NOTFOUND,
-        errors.SQLITE_NOTICE => ResultCode.SQLITE_NOTICE,
-        errors.SQLITE_PERM => ResultCode.SQLITE_PERM,
-        errors.SQLITE_PROTOCOL => ResultCode.SQLITE_PROTOCOL,
-        errors.SQLITE_RANGE => ResultCode.SQLITE_RANGE,
-        errors.SQLITE_READONLY => ResultCode.SQLITE_READONLY,
-        errors.SQLITE_SCHEMA => ResultCode.SQLITE_SCHEMA,
-        errors.SQLITE_TOOBIG => ResultCode.SQLITE_TOOBIG,
-        errors.SQLITE_WARNING => ResultCode.SQLITE_WARNING,
-
-        // Extended codes
-        errors.SQLITE_ABORT_ROLLBACK => ResultCode.SQLITE_ABORT_ROLLBACK,
-        errors.SQLITE_AUTH_USER => ResultCode.SQLITE_AUTH_USER,
-        errors.SQLITE_BUSY_RECOVERY => ResultCode.SQLITE_BUSY_RECOVERY,
-        errors.SQLITE_BUSY_SNAPSHOT => ResultCode.SQLITE_BUSY_SNAPSHOT,
-        errors.SQLITE_BUSY_TIMEOUT => ResultCode.SQLITE_BUSY_TIMEOUT,
-        errors.SQLITE_CANTOPEN_CONVPATH => ResultCode.SQLITE_CANTOPEN_CONVPATH,
-        errors.SQLITE_CANTOPEN_DIRTYWAL => ResultCode.SQLITE_CANTOPEN_DIRTYWAL,
-        errors.SQLITE_CANTOPEN_FULLPATH => ResultCode.SQLITE_CANTOPEN_FULLPATH,
-        errors.SQLITE_CANTOPEN_ISDIR => ResultCode.SQLITE_CANTOPEN_ISDIR,
-        errors.SQLITE_CANTOPEN_NOTEMPDIR => ResultCode.SQLITE_CANTOPEN_NOTEMPDIR,
-        errors.SQLITE_CANTOPEN_SYMLINK => ResultCode.SQLITE_CANTOPEN_SYMLINK,
-        errors.SQLITE_CONSTRAINT_CHECK => ResultCode.SQLITE_CONSTRAINT_CHECK,
-        errors.SQLITE_CONSTRAINT_COMMITHOOK => ResultCode.SQLITE_CONSTRAINT_COMMITHOOK,
-        errors.SQLITE_CONSTRAINT_DATATYPE => ResultCode.SQLITE_CONSTRAINT_DATATYPE,
-        errors.SQLITE_CONSTRAINT_FOREIGNKEY => ResultCode.SQLITE_CONSTRAINT_FOREIGNKEY,
-        errors.SQLITE_CONSTRAINT_FUNCTION => ResultCode.SQLITE_CONSTRAINT_FUNCTION,
-        errors.SQLITE_CONSTRAINT_NOTNULL => ResultCode.SQLITE_CONSTRAINT_NOTNULL,
-        errors.SQLITE_CONSTRAINT_PINNED => ResultCode.SQLITE_CONSTRAINT_PINNED,
-        errors.SQLITE_CONSTRAINT_PRIMARYKEY => ResultCode.SQLITE_CONSTRAINT_PRIMARYKEY,
-        errors.SQLITE_CONSTRAINT_ROWID => ResultCode.SQLITE_CONSTRAINT_ROWID,
-        errors.SQLITE_CONSTRAINT_TRIGGER => ResultCode.SQLITE_CONSTRAINT_TRIGGER,
-        errors.SQLITE_CONSTRAINT_UNIQUE => ResultCode.SQLITE_CONSTRAINT_UNIQUE,
-        errors.SQLITE_CONSTRAINT_VTAB => ResultCode.SQLITE_CONSTRAINT_VTAB,
-        errors.SQLITE_CORRUPT_INDEX => ResultCode.SQLITE_CORRUPT_INDEX,
-        errors.SQLITE_CORRUPT_SEQUENCE => ResultCode.SQLITE_CORRUPT_SEQUENCE,
-        errors.SQLITE_CORRUPT_VTAB => ResultCode.SQLITE_CORRUPT_VTAB,
-        errors.SQLITE_ERROR_MISSING_COLLSEQ => ResultCode.SQLITE_ERROR_MISSING_COLLSEQ,
-        errors.SQLITE_ERROR_RETRY => ResultCode.SQLITE_ERROR_RETRY,
-        errors.SQLITE_ERROR_SNAPSHOT => ResultCode.SQLITE_ERROR_SNAPSHOT,
-        errors.SQLITE_IOERR_ACCESS => ResultCode.SQLITE_IOERR_ACCESS,
-        errors.SQLITE_IOERR_AUTH => ResultCode.SQLITE_IOERR_AUTH,
-        errors.SQLITE_IOERR_BEGIN_ATOMIC => ResultCode.SQLITE_IOERR_BEGIN_ATOMIC,
-        errors.SQLITE_IOERR_BLOCKED => ResultCode.SQLITE_IOERR_BLOCKED,
-        errors.SQLITE_IOERR_CHECKRESERVEDLOCK => ResultCode.SQLITE_IOERR_CHECKRESERVEDLOCK,
-        errors.SQLITE_IOERR_CLOSE => ResultCode.SQLITE_IOERR_CLOSE,
-        errors.SQLITE_IOERR_COMMIT_ATOMIC => ResultCode.SQLITE_IOERR_COMMIT_ATOMIC,
-        errors.SQLITE_IOERR_CONVPATH => ResultCode.SQLITE_IOERR_CONVPATH,
-        errors.SQLITE_IOERR_CORRUPTFS => ResultCode.SQLITE_IOERR_CORRUPTFS,
-        errors.SQLITE_IOERR_DATA => ResultCode.SQLITE_IOERR_DATA,
-        errors.SQLITE_IOERR_DELETE => ResultCode.SQLITE_IOERR_DELETE,
-        errors.SQLITE_IOERR_DELETE_NOENT => ResultCode.SQLITE_IOERR_DELETE_NOENT,
-        errors.SQLITE_IOERR_DIR_CLOSE => ResultCode.SQLITE_IOERR_DIR_CLOSE,
-        errors.SQLITE_IOERR_DIR_FSYNC => ResultCode.SQLITE_IOERR_DIR_FSYNC,
-        errors.SQLITE_IOERR_FSTAT => ResultCode.SQLITE_IOERR_FSTAT,
-        errors.SQLITE_IOERR_FSYNC => ResultCode.SQLITE_IOERR_FSYNC,
-        errors.SQLITE_IOERR_GETTEMPPATH => ResultCode.SQLITE_IOERR_GETTEMPPATH,
-        errors.SQLITE_IOERR_LOCK => ResultCode.SQLITE_IOERR_LOCK,
-        errors.SQLITE_IOERR_MMAP => ResultCode.SQLITE_IOERR_MMAP,
-        errors.SQLITE_IOERR_NOMEM => ResultCode.SQLITE_IOERR_NOMEM,
-        errors.SQLITE_IOERR_RDLOCK => ResultCode.SQLITE_IOERR_RDLOCK,
-        errors.SQLITE_IOERR_READ => ResultCode.SQLITE_IOERR_READ,
-        errors.SQLITE_IOERR_ROLLBACK_ATOMIC => ResultCode.SQLITE_IOERR_ROLLBACK_ATOMIC,
-        errors.SQLITE_IOERR_SEEK => ResultCode.SQLITE_IOERR_SEEK,
-        errors.SQLITE_IOERR_SHMLOCK => ResultCode.SQLITE_IOERR_SHMLOCK,
-        errors.SQLITE_IOERR_SHMMAP => ResultCode.SQLITE_IOERR_SHMMAP,
-        errors.SQLITE_IOERR_SHMOPEN => ResultCode.SQLITE_IOERR_SHMOPEN,
-        errors.SQLITE_IOERR_SHMSIZE => ResultCode.SQLITE_IOERR_SHMSIZE,
-        errors.SQLITE_IOERR_SHORT_READ => ResultCode.SQLITE_IOERR_SHORT_READ,
-        errors.SQLITE_IOERR_TRUNCATE => ResultCode.SQLITE_IOERR_TRUNCATE,
-        errors.SQLITE_IOERR_UNLOCK => ResultCode.SQLITE_IOERR_UNLOCK,
-        errors.SQLITE_IOERR_VNODE => ResultCode.SQLITE_IOERR_VNODE,
-        errors.SQLITE_IOERR_WRITE => ResultCode.SQLITE_IOERR_WRITE,
-        errors.SQLITE_LOCKED_SHAREDCACHE => ResultCode.SQLITE_LOCKED_SHAREDCACHE,
-        errors.SQLITE_LOCKED_VTAB => ResultCode.SQLITE_LOCKED_VTAB,
-        errors.SQLITE_NOTICE_RECOVER_ROLLBACK => ResultCode.SQLITE_NOTICE_RECOVER_ROLLBACK,
-        errors.SQLITE_NOTICE_RECOVER_WAL => ResultCode.SQLITE_NOTICE_RECOVER_WAL,
-        errors.SQLITE_OK_LOAD_PERMANENTLY => ResultCode.SQLITE_OK_LOAD_PERMANENTLY,
-        errors.SQLITE_READONLY_CANTINIT => ResultCode.SQLITE_READONLY_CANTINIT,
-        errors.SQLITE_READONLY_CANTLOCK => ResultCode.SQLITE_READONLY_CANTLOCK,
-        errors.SQLITE_READONLY_DBMOVED => ResultCode.SQLITE_READONLY_DBMOVED,
-        errors.SQLITE_READONLY_DIRECTORY => ResultCode.SQLITE_READONLY_DIRECTORY,
-        errors.SQLITE_READONLY_RECOVERY => ResultCode.SQLITE_READONLY_RECOVERY,
-        errors.SQLITE_READONLY_ROLLBACK => ResultCode.SQLITE_READONLY_ROLLBACK,
-        errors.SQLITE_WARNING_AUTOINDEX => ResultCode.SQLITE_WARNING_AUTOINDEX,
-    };
-}
-
-fn errorFromResultCode(code: ResultCode) !ResultCode {
-    return switch (code) {
-        // non-error result codes
-        ResultCode.SQLITE_OK, ResultCode.SQLITE_DONE, ResultCode.SQLITE_ROW => code,
-
-        // Primary codes
-        ResultCode.SQLITE_ABORT => errors.SQLITE_ABORT,
-        ResultCode.SQLITE_AUTH => errors.SQLITE_AUTH,
-        ResultCode.SQLITE_BUSY => errors.SQLITE_BUSY,
-        ResultCode.SQLITE_CANTOPEN => errors.SQLITE_CANTOPEN,
-        ResultCode.SQLITE_CONSTRAINT => errors.SQLITE_CONSTRAINT,
-        ResultCode.SQLITE_CORRUPT => errors.SQLITE_CORRUPT,
-        ResultCode.SQLITE_EMPTY => errors.SQLITE_EMPTY,
-        ResultCode.SQLITE_ERROR => errors.SQLITE_ERROR,
-        ResultCode.SQLITE_FORMAT => errors.SQLITE_FORMAT,
-        ResultCode.SQLITE_FULL => errors.SQLITE_FULL,
-        ResultCode.SQLITE_INTERNAL => errors.SQLITE_INTERNAL,
-        ResultCode.SQLITE_INTERRUPT => errors.SQLITE_INTERRUPT,
-        ResultCode.SQLITE_IOERR => errors.SQLITE_IOERR,
-        ResultCode.SQLITE_LOCKED => errors.SQLITE_LOCKED,
-        ResultCode.SQLITE_MISMATCH => errors.SQLITE_MISMATCH,
-        ResultCode.SQLITE_MISUSE => errors.SQLITE_MISUSE,
-        ResultCode.SQLITE_NOLFS => errors.SQLITE_NOLFS,
-        ResultCode.SQLITE_NOMEM => errors.SQLITE_NOMEM,
-        ResultCode.SQLITE_NOTADB => errors.SQLITE_NOTADB,
-        ResultCode.SQLITE_NOTFOUND => errors.SQLITE_NOTFOUND,
-        ResultCode.SQLITE_NOTICE => errors.SQLITE_NOTICE,
-        ResultCode.SQLITE_PERM => errors.SQLITE_PERM,
-        ResultCode.SQLITE_PROTOCOL => errors.SQLITE_PROTOCOL,
-        ResultCode.SQLITE_RANGE => errors.SQLITE_RANGE,
-        ResultCode.SQLITE_READONLY => errors.SQLITE_READONLY,
-        ResultCode.SQLITE_SCHEMA => errors.SQLITE_SCHEMA,
-        ResultCode.SQLITE_TOOBIG => errors.SQLITE_TOOBIG,
-        ResultCode.SQLITE_WARNING => errors.SQLITE_WARNING,
-
-        // Extended codes
-        ResultCode.SQLITE_ABORT_ROLLBACK => errors.SQLITE_ABORT_ROLLBACK,
-        ResultCode.SQLITE_AUTH_USER => errors.SQLITE_AUTH_USER,
-        ResultCode.SQLITE_BUSY_RECOVERY => errors.SQLITE_BUSY_RECOVERY,
-        ResultCode.SQLITE_BUSY_SNAPSHOT => errors.SQLITE_BUSY_SNAPSHOT,
-        ResultCode.SQLITE_BUSY_TIMEOUT => errors.SQLITE_BUSY_TIMEOUT,
-        ResultCode.SQLITE_CANTOPEN_CONVPATH => errors.SQLITE_CANTOPEN_CONVPATH,
-        ResultCode.SQLITE_CANTOPEN_DIRTYWAL => errors.SQLITE_CANTOPEN_DIRTYWAL,
-        ResultCode.SQLITE_CANTOPEN_FULLPATH => errors.SQLITE_CANTOPEN_FULLPATH,
-        ResultCode.SQLITE_CANTOPEN_ISDIR => errors.SQLITE_CANTOPEN_ISDIR,
-        ResultCode.SQLITE_CANTOPEN_NOTEMPDIR => errors.SQLITE_CANTOPEN_NOTEMPDIR,
-        ResultCode.SQLITE_CANTOPEN_SYMLINK => errors.SQLITE_CANTOPEN_SYMLINK,
-        ResultCode.SQLITE_CONSTRAINT_CHECK => errors.SQLITE_CONSTRAINT_CHECK,
-        ResultCode.SQLITE_CONSTRAINT_COMMITHOOK => errors.SQLITE_CONSTRAINT_COMMITHOOK,
-        ResultCode.SQLITE_CONSTRAINT_DATATYPE => errors.SQLITE_CONSTRAINT_DATATYPE,
-        ResultCode.SQLITE_CONSTRAINT_FOREIGNKEY => errors.SQLITE_CONSTRAINT_FOREIGNKEY,
-        ResultCode.SQLITE_CONSTRAINT_FUNCTION => errors.SQLITE_CONSTRAINT_FUNCTION,
-        ResultCode.SQLITE_CONSTRAINT_NOTNULL => errors.SQLITE_CONSTRAINT_NOTNULL,
-        ResultCode.SQLITE_CONSTRAINT_PINNED => errors.SQLITE_CONSTRAINT_PINNED,
-        ResultCode.SQLITE_CONSTRAINT_PRIMARYKEY => errors.SQLITE_CONSTRAINT_PRIMARYKEY,
-        ResultCode.SQLITE_CONSTRAINT_ROWID => errors.SQLITE_CONSTRAINT_ROWID,
-        ResultCode.SQLITE_CONSTRAINT_TRIGGER => errors.SQLITE_CONSTRAINT_TRIGGER,
-        ResultCode.SQLITE_CONSTRAINT_UNIQUE => errors.SQLITE_CONSTRAINT_UNIQUE,
-        ResultCode.SQLITE_CONSTRAINT_VTAB => errors.SQLITE_CONSTRAINT_VTAB,
-        ResultCode.SQLITE_CORRUPT_INDEX => errors.SQLITE_CORRUPT_INDEX,
-        ResultCode.SQLITE_CORRUPT_SEQUENCE => errors.SQLITE_CORRUPT_SEQUENCE,
-        ResultCode.SQLITE_CORRUPT_VTAB => errors.SQLITE_CORRUPT_VTAB,
-        ResultCode.SQLITE_ERROR_MISSING_COLLSEQ => error.SQLITE_ERROR_MISSING_COLLSEQ,
-        ResultCode.SQLITE_ERROR_RETRY => error.SQLITE_ERROR_RETRY,
-        ResultCode.SQLITE_ERROR_SNAPSHOT => error.SQLITE_ERROR_SNAPSHOT,
-        ResultCode.SQLITE_IOERR_ACCESS => errors.SQLITE_IOERR_ACCESS,
-        ResultCode.SQLITE_IOERR_AUTH => errors.SQLITE_IOERR_AUTH,
-        ResultCode.SQLITE_IOERR_BEGIN_ATOMIC => errors.SQLITE_IOERR_BEGIN_ATOMIC,
-        ResultCode.SQLITE_IOERR_BLOCKED => errors.SQLITE_IOERR_BLOCKED,
-        ResultCode.SQLITE_IOERR_CHECKRESERVEDLOCK => errors.SQLITE_IOERR_CHECKRESERVEDLOCK,
-        ResultCode.SQLITE_IOERR_CLOSE => errors.SQLITE_IOERR_CLOSE,
-        ResultCode.SQLITE_IOERR_COMMIT_ATOMIC => errors.SQLITE_IOERR_COMMIT_ATOMIC,
-        ResultCode.SQLITE_IOERR_CONVPATH => errors.SQLITE_IOERR_CONVPATH,
-        ResultCode.SQLITE_IOERR_CORRUPTFS => errors.SQLITE_IOERR_CORRUPTFS,
-        ResultCode.SQLITE_IOERR_DATA => errors.SQLITE_IOERR_DATA,
-        ResultCode.SQLITE_IOERR_DELETE => errors.SQLITE_IOERR_DELETE,
-        ResultCode.SQLITE_IOERR_DELETE_NOENT => errors.SQLITE_IOERR_DELETE_NOENT,
-        ResultCode.SQLITE_IOERR_DIR_CLOSE => errors.SQLITE_IOERR_DIR_CLOSE,
-        ResultCode.SQLITE_IOERR_DIR_FSYNC => errors.SQLITE_IOERR_DIR_FSYNC,
-        ResultCode.SQLITE_IOERR_FSTAT => errors.SQLITE_IOERR_FSTAT,
-        ResultCode.SQLITE_IOERR_FSYNC => errors.SQLITE_IOERR_FSYNC,
-        ResultCode.SQLITE_IOERR_GETTEMPPATH => errors.SQLITE_IOERR_GETTEMPPATH,
-        ResultCode.SQLITE_IOERR_LOCK => errors.SQLITE_IOERR_LOCK,
-        ResultCode.SQLITE_IOERR_MMAP => errors.SQLITE_IOERR_MMAP,
-        ResultCode.SQLITE_IOERR_NOMEM => errors.SQLITE_IOERR_NOMEM,
-        ResultCode.SQLITE_IOERR_RDLOCK => errors.SQLITE_IOERR_RDLOCK,
-        ResultCode.SQLITE_IOERR_READ => errors.SQLITE_IOERR_READ,
-        ResultCode.SQLITE_IOERR_ROLLBACK_ATOMIC => errors.SQLITE_IOERR_ROLLBACK_ATOMIC,
-        ResultCode.SQLITE_IOERR_SEEK => errors.SQLITE_IOERR_SEEK,
-        ResultCode.SQLITE_IOERR_SHMLOCK => errors.SQLITE_IOERR_SHMLOCK,
-        ResultCode.SQLITE_IOERR_SHMMAP => errors.SQLITE_IOERR_SHMMAP,
-        ResultCode.SQLITE_IOERR_SHMOPEN => errors.SQLITE_IOERR_SHMOPEN,
-        ResultCode.SQLITE_IOERR_SHMSIZE => errors.SQLITE_IOERR_SHMSIZE,
-        ResultCode.SQLITE_IOERR_SHORT_READ => errors.SQLITE_IOERR_SHORT_READ,
-        ResultCode.SQLITE_IOERR_TRUNCATE => errors.SQLITE_IOERR_TRUNCATE,
-        ResultCode.SQLITE_IOERR_UNLOCK => errors.SQLITE_IOERR_UNLOCK,
-        ResultCode.SQLITE_IOERR_VNODE => errors.SQLITE_IOERR_VNODE,
-        ResultCode.SQLITE_IOERR_WRITE => errors.SQLITE_IOERR_WRITE,
-        ResultCode.SQLITE_LOCKED_SHAREDCACHE => errors.SQLITE_LOCKED_SHAREDCACHE,
-        ResultCode.SQLITE_LOCKED_VTAB => errors.SQLITE_LOCKED_VTAB,
-        ResultCode.SQLITE_NOTICE_RECOVER_ROLLBACK => errors.SQLITE_NOTICE_RECOVER_ROLLBACK,
-        ResultCode.SQLITE_NOTICE_RECOVER_WAL => errors.SQLITE_NOTICE_RECOVER_WAL,
-        ResultCode.SQLITE_OK_LOAD_PERMANENTLY => errors.SQLITE_OK_LOAD_PERMANENTLY,
-        ResultCode.SQLITE_READONLY_CANTINIT => errors.SQLITE_READONLY_CANTINIT,
-        ResultCode.SQLITE_READONLY_CANTLOCK => errors.SQLITE_READONLY_CANTLOCK,
-        ResultCode.SQLITE_READONLY_DBMOVED => errors.SQLITE_READONLY_DBMOVED,
-        ResultCode.SQLITE_READONLY_DIRECTORY => errors.SQLITE_READONLY_DIRECTORY,
-        ResultCode.SQLITE_READONLY_RECOVERY => errors.SQLITE_READONLY_RECOVERY,
-        ResultCode.SQLITE_READONLY_ROLLBACK => errors.SQLITE_READONLY_ROLLBACK,
-        ResultCode.SQLITE_WARNING_AUTOINDEX => errors.SQLITE_WARNING_AUTOINDEX,
-    };
-}
-
 /// Open and return a pointer to a sqlite database or return an error if a
 /// database pointer cannot be opened for some reason.
-pub fn open(filename: [:0]const u8) !*DataBase {
-    var db_optional: ?*DataBase = null;
+pub fn open(filename: [:0]const u8) !*DataBaseAlias {
+    var db_optional: ?*DataBaseAlias = null;
     var rc: c_int = 0;
 
     const flags: c_int = c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE | c.SQLITE_OPEN_URI;
 
     rc = c.sqlite3_open_v2(filename.ptr, &db_optional, flags, null);
     errdefer close(db_optional) catch unreachable;
-    _ = try checkReturnCode(db_optional, rc);
+    _ = try ResultCode.fromInt(rc).check(db_optional);
 
     // Enable extended error codes
     rc = c.sqlite3_extended_result_codes(db_optional, 1);
-    _ = try checkReturnCode(db_optional, rc);
+    _ = try ResultCode.fromInt(rc).check(db_optional);
 
     if (db_optional) |db| {
         return db;
     } else {
-        std.debug.print("SQLite did not indicate an error, but db_optional is still null: {any}\n", .{db_optional});
-        unreachable;
+        std.debug.panic("SQLite did not indicate an error, but db_optional is still null when opening file: {s}\n", .{filename});
     }
 }
 
 /// Close and free a pointer to a sqlite database or return an error if the
 /// given database pointer cannot be closed for some reason.
-pub fn close(db: ?*DataBase) !void {
+pub fn close(db: ?*DataBaseAlias) !void {
     const rc = c.sqlite3_close(db);
-    _ = try checkReturnCode(db, rc);
+    _ = try ResultCode.fromInt(rc).check(db);
 }
 
-pub fn exec(db: *DataBase, stmt: [:0]const u8) !void {
+pub fn exec(db: *DataBaseAlias, stmt: [:0]const u8) !void {
     const rc = c.sqlite3_exec(db, stmt.ptr, null, null, null);
-    _ = try checkReturnCode(db, rc);
+    _ = try ResultCode.fromInt(rc).check(db);
 }
 
 /// Prepare a sql statement
-pub fn prepare(db: ?*DataBase, stmt: [:0]const u8) !*PreparedStatement {
+pub fn prepare(db: ?*DataBaseAlias, stmt: [:0]const u8) !*PreparedStatement {
     var stmt_opt: ?*PreparedStatement = null;
 
     const rc = c.sqlite3_prepare_v2(db, stmt.ptr, @intCast(stmt.len + 1), &stmt_opt, null);
-    _ = try checkReturnCode(db, rc);
+    _ = try ResultCode.fromInt(rc).check(db);
 
     if (stmt_opt) |stmt_ptr| {
         return stmt_ptr;
@@ -581,20 +592,20 @@ pub fn bind(stmt: *PreparedStatement, index: u16, value: anytype) !void {
         },
     };
 
-    _ = try checkReturnCode(null, rc);
+    _ = try ResultCode.fromInt(rc).check(null);
 }
 
 /// Return all result codes except `SQLITE_DONE`
 pub fn step(stmt: *PreparedStatement) !ResultCode {
-    const code: ResultCode = @enumFromInt(c.sqlite3_step(stmt));
+    const code = ResultCode.fromInt(c.sqlite3_step(stmt));
 
     if (code == ResultCode.SQLITE_DONE) {
-        _ = try checkReturnCode(null, c.sqlite3_clear_bindings(stmt));
-        _ = try checkReturnCode(null, c.sqlite3_reset(stmt));
+        _ = try ResultCode.fromInt(c.sqlite3_clear_bindings(stmt)).check(null);
+        _ = try ResultCode.fromInt(c.sqlite3_reset(stmt)).check(null);
 
         return error.StopIteration;
     } else {
-        return try checkReturnCode(null, @intFromEnum(code));
+        return try code.check(null);
     }
 }
 
@@ -606,20 +617,16 @@ pub fn bind_text(stmt: *PreparedStatement, index: u16, value: [:0]const u8) !voi
     // from the function.
     const rc = c.sqlite3_bind_text64(stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8);
 
-    _ = try checkReturnCode(null, rc);
+    _ = try ResultCode.fromInt(rc).check(null);
 }
 
 /// Finalize (i.e. "free") a prepared sql statement
 pub fn finalize(stmt_opt: ?*PreparedStatement) !void {
     const rc = c.sqlite3_finalize(stmt_opt);
-    _ = try checkReturnCode(null, rc);
+    _ = try ResultCode.fromInt(rc).check(null);
 }
 
 test "sqlite3.h include" {
     std.debug.print("What is the value of SQLITE_OK? {any}\n", .{c.SQLITE_OK});
     try std.testing.expectEqual(0, c.SQLITE_OK);
-    // var list = std.ArrayList(i32).init(std.testing.allocator);
-    // defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    // try list.append(42);
-    // try std.testing.expectEqual(@as(i32, 42), list.pop());
 }

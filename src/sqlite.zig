@@ -65,6 +65,64 @@ pub const Statement = struct {
         const rc = c.sqlite3_finalize(stmt.stmt);
         _ = try ResultCode.fromInt(rc).check(stmt.db.db);
     }
+
+    pub fn clear_bindings(stmt: Statement) !void {
+        _ = try ResultCode.fromInt(c.sqlite3_clear_bindings(stmt.stmt)).check(stmt.db.db);
+    }
+
+    pub fn reset(stmt: Statement) !void {
+        _ = try ResultCode.fromInt(c.sqlite3_reset(stmt.stmt)).check(stmt.db.db);
+    }
+
+    /// Return all result codes except `SQLITE_DONE`. When `SQLITE_DONE` is
+    /// encountered, `null` is returned instead.
+    pub fn step(stmt: Statement) ?ResultCode {
+        const code = ResultCode.fromInt(c.sqlite3_step(stmt.stmt));
+        return if (code == ResultCode.SQLITE_DONE) null else code;
+    }
+
+    pub fn bind_text(stmt: Statement, index: u16, value: [:0]const u8) !void {
+        // Using text64 should make it so that we don't need to do any casting
+        // to pass the len of the slice. Since it is null terminated, we add
+        // one to the len for the null terminator. Using `c.SQLITE_TRANSIENT`
+        // ensures that SQLite makes a its own copy of the string before returning
+        // from the function.
+        const rc = c.sqlite3_bind_text64(stmt.stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8);
+
+        _ = try ResultCode.fromInt(rc).check(null);
+    }
+
+    /// Bind `null` to a parameter index
+    pub fn bind_null(stmt: Statement, index: u16) !void {
+        _ = try ResultCode.fromInt(c.sqlite3_bind_null(stmt, index)).check(stmt.db.db);
+    }
+
+    /// Use comptime magic to bind parameters for SQLite prepared statements based
+    /// on the type passed in. This can't stop the caller from making the mistake
+    /// of binding values of the incorrect type to parameter indices. See docs here
+    /// for the bind interface: https://www.sqlite.org/c3ref/bind_blob.html
+    pub fn bind(stmt: Statement, index: u16, value: anytype) !void {
+        const rc = switch (@TypeOf(value)) {
+            f16, f32, f64, comptime_float => c.sqlite3_bind_double(stmt, index, value),
+            u8, i8, u16, i16, i32, u32, i64, comptime_int => c.sqlite3_bind_int64(stmt, index, value),
+
+            // Using text64 should make it so that we don't need to do any casting
+            // to pass the len of the slice. Since it is null terminated, we add
+            // one to the len for the terminator.
+            [:0]u8, [:0]const u8 => c.sqlite3_bind_text64(stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8),
+
+            // If a u8 slice is not null terminated, we assume it is meant to be treated as a blob
+            []u8, []const u8 => c.sqlite3_bind_blob64(stmt, index, value.ptr, value.len, c.SQLITE_TRANSIENT),
+
+            // Failure
+            else => {
+                std.debug.print("Not given a type that can be bound to SQLite: {any}\n", .{@TypeOf(value)});
+                @compileError("Not given a type that can be bound to SQLite");
+            },
+        };
+
+        _ = try ResultCode.fromInt(rc).check(stmt.db.db);
+    }
 };
 
 /// All SQLite error codes as Zig errors
@@ -288,7 +346,7 @@ pub const ResultCode = enum(c_int) {
     SQLITE_WARNING_AUTOINDEX = c.SQLITE_WARNING_AUTOINDEX,
 
     pub fn check(code: ResultCode, db_optional: ?*DataBaseAlias) !ResultCode {
-        return code.toError() catch |err| {
+        return if (code.toError()) |err| {
             // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
             std.debug.print("SQLite returned code '{s}' ({d}) with message: '{s}'\n", .{ @errorName(err), code.toInt(), c.sqlite3_errstr(code.toInt()) });
             if (db_optional) |db| {
@@ -296,6 +354,8 @@ pub const ResultCode = enum(c_int) {
             }
 
             return err;
+        } else {
+            return code;
         };
     }
 
@@ -417,10 +477,10 @@ pub const ResultCode = enum(c_int) {
         };
     }
 
-    pub fn toError(code: ResultCode) !ResultCode {
+    pub fn toError(code: ResultCode) ?@TypeOf(errors.SQLITE_ERROR) {
         return switch (code) {
             // non-error result codes
-            ResultCode.SQLITE_OK, ResultCode.SQLITE_DONE, ResultCode.SQLITE_ROW => code,
+            ResultCode.SQLITE_OK, ResultCode.SQLITE_DONE, ResultCode.SQLITE_ROW => null,
 
             // Primary codes
             ResultCode.SQLITE_ABORT => errors.SQLITE_ABORT,

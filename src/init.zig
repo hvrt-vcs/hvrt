@@ -37,12 +37,12 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     defer alloc.free(db_path);
     std.debug.print("what is db_path: {s}\n", .{db_path});
 
-    const db = try sqlite.open(db_path);
-    defer sqlite.close(db) catch unreachable;
+    const db = try sqlite.DataBase.open(db_path);
+    defer db.close() catch unreachable;
 
     const sqlfiles = sql.sqlite;
 
-    try sqlite.exec(db, sqlfiles.work_tree.init.tables);
+    try db.exec(sqlfiles.work_tree.init.tables);
 
     // Preparing a statement will only evaluate one statement (semicolon
     // terminated) at a time. So we can't just compile the whole init script
@@ -50,40 +50,26 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     // or add some logic to iterate over the statements/detect when parameters
     // need to be bound. See link here for an example of this logic:
     // https://github.com/praeclarum/sqlite-net/issues/84
-    const prepared_stmt1 = try sqlite.prepare(db, sqlfiles.work_tree.init.version);
-    defer sqlite.finalize(prepared_stmt1) catch unreachable;
+    const prepared_stmt1 = try sqlite.Statement.prepare(db, sqlfiles.work_tree.init.version);
+    defer prepared_stmt1.finalize() catch unreachable;
 
     // Version
-    try sqlite.bind_text(prepared_stmt1, 1, version);
+    try prepared_stmt1.bind_text(1, version);
 
-    rows1: while (sqlite.step(prepared_stmt1)) |rc| {
-        std.debug.print("What is the Result code? {any}\n", .{rc});
-    } else |err| {
-        std.debug.print("What is the error? {any}\n", .{err});
-
-        if (err != error.StopIteration) {
-            // Address error, then jump back to beginning and try again
-            break :rows1;
-        }
+    while (prepared_stmt1.step()) |rc| {
+        _ = try rc.check(db);
     }
 
     std.debug.print("Did we insert the version?\n", .{});
 
-    const prepared_stmt2 = try sqlite.prepare(db, sqlfiles.work_tree.init.branch);
-    defer sqlite.finalize(prepared_stmt2) catch unreachable;
+    const prepared_stmt2 = try sqlite.Statement.prepare(db, sqlfiles.work_tree.init.branch);
+    defer prepared_stmt2.finalize() catch unreachable;
 
     // default branch
-    try sqlite.bind_text(prepared_stmt2, 1, "master");
+    try prepared_stmt2.bind_text(1, "master");
 
-    rows2: while (sqlite.step(prepared_stmt2)) |rc| {
-        std.debug.print("What is the Result code? {any}\n", .{rc});
-    } else |err| {
-        std.debug.print("What is the error? {any}\n", .{err});
-
-        if (err != error.StopIteration) {
-            // Address error, then jump back to beginning and try again
-            break :rows2;
-        }
+    while (prepared_stmt2.step()) |rc| {
+        _ = try rc.check(db);
     }
 
     std.debug.print("Did we insert the default branch name?\n", .{});
@@ -100,11 +86,4 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     // try stdout.print("Run `zig build test` to run the tests.\n", .{});
 
     // try bw.flush(); // don't forget to flush!
-}
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
 }

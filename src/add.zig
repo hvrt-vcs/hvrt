@@ -22,15 +22,13 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
     std.debug.print("what is db_path: {s}\n", .{db_path});
 
     // Should fail if either the directory or db files do not exist
-    const db = try sqlite.open(db_path);
-    defer sqlite.close(db) catch unreachable;
+    const db = try sqlite.DataBase.open(db_path);
+    defer db.close() catch unreachable;
 
     const sqlfiles = sql.sqlite;
 
-    // std.fs.openIterableDirAbsolute(".", .{});
-
-    const blob_stmt = try sqlite.prepare(db, sqlfiles.work_tree.add.blob);
-    defer sqlite.finalize(blob_stmt) catch unreachable;
+    const blob_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.blob);
+    defer blob_stmt.finalize() catch unreachable;
 
     {
         const tx = try sqlite.Transaction.init(db, "add_cmd");

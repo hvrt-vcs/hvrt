@@ -20,14 +20,15 @@ pub const DataBase = struct {
 
         rc = c.sqlite3_open_v2(filename.ptr, &db_optional, flags, null);
         errdefer if (db_optional) |db| DataBase.close(.{ .db = db }) catch unreachable;
-        _ = try ResultCode.fromInt(rc).check(db_optional);
+        _ = try ResultCode.fromInt(rc).check(if (db_optional) |db| .{ .db = db } else null);
 
         // Enable extended error codes
-        rc = c.sqlite3_extended_result_codes(db_optional, 1);
-        _ = try ResultCode.fromInt(rc).check(db_optional);
-
         if (db_optional) |db| {
-            return .{ .db = db };
+            const self = .{ .db = db };
+            rc = c.sqlite3_extended_result_codes(self.db, 1);
+            _ = try ResultCode.fromInt(rc).check(self);
+
+            return self;
         } else {
             std.debug.panic("SQLite did not indicate an error, but db_optional is still null when opening file: {s}\n", .{filename});
         }
@@ -37,7 +38,12 @@ pub const DataBase = struct {
     /// cannot be closed for some reason.
     pub fn close(db: DataBase) !void {
         const rc = c.sqlite3_close(db.db);
-        _ = try ResultCode.fromInt(rc).check(db.db);
+        _ = try ResultCode.fromInt(rc).check(db);
+    }
+
+    pub fn exec(db: DataBase, stmt: [:0]const u8) !void {
+        const rc = c.sqlite3_exec(db.db, stmt.ptr, null, null, null);
+        _ = try ResultCode.fromInt(rc).check(db);
     }
 };
 
@@ -63,15 +69,15 @@ pub const Statement = struct {
     /// Finalize (i.e. "free") a prepared sql statement
     pub fn finalize(stmt: Statement) !void {
         const rc = c.sqlite3_finalize(stmt.stmt);
-        _ = try ResultCode.fromInt(rc).check(stmt.db.db);
+        _ = try ResultCode.fromInt(rc).check(stmt.db);
     }
 
     pub fn clear_bindings(stmt: Statement) !void {
-        _ = try ResultCode.fromInt(c.sqlite3_clear_bindings(stmt.stmt)).check(stmt.db.db);
+        _ = try ResultCode.fromInt(c.sqlite3_clear_bindings(stmt.stmt)).check(stmt.db);
     }
 
     pub fn reset(stmt: Statement) !void {
-        _ = try ResultCode.fromInt(c.sqlite3_reset(stmt.stmt)).check(stmt.db.db);
+        _ = try ResultCode.fromInt(c.sqlite3_reset(stmt.stmt)).check(stmt.db);
     }
 
     /// Return all result codes except `SQLITE_DONE`. When `SQLITE_DONE` is
@@ -94,7 +100,7 @@ pub const Statement = struct {
 
     /// Bind `null` to a parameter index
     pub fn bind_null(stmt: Statement, index: u16) !void {
-        _ = try ResultCode.fromInt(c.sqlite3_bind_null(stmt, index)).check(stmt.db.db);
+        _ = try ResultCode.fromInt(c.sqlite3_bind_null(stmt, index)).check(stmt.db);
     }
 
     /// Use comptime magic to bind parameters for SQLite prepared statements based
@@ -121,7 +127,49 @@ pub const Statement = struct {
             },
         };
 
-        _ = try ResultCode.fromInt(rc).check(stmt.db.db);
+        _ = try ResultCode.fromInt(rc).check(stmt.db);
+    }
+};
+
+pub const Transaction = struct {
+    const Self = @This();
+    const default_name = "default_savepoint_name";
+    const buf_sz = 128;
+
+    db: DataBase,
+    name: [:0]const u8,
+
+    /// Creates an (optionally) named transaction. This does not use parameter
+    /// binding or escaping, so the name should be a valid SQLite identifier.
+    pub fn init(db: DataBase, name: ?[:0]const u8) !Transaction {
+        const local_name = name orelse default_name;
+        const self = .{ .db = db, .name = local_name };
+
+        // Attempt to check if the name is a keyword.
+        const rc = c.sqlite3_keyword_check(self.name.ptr, 0);
+        _ = try ResultCode.fromInt(rc).check(self.db);
+
+        // XXX: We add extra spaces at the end to ensure that if the name fails
+        // because it is too long, it will fail now (before executing anything)
+        // instead of failing later when attempting to rollback a bad
+        // statement, or commit a good statement.
+        var stmt_buf: [buf_sz]u8 = undefined;
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "SAVEPOINT {s};            ", .{self.name});
+
+        try self.db.exec(trans_stmt);
+        return self;
+    }
+
+    pub fn commit(self: *const Self) !void {
+        var stmt_buf: [buf_sz]u8 = undefined;
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "RELEASE SAVEPOINT {s};", .{self.name});
+        try self.db.exec(trans_stmt);
+    }
+
+    pub fn rollback(self: *const Self) !void {
+        var stmt_buf: [buf_sz]u8 = undefined;
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "ROLLBACK TO SAVEPOINT {s};", .{self.name});
+        try self.db.exec(trans_stmt);
     }
 };
 
@@ -345,12 +393,12 @@ pub const ResultCode = enum(c_int) {
     SQLITE_READONLY_ROLLBACK = c.SQLITE_READONLY_ROLLBACK,
     SQLITE_WARNING_AUTOINDEX = c.SQLITE_WARNING_AUTOINDEX,
 
-    pub fn check(code: ResultCode, db_optional: ?*DataBaseAlias) !ResultCode {
+    pub fn check(code: ResultCode, db_optional: ?DataBase) !ResultCode {
         return if (code.toError()) |err| {
             // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
             std.debug.print("SQLite returned code '{s}' ({d}) with message: '{s}'\n", .{ @errorName(err), code.toInt(), c.sqlite3_errstr(code.toInt()) });
             if (db_optional) |db| {
-                std.debug.print("SQLite message for non-null DB pointer: '{s}'\n", .{c.sqlite3_errmsg(db)});
+                std.debug.print("SQLite message for non-null DB pointer: '{s}'\n", .{c.sqlite3_errmsg(db.db)});
             }
 
             return err;
@@ -590,157 +638,6 @@ pub const ResultCode = enum(c_int) {
         };
     }
 };
-
-pub const Transaction = struct {
-    const Self = @This();
-    const default_name = "default_savepoint_name";
-    const buf_sz = 128;
-
-    db: *DataBaseAlias,
-    name: [:0]const u8,
-
-    /// Creates an (optionally) named transaction. This does not use parameter
-    /// binding or escaping, so the name should be a valid SQLite identifier.
-    pub fn init(db: *DataBaseAlias, name: ?[:0]const u8) !Transaction {
-        const local_name = name orelse default_name;
-        const self = .{ .db = db, .name = local_name };
-
-        // Attempt to check if the name is a keyword.
-        const rc = c.sqlite3_keyword_check(self.name.ptr, 0);
-        _ = try ResultCode.fromInt(rc).check(db);
-
-        // XXX: We add extra spaces at the end to ensure that if the name fails
-        // because it is too long, it will fail now (before executing anything)
-        // instead of failing later when attempting to rollback a bad
-        // statement, or commit a good statement.
-        var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "SAVEPOINT {s};            ", .{self.name});
-
-        try exec(db, trans_stmt);
-        return self;
-    }
-
-    pub fn commit(self: *const Self) !void {
-        var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "RELEASE SAVEPOINT {s};", .{self.name});
-        try exec(self.db, trans_stmt);
-    }
-
-    pub fn rollback(self: *const Self) !void {
-        var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "ROLLBACK TO SAVEPOINT {s};", .{self.name});
-        try exec(self.db, trans_stmt);
-    }
-};
-
-/// Open and return a pointer to a sqlite database or return an error if a
-/// database pointer cannot be opened for some reason.
-pub fn open(filename: [:0]const u8) !*DataBaseAlias {
-    var db_optional: ?*DataBaseAlias = null;
-    var rc: c_int = 0;
-
-    const flags: c_int = c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE | c.SQLITE_OPEN_URI;
-
-    rc = c.sqlite3_open_v2(filename.ptr, &db_optional, flags, null);
-    errdefer close(db_optional) catch unreachable;
-    _ = try ResultCode.fromInt(rc).check(db_optional);
-
-    // Enable extended error codes
-    rc = c.sqlite3_extended_result_codes(db_optional, 1);
-    _ = try ResultCode.fromInt(rc).check(db_optional);
-
-    if (db_optional) |db| {
-        return db;
-    } else {
-        std.debug.panic("SQLite did not indicate an error, but db_optional is still null when opening file: {s}\n", .{filename});
-    }
-}
-
-/// Close and free a pointer to a sqlite database or return an error if the
-/// given database pointer cannot be closed for some reason.
-pub fn close(db: ?*DataBaseAlias) !void {
-    const rc = c.sqlite3_close(db);
-    _ = try ResultCode.fromInt(rc).check(db);
-}
-
-pub fn exec(db: *DataBaseAlias, stmt: [:0]const u8) !void {
-    const rc = c.sqlite3_exec(db, stmt.ptr, null, null, null);
-    _ = try ResultCode.fromInt(rc).check(db);
-}
-
-/// Prepare a sql statement
-pub fn prepare(db: ?*DataBaseAlias, stmt: [:0]const u8) !*PreparedStatementAlias {
-    var stmt_opt: ?*PreparedStatementAlias = null;
-
-    const rc = c.sqlite3_prepare_v2(db, stmt.ptr, @intCast(stmt.len + 1), &stmt_opt, null);
-    _ = try ResultCode.fromInt(rc).check(db);
-
-    if (stmt_opt) |stmt_ptr| {
-        return stmt_ptr;
-    } else {
-        std.debug.print("SQLite did not indicate an error, but stmt_opt is still null: {any}\n", .{stmt_opt});
-        unreachable;
-    }
-}
-
-/// Use comptime magic to bind parameters for SQLite prepared statements based
-/// on the type passed in. This can't stop the caller from making the mistake
-/// of binding values of the incorrect type to parameter indices. See docs here
-/// for the bind interface: https://www.sqlite.org/c3ref/bind_blob.html
-pub fn bind(stmt: *PreparedStatementAlias, index: u16, value: anytype) !void {
-    const rc = switch (@TypeOf(value)) {
-        @TypeOf(null) => c.sqlite3_bind_null(stmt, index),
-        f16, f32, f64, comptime_float => c.sqlite3_bind_double(stmt, index, value),
-        u8, i8, u16, i16, i32, u32, i64, comptime_int => c.sqlite3_bind_int64(stmt, index, value),
-
-        // Using text64 should make it so that we don't need to do any casting
-        // to pass the len of the slice. Since it is null terminated, we add
-        // one to the len for the terminator.
-        [:0]u8, [:0]const u8 => c.sqlite3_bind_text64(stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8),
-
-        // If a u8 slice is not null terminated, we assume it is meant to be treated as a blob
-        []const u8 => c.sqlite3_bind_blob64(stmt, index, value.ptr, value.len, c.SQLITE_TRANSIENT),
-
-        // Failure
-        else => {
-            std.debug.print("Not given a type that can be bound to SQLite: {any}\n", .{@TypeOf(value)});
-            @compileError("Not given a type that can be bound to SQLite");
-        },
-    };
-
-    _ = try ResultCode.fromInt(rc).check(null);
-}
-
-/// Return all result codes except `SQLITE_DONE`
-pub fn step(stmt: *PreparedStatementAlias) !ResultCode {
-    const code = ResultCode.fromInt(c.sqlite3_step(stmt));
-
-    if (code == ResultCode.SQLITE_DONE) {
-        _ = try ResultCode.fromInt(c.sqlite3_clear_bindings(stmt)).check(null);
-        _ = try ResultCode.fromInt(c.sqlite3_reset(stmt)).check(null);
-
-        return error.StopIteration;
-    } else {
-        return try code.check(null);
-    }
-}
-
-pub fn bind_text(stmt: *PreparedStatementAlias, index: u16, value: [:0]const u8) !void {
-    // Using text64 should make it so that we don't need to do any casting
-    // to pass the len of the slice. Since it is null terminated, we add
-    // one to the len for the null terminator. Using `c.SQLITE_TRANSIENT`
-    // ensures that SQLite makes a its own copy of the string before returning
-    // from the function.
-    const rc = c.sqlite3_bind_text64(stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8);
-
-    _ = try ResultCode.fromInt(rc).check(null);
-}
-
-/// Finalize (i.e. "free") a prepared sql statement
-pub fn finalize(stmt_opt: ?*PreparedStatementAlias) !void {
-    const rc = c.sqlite3_finalize(stmt_opt);
-    _ = try ResultCode.fromInt(rc).check(null);
-}
 
 test "sqlite3.h include" {
     std.debug.print("What is the value of SQLITE_OK? {any}\n", .{c.SQLITE_OK});

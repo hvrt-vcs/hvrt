@@ -1,12 +1,6 @@
 const std = @import("std");
 const c = @import("c.zig");
 
-/// Alias opaque sqlite3 type.
-pub const DataBaseAlias = c.sqlite3;
-
-/// Alias opaque sqlite3_stmt type.
-pub const PreparedStatementAlias = c.sqlite3_stmt;
-
 pub const DataBase = struct {
     db: *c.sqlite3,
 

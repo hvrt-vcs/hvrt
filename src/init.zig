@@ -23,7 +23,9 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
 
     // fails if directory already exists
     try std.fs.makeDirAbsolute(hvrt_path);
-    const hvrt_dir = try std.fs.openDirAbsolute(hvrt_path, .{});
+    var hvrt_dir = try std.fs.openDirAbsolute(hvrt_path, .{});
+    defer hvrt_dir.close();
+    errdefer hvrt_dir.deleteTree(".") catch unreachable;
 
     // Deferring file close until the end of this function has the added
     // benefit of holding an exclusive file lock for the duration of the
@@ -54,11 +56,8 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     defer prepared_stmt1.finalize() catch unreachable;
 
     // Version
-    try prepared_stmt1.bind_text(1, version);
-
-    while (prepared_stmt1.step()) |rc| {
-        _ = try rc.check(db);
-    }
+    try prepared_stmt1.bind(1, version);
+    try prepared_stmt1.auto_step();
 
     std.debug.print("Did we insert the version?\n", .{});
 
@@ -66,11 +65,8 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     defer prepared_stmt2.finalize() catch unreachable;
 
     // default branch
-    try prepared_stmt2.bind_text(1, "master");
-
-    while (prepared_stmt2.step()) |rc| {
-        _ = try rc.check(db);
-    }
+    try prepared_stmt2.bind(1, "master");
+    try prepared_stmt2.auto_step();
 
     std.debug.print("Did we insert the default branch name?\n", .{});
     // // default branch

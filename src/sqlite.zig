@@ -1,6 +1,8 @@
 const std = @import("std");
 const c = @import("c.zig");
 
+pub const SqliteError = @TypeOf(errors.SQLITE_ERROR);
+
 pub const DataBase = struct {
     db: *c.sqlite3,
 
@@ -75,26 +77,38 @@ pub const Statement = struct {
     }
 
     /// Return all result codes except `SQLITE_DONE`. When `SQLITE_DONE` is
-    /// encountered, `null` is returned instead.
+    /// encountered, `null` is returned instead. If an error is returned,
+    /// unless the return code is checked and the while loop broken, it is
+    /// possible to get into an infinite loop. See `auto_step` for a simple
+    /// example of how to check for errors in the return code.
     pub fn step(stmt: Statement) ?ResultCode {
         const code = ResultCode.fromInt(c.sqlite3_step(stmt.stmt));
         return if (code == ResultCode.SQLITE_DONE) null else code;
     }
 
-    pub fn bind_text(stmt: Statement, index: u16, value: [:0]const u8) !void {
-        // Using text64 should make it so that we don't need to do any casting
-        // to pass the len of the slice. Since it is null terminated, we add
-        // one to the len for the null terminator. Using `c.SQLITE_TRANSIENT`
-        // ensures that SQLite makes a its own copy of the string before returning
-        // from the function.
-        const rc = c.sqlite3_bind_text64(stmt.stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8);
-
-        _ = try ResultCode.fromInt(rc).check(null);
+    /// Step through all returned rows automatically. Useful for when a
+    /// statement does not return any rows or when we don't care about any
+    /// returned results. Similar to `DataBase.exec` except prepared Statements
+    /// objects can only execute one statement, instead of several, and also
+    /// parameters can be bound before stepping through results, unlike `exec`.
+    pub fn auto_step(stmt: Statement) !void {
+        while (stmt.step()) |rc| {
+            _ = try rc.check(stmt.db);
+        }
     }
 
     /// Bind `null` to a parameter index
     pub fn bind_null(stmt: Statement, index: u16) !void {
         _ = try ResultCode.fromInt(c.sqlite3_bind_null(stmt, index)).check(stmt.db);
+    }
+
+    pub fn bind_blob(stmt: Statement, index: u16, value: []const u8) !void {
+        // Using blob64 should make it so that we don't need to do any casting
+        // to pass the len of the slice. Using `c.SQLITE_TRANSIENT` ensures that
+        // SQLite makes a its own copy of the blob before returning from the
+        // function. SQLite will manage the lifetime of its private copy.
+        const rc = c.sqlite3_bind_blob64(stmt.stmt, index, value.ptr, value.len, c.SQLITE_TRANSIENT);
+        _ = try ResultCode.fromInt(rc).check(stmt.db);
     }
 
     /// Use comptime magic to bind parameters for SQLite prepared statements based
@@ -103,22 +117,16 @@ pub const Statement = struct {
     /// for the bind interface: https://www.sqlite.org/c3ref/bind_blob.html
     pub fn bind(stmt: Statement, index: u16, value: anytype) !void {
         const rc = switch (@TypeOf(value)) {
-            f16, f32, f64, comptime_float => c.sqlite3_bind_double(stmt, index, value),
-            u8, i8, u16, i16, i32, u32, i64, comptime_int => c.sqlite3_bind_int64(stmt, index, value),
+            f16, f32, f64, comptime_float => c.sqlite3_bind_double(stmt.stmt, index, value),
+            u8, i8, u16, i16, i32, u32, i64, comptime_int => c.sqlite3_bind_int64(stmt.stmt, index, value),
 
-            // Using text64 should make it so that we don't need to do any casting
-            // to pass the len of the slice. Since it is null terminated, we add
-            // one to the len for the terminator.
-            [:0]u8, [:0]const u8 => c.sqlite3_bind_text64(stmt, index, value.ptr, value.len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8),
-
-            // If a u8 slice is not null terminated, we assume it is meant to be treated as a blob
-            []u8, []const u8 => c.sqlite3_bind_blob64(stmt, index, value.ptr, value.len, c.SQLITE_TRANSIENT),
-
-            // Failure
-            else => {
-                std.debug.print("Not given a type that can be bound to SQLite: {any}\n", .{@TypeOf(value)});
-                @compileError("Not given a type that can be bound to SQLite");
-            },
+            // Using text64 should make it so that we don't need to do any
+            // casting to pass the len of the slice. Since it is null
+            // terminated, we add one to the len for the null terminator. Using
+            // `c.SQLITE_TRANSIENT` ensures that SQLite makes a its own copy of
+            // the string before returning from the function.  SQLite will
+            // manage the lifetime of its private copy.
+            else => c.sqlite3_bind_text64(stmt.stmt, index, @as([:0]const u8, value).ptr, @as([:0]const u8, value).len + 1, c.SQLITE_TRANSIENT, c.SQLITE_UTF8),
         };
 
         _ = try ResultCode.fromInt(rc).check(stmt.db);
@@ -126,6 +134,11 @@ pub const Statement = struct {
 };
 
 pub const Transaction = struct {
+    const _begin_fmt = "SAVEPOINT {s};";
+    const _commit_fmt = "RELEASE SAVEPOINT {s};";
+    const _rollback_fmt = "ROLLBACK TO SAVEPOINT {s};";
+    const _max_fmt_sz = @max(@max(_begin_fmt.len, _commit_fmt.len), _rollback_fmt.len);
+
     const Self = @This();
     const default_name = "default_savepoint_name";
     const buf_sz = 128;
@@ -136,8 +149,10 @@ pub const Transaction = struct {
     /// Creates an (optionally) named transaction. This does not use parameter
     /// binding or escaping, so the name should be a valid SQLite identifier.
     pub fn init(db: DataBase, name: ?[:0]const u8) !Transaction {
-        const local_name = name orelse default_name;
-        const self = .{ .db = db, .name = local_name };
+        const self: Transaction = .{ .db = db, .name = name orelse default_name };
+
+        // Add 1 for the sentinel `0` value in the cstring.
+        if (self.name.len + _max_fmt_sz + 1 > buf_sz) return error.NameTooLong;
 
         // Attempt to check if the name is a keyword.
         const rc = c.sqlite3_keyword_check(self.name.ptr, 0);
@@ -148,7 +163,7 @@ pub const Transaction = struct {
         // instead of failing later when attempting to rollback a bad
         // statement, or commit a good statement.
         var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "SAVEPOINT {s};            ", .{self.name});
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _begin_fmt, .{self.name});
 
         try self.db.exec(trans_stmt);
         return self;
@@ -156,13 +171,13 @@ pub const Transaction = struct {
 
     pub fn commit(self: *const Self) !void {
         var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "RELEASE SAVEPOINT {s};", .{self.name});
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _commit_fmt, .{self.name});
         try self.db.exec(trans_stmt);
     }
 
     pub fn rollback(self: *const Self) !void {
         var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, "ROLLBACK TO SAVEPOINT {s};", .{self.name});
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _rollback_fmt, .{self.name});
         try self.db.exec(trans_stmt);
     }
 };
@@ -409,7 +424,7 @@ pub const ResultCode = enum(c_int) {
         return @intFromEnum(code);
     }
 
-    pub fn fromError(err: @TypeOf(errors.SQLITE_ERROR)) ResultCode {
+    pub fn fromError(err: SqliteError) ResultCode {
         return switch (err) {
             // Primary codes
             errors.SQLITE_ABORT => ResultCode.SQLITE_ABORT,
@@ -519,7 +534,7 @@ pub const ResultCode = enum(c_int) {
         };
     }
 
-    pub fn toError(code: ResultCode) ?@TypeOf(errors.SQLITE_ERROR) {
+    pub fn toError(code: ResultCode) ?SqliteError {
         return switch (code) {
             // non-error result codes
             ResultCode.SQLITE_OK, ResultCode.SQLITE_DONE, ResultCode.SQLITE_ROW => null,

@@ -8,7 +8,10 @@ const sql = @import("sql.zig");
 const hvrt_dirname = ".hvrt";
 const work_tree_db_name = "work_tree_state.sqlite";
 
-const default_buffer_size = 1024 * 4;
+// TODO: use fifo buffer size pulled from config
+const fifo_buffer_size = 1024 * 4;
+// TODO: use chunk size pulled from config
+const chunk_size = 1024 * 4;
 
 /// It is the responsibility of the caller of `add` to deallocate and
 /// deinit alloc, repo_path, and files, if necessary.
@@ -25,21 +28,32 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
     const db = try sqlite.DataBase.open(db_path);
     defer db.close() catch unreachable;
 
+    const fifo_buf = try alloc.alloc(u8, fifo_buffer_size);
+    defer alloc.free(fifo_buf);
+
+    var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
+
     const sqlfiles = sql.sqlite;
 
     const blob_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.blob);
     defer blob_stmt.finalize() catch unreachable;
 
     {
+        var tx_ok = true;
         const tx = try sqlite.Transaction.init(db, "add_cmd");
+        defer if (tx_ok) tx.commit() catch unreachable;
         errdefer tx.rollback() catch |err| {
-            std.debug.panic("Caught error when attempting to rollback transaction named '{s}': {any}", .{ tx.name, err });
+            tx_ok = false;
+            std.debug.print("Transaction '{s}' rollback failed: {any}\n", .{ tx.name, err });
         };
 
         for (files) |file| {
+            var file_tx_ok = true;
             const file_tx = try sqlite.Transaction.init(db, "add_single_file");
+            defer if (file_tx_ok) file_tx.commit() catch unreachable;
             errdefer file_tx.rollback() catch |err| {
-                std.debug.panic("Transaction '{s}' rollback failed: {any}", .{ tx.name, err });
+                file_tx_ok = false;
+                std.debug.print("Transaction '{s}' rollback failed: {any}\n", .{ tx.name, err });
             };
 
             const file_path_parts = [_][]const u8{ abs_repo_path, file };
@@ -50,46 +64,38 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             std.debug.print("What is the absolute path? {s}\n", .{abs_path});
 
             var f_in = try std.fs.openFileAbsolute(abs_path, .{ .lock = .shared });
-            var f_in_buffed = std.io.bufferedReader(f_in.reader());
-
-            // TODO: use heap memory and a chunk size pulled from config
-            // var buffer: [default_buffer_size]u8 = undefined;
-            const buffer = try alloc.alloc(u8, default_buffer_size);
-            defer alloc.free(buffer);
-            var buf_writer = std.io.fixedBufferStream(buffer);
 
             const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;
             var hash = std.crypto.hash.sha3.Sha3_256.init(.{});
+            var file_digest_buf: [digest_length]u8 = undefined;
 
-            // TODO: use LimitedReader below so that we only read the default chunk size for
-            // each chunk DB entry.
-            var lr = std.io.limitedReader(f_in_buffed.reader(), default_buffer_size);
-            _ = lr;
+            try fifo.pump(f_in.reader(), hash.writer());
 
-            var mwriter = std.io.multiWriter(.{ hash.writer(), buf_writer.writer() });
+            hash.final(&file_digest_buf);
+            var file_digest_hex = std.fmt.bytesToHex(file_digest_buf, .lower);
 
-            const fifo_buf = try alloc.alloc(u8, default_buffer_size);
-            defer alloc.free(fifo_buf);
+            // Rewind to beginning of file before chunking
+            try f_in.seekTo(0);
 
-            var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
+            const chunk_buffer = try alloc.alloc(u8, chunk_size);
+            defer alloc.free(chunk_buffer);
+            var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
 
-            try fifo.pump(f_in_buffed.reader(), mwriter.writer());
+            var chunk_hash = std.crypto.hash.sha3.Sha3_256.init(.{});
+            var lr = std.io.limitedReader(f_in.reader(), chunk_size);
 
-            var digest_buf: [digest_length]u8 = undefined;
-            hash.final(&digest_buf);
+            var mwriter = std.io.multiWriter(.{ chunk_hash.writer(), chunk_buf_stream.writer() });
 
-            var digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
-            std.debug.print("What is the contents of {s}? '{s}'\n", .{ file, buf_writer.getWritten() });
-            std.debug.print("What is the hash contents of {s}? {s}\n", .{ file, digest_hex });
+            try fifo.pump(lr.reader(), mwriter.writer());
 
-            // TODO: actually add files to work tree DB
+            var chunk_digest_buf: [digest_length]u8 = undefined;
+            chunk_hash.final(&chunk_digest_buf);
 
-            // try to commit if everything went well
-            try file_tx.commit();
+            var chunk_digest_hex = std.fmt.bytesToHex(chunk_digest_buf, .lower);
+            std.debug.print("What is the contents of {s}? '{s}'\n", .{ file, chunk_buf_stream.getWritten() });
+            std.debug.print("What is the hash contents of {s}? {s}\n", .{ file, file_digest_hex });
+            std.debug.print("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hex });
         }
-
-        // try to commit if everything went well
-        try tx.commit();
     }
 }
 

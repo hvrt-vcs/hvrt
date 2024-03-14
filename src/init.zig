@@ -6,26 +6,24 @@ const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
 
 const hvrt_dirname = ".hvrt";
+const repo_db_name = "repo.hvrt";
 const work_tree_db_name = "work_tree_state.sqlite";
 const default_config_name = "config.toml";
 const default_config = @embedFile("embedded/default.toml");
+const default_branch = "master";
 
 const version = @embedFile("embedded/VERSION.txt");
 
 /// It is the responsibility of the caller of `init` to deallocate and
 /// deinit dir_path and alloc, if necessary.
 pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
-
-    // const path = try std.fs.path.join(alloc, .{ dir_path, ".hvrt" });
-    const path_parts = [_][]const u8{ repo_path, hvrt_dirname };
-    const hvrt_path = try fspath.joinZ(alloc, &path_parts);
-    defer alloc.free(hvrt_path);
+    var repo_dir = try std.fs.openDirAbsolute(repo_path, .{});
+    defer repo_dir.close();
 
     // fails if directory already exists
-    try std.fs.makeDirAbsolute(hvrt_path);
-    var hvrt_dir = try std.fs.openDirAbsolute(hvrt_path, .{});
+    var hvrt_dir = try repo_dir.makeOpenPath(hvrt_dirname, .{});
+    errdefer repo_dir.deleteTree(hvrt_dirname) catch unreachable;
     defer hvrt_dir.close();
-    errdefer hvrt_dir.deleteTree(".") catch unreachable;
 
     // Deferring file close until the end of this function has the added
     // benefit of holding an exclusive file lock for the duration of the
@@ -34,52 +32,55 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     defer config_file.close();
     _ = try config_file.write(default_config);
 
-    const db_path_parts = [_][]const u8{ hvrt_path, work_tree_db_name };
-    const db_path = try fspath.joinZ(alloc, &db_path_parts);
-    defer alloc.free(db_path);
-    std.debug.print("what is db_path: {s}\n", .{db_path});
+    // Worktree
+    const wt_db_path_parts = [_][]const u8{ repo_path, hvrt_dirname, work_tree_db_name };
+    const wt_db_path = try fspath.joinZ(alloc, &wt_db_path_parts);
+    defer alloc.free(wt_db_path);
+    std.debug.print("what is wt_db_path: {s}\n", .{wt_db_path});
 
-    const db = try sqlite.DataBase.open(db_path);
+    const wt_sqlfiles = sql.sqlite.work_tree;
+    try initDatabase(wt_db_path, "worktree_init", wt_sqlfiles);
+
+    // Repo
+    const repo_db_path_parts = [_][]const u8{ repo_path, hvrt_dirname, repo_db_name };
+    const repo_db_path = try fspath.joinZ(alloc, &repo_db_path_parts);
+    defer alloc.free(repo_db_path);
+
+    // FIXME: no postgres support at the moment, so this `if` statement is just for show.
+    const repo_sqlfiles = if (true) sql.sqlite.repo else sql.postgres.repo;
+    try initDatabase(repo_db_path, "repo_init", repo_sqlfiles);
+}
+
+fn initDatabase(db_uri: [:0]const u8, tx_name: [:0]const u8, sqlfiles: anytype) !void {
+    const db = try sqlite.DataBase.open(db_uri);
     defer db.close() catch unreachable;
 
-    const sqlfiles = sql.sqlite;
+    var tx_ok = true;
+    const tx = try sqlite.Transaction.init(db, tx_name);
+    defer if (tx_ok) tx.commit() catch unreachable;
+    errdefer tx.rollback() catch unreachable;
+    errdefer tx_ok = false;
 
-    try db.exec(sqlfiles.work_tree.init.tables);
-
-    // Preparing a statement will only evaluate one statement (semicolon
-    // terminated) at a time. So we can't just compile the whole init script
-    // and run it. Will need to either split the script into multiple pieces,
-    // or add some logic to iterate over the statements/detect when parameters
-    // need to be bound. See link here for an example of this logic:
-    // https://github.com/praeclarum/sqlite-net/issues/84
-    const prepared_stmt1 = try sqlite.Statement.prepare(db, sqlfiles.work_tree.init.version);
-    defer prepared_stmt1.finalize() catch unreachable;
+    try db.exec(sqlfiles.init.tables);
 
     // Version
+    const prepared_stmt1 = try sqlite.Statement.prepare(db, sqlfiles.init.version);
+    defer prepared_stmt1.finalize() catch unreachable;
+
     try prepared_stmt1.bind(1, version);
     try prepared_stmt1.auto_step();
 
-    std.debug.print("Did we insert the version?\n", .{});
-
-    const prepared_stmt2 = try sqlite.Statement.prepare(db, sqlfiles.work_tree.init.branch);
+    // default branch1
+    const prepared_stmt2 = try sqlite.Statement.prepare(db, sqlfiles.init.branch1);
     defer prepared_stmt2.finalize() catch unreachable;
 
-    // default branch
-    try prepared_stmt2.bind(1, "master");
+    try prepared_stmt2.bind(1, default_branch);
     try prepared_stmt2.auto_step();
 
-    std.debug.print("Did we insert the default branch name?\n", .{});
-    // // default branch
-    // try sqlite3_bind(prepared_stmt, 2, "master");
+    // default branch2
+    const prepared_stmt3 = try sqlite.Statement.prepare(db, sqlfiles.init.branch2);
+    defer prepared_stmt3.finalize() catch unreachable;
 
-    // // stdout is for the actual output of your application, for example if you
-    // // are implementing gzip, then only the compressed bytes should be sent to
-    // // stdout, not any debugging messages.
-    // const stdout_file = std.io.getStdOut().writer();
-    // var bw = std.io.bufferedWriter(stdout_file);
-    // const stdout = bw.writer();
-
-    // try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    // try bw.flush(); // don't forget to flush!
+    try prepared_stmt3.bind(1, default_branch);
+    try prepared_stmt3.auto_step();
 }

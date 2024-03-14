@@ -416,11 +416,11 @@ pub const ResultCode = enum(c_int) {
         };
     }
 
-    pub fn fromInt(int: anytype) ResultCode {
+    pub inline fn fromInt(int: anytype) ResultCode {
         return @enumFromInt(int);
     }
 
-    pub fn toInt(code: ResultCode) c_int {
+    pub inline fn toInt(code: ResultCode) c_int {
         return @intFromEnum(code);
     }
 

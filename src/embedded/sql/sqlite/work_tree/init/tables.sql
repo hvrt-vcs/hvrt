@@ -1,5 +1,3 @@
--- We do not directly hardcode the version value into this init script so that
--- we avoid updating the script with every release of the software.
 CREATE TABLE vcs_version (
 	"id"	INTEGER,
 

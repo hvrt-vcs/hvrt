@@ -25,7 +25,7 @@ pub fn main() !void {
         defer if (debug_opt) |debug_slice| gpalloc.free(debug_slice);
 
         // c_allocator is vastly faster, but less safe than the current GeneralPurposeAllocator.
-        const allocator = if (debug_opt) gpalloc else std.heap.c_allocator;
+        const allocator = if (debug_opt != null) gpalloc else std.heap.c_allocator;
 
         // Parse args into string array (error union needs 'try')
         const args = try std.process.argsAlloc(allocator);

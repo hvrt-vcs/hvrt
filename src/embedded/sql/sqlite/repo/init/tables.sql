@@ -10,13 +10,6 @@ CREATE TABLE vcs_version (
 	PRIMARY KEY ("id" AUTOINCREMENT)
 );
 
--- We do not directly hardcode the version value into this init script so that
--- we avoid updating the script with every release of the software.
-
--- Insert the version as a parameter value when we run this init script.
-INSERT INTO vcs_version ("id", "version", "created_at", "modified_at")
-	VALUES (1, $1, strftime("%s", CURRENT_TIMESTAMP), strftime("%s", CURRENT_TIMESTAMP));
-
 CREATE TABLE tags (
 	"name"	TEXT NOT NULL,
 	"annotation"	TEXT,
@@ -34,14 +27,6 @@ CREATE TABLE default_branch (
 	PRIMARY KEY ("id" AUTOINCREMENT)
 	FOREIGN KEY ("name") REFERENCES "tags" ("name") ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
-
--- Insert default branch when we run this init script.
-INSERT INTO "tags" ("name", "is_branch", "created_at")
-	VALUES ($2, TRUE, strftime("%s", CURRENT_TIMESTAMP));
-
--- There should only ever be one entry into this table.
-INSERT INTO "default_branch" ("id", "name") VALUES (1, $2);
-
 
 CREATE TABLE trees (
 	-- It is theoretically possible to have a single tree shared between multiple

@@ -17,7 +17,8 @@ pub const WorkTree = struct {
     },
 
     init: struct {
-        branch: [:0]const u8,
+        branch1: [:0]const u8,
+        branch2: [:0]const u8,
         tables: [:0]const u8,
         version: [:0]const u8,
     },
@@ -28,25 +29,35 @@ pub const WorkTree = struct {
 /// is being implemented. Once that is fully working, a DB abstraction layer
 /// can be defined and other DBs like postgres can be implemented.
 pub const Repo = struct {
-    init: [:0]const u8,
-
     commit: struct {
         blob: [:0]const u8,
         blob_chunk: [:0]const u8,
         chunk: [:0]const u8,
         header: [:0]const u8,
     },
+
+    init: struct {
+        branch1: [:0]const u8,
+        branch2: [:0]const u8,
+        tables: [:0]const u8,
+        version: [:0]const u8,
+    },
 };
 
 pub const sqlite = .{
     .repo = Repo{
-        .init = @embedFile("embedded/sql/sqlite/repo/init.sql"),
-
         .commit = .{
             .blob = @embedFile("embedded/sql/sqlite/repo/commit/blob.sql"),
             .blob_chunk = @embedFile("embedded/sql/sqlite/repo/commit/blob_chunk.sql"),
             .chunk = @embedFile("embedded/sql/sqlite/repo/commit/chunk.sql"),
             .header = @embedFile("embedded/sql/sqlite/repo/commit/header.sql"),
+        },
+
+        .init = .{
+            .branch1 = @embedFile("embedded/sql/sqlite/repo/init/branch1.sql"),
+            .branch2 = @embedFile("embedded/sql/sqlite/repo/init/branch2.sql"),
+            .tables = @embedFile("embedded/sql/sqlite/repo/init/tables.sql"),
+            .version = @embedFile("embedded/sql/sqlite/repo/init/version.sql"),
         },
     },
     .work_tree = WorkTree{
@@ -64,7 +75,8 @@ pub const sqlite = .{
         },
 
         .init = .{
-            .branch = @embedFile("embedded/sql/sqlite/work_tree/init/branch.sql"),
+            .branch1 = @embedFile("embedded/sql/sqlite/work_tree/init/branch1.sql"),
+            .branch2 = @embedFile("embedded/sql/sqlite/work_tree/init/branch2.sql"),
             .tables = @embedFile("embedded/sql/sqlite/work_tree/init/tables.sql"),
             .version = @embedFile("embedded/sql/sqlite/work_tree/init/version.sql"),
         },

@@ -1,7 +1,7 @@
 const std = @import("std");
 
-/// Although a type is defined for WorkTree, the worktree DB is always going to
-/// be SQLite, for the forseeable future.
+/// XXX: Although a type is defined for WorkTree, the worktree DB is
+/// going to be SQLite, for the forseeable future.
 pub const WorkTree = struct {
     clear: [:0]const u8,
 

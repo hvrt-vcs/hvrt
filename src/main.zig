@@ -54,34 +54,42 @@ pub fn main() !void {
 
 const test_alloc = std.testing.allocator;
 
-fn test_init(tmp: *std.testing.TmpDir) !void {
-    var tmp_path = try tmp.dir.realpathAlloc(test_alloc, ".");
-    defer test_alloc.free(tmp_path);
+fn test_pathz(alloc: std.mem.Allocator, tmp: *std.testing.TmpDir) ![:0]u8 {
+    var tmp_path = try tmp.dir.realpathAlloc(alloc, ".");
+    defer alloc.free(tmp_path);
 
-    const tmp_pathz = try test_alloc.dupeZ(u8, tmp_path);
+    return try alloc.dupeZ(u8, tmp_path);
+}
+
+fn setup_test_files(tmp: *std.testing.TmpDir, files: []const [:0]const u8) !void {
+    for (files) |file| {
+        // std.debug.print("\nWhat is filename? {s}\n", .{file});
+
+        var fp = try tmp.dir.createFile(file, .{ .exclusive = true });
+        defer fp.close();
+
+        try fp.writer().print("The filename of this file is '{s}'.\n", .{file});
+
+        // var fifo = std.fifo.LinearFifo(u8, .{ .Static = (1024 * 16) }){};
+        // fifo.pump(null, fp.writer());
+    }
+}
+
+fn setup_init_test(tmp: *std.testing.TmpDir) !void {
+    const tmp_pathz = try test_pathz(test_alloc, tmp);
     defer test_alloc.free(tmp_pathz);
 
     const basic_args = [_][:0]const u8{ "hvrt", "init", tmp_pathz };
     try cmd.internalMain(test_alloc, &basic_args);
 }
 
-fn test_add(tmp: *std.testing.TmpDir) !void {
-    var tmp_path = try tmp.dir.realpathAlloc(test_alloc, ".");
-    defer test_alloc.free(tmp_path);
-
-    const tmp_pathz = try test_alloc.dupeZ(u8, tmp_path);
+fn setup_add_test(tmp: *std.testing.TmpDir) !void {
+    const tmp_pathz = try test_pathz(test_alloc, tmp);
     defer test_alloc.free(tmp_pathz);
 
     const files = [_][:0]const u8{ "foo.txt", "bar.txt" };
 
-    for (&files) |file| {
-        std.debug.print("\nWhat is filename? {s}\n", .{file});
-
-        var fp = try tmp.dir.createFile(file, .{ .exclusive = true });
-        defer fp.close();
-
-        try fp.writer().print("The filename of this file is '{s}'.", .{file});
-    }
+    try setup_test_files(tmp, &files);
 
     const basic_args = [_][:0]const u8{ "hvrt", "add", tmp_pathz, files[0], files[1] };
     try cmd.internalMain(test_alloc, &basic_args);
@@ -91,15 +99,26 @@ test "invoke with init sub-command" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    try test_init(&tmp);
+    try setup_init_test(&tmp);
+
+    _ = try tmp.dir.statFile(".hvrt/config.toml");
+    _ = try tmp.dir.statFile(".hvrt/repo.hvrt");
+    _ = try tmp.dir.statFile(".hvrt/work_tree_state.sqlite");
 }
 
 test "invoke with add sub-command" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    try test_init(&tmp);
-    try test_add(&tmp);
+    try setup_init_test(&tmp);
+
+    const before_stat = try tmp.dir.statFile(".hvrt/work_tree_state.sqlite");
+    try setup_add_test(&tmp);
+    const after_stat = try tmp.dir.statFile(".hvrt/work_tree_state.sqlite");
+
+    std.debug.print("before_stat: {}\nafter_stat: {}\n", .{ before_stat, after_stat });
+    // FIXME: add more content to test files for testing.
+    // try std.testing.expect(before_stat.size < after_stat.size);
 }
 
 test "invoke without args" {

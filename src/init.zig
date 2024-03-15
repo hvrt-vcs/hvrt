@@ -36,7 +36,7 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     const wt_db_path_parts = [_][]const u8{ repo_path, hvrt_dirname, work_tree_db_name };
     const wt_db_path = try fspath.joinZ(alloc, &wt_db_path_parts);
     defer alloc.free(wt_db_path);
-    std.debug.print("what is wt_db_path: {s}\n", .{wt_db_path});
+    // std.debug.print("what is wt_db_path: {s}\n", .{wt_db_path});
 
     const wt_sqlfiles = sql.sqlite.work_tree;
     try initDatabase(wt_db_path, "worktree_init", wt_sqlfiles);

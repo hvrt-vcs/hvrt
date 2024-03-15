@@ -22,7 +22,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
     const db_path_parts = [_][]const u8{ abs_repo_path, hvrt_dirname, work_tree_db_name };
     const db_path = try fspath.joinZ(alloc, &db_path_parts);
     defer alloc.free(db_path);
-    std.debug.print("what is db_path: {s}\n", .{db_path});
+    // std.debug.print("what is db_path: {s}\n", .{db_path});
 
     // Should fail if either the directory or db files do not exist
     const db = try sqlite.DataBase.open(db_path);
@@ -60,8 +60,8 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             const abs_path = try std.fs.path.joinZ(alloc, &file_path_parts);
             defer alloc.free(abs_path);
 
-            std.debug.print("What is the file name? {s}\n", .{file});
-            std.debug.print("What is the absolute path? {s}\n", .{abs_path});
+            // std.debug.print("What is the file name? {s}\n", .{file});
+            // std.debug.print("What is the absolute path? {s}\n", .{abs_path});
 
             var f_in = try std.fs.openFileAbsolute(abs_path, .{ .lock = .shared });
 
@@ -73,6 +73,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
             hash.final(&file_digest_buf);
             var file_digest_hex = std.fmt.bytesToHex(file_digest_buf, .lower);
+            _ = file_digest_hex;
 
             // Rewind to beginning of file before chunking
             try f_in.seekTo(0);
@@ -92,9 +93,10 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             chunk_hash.final(&chunk_digest_buf);
 
             var chunk_digest_hex = std.fmt.bytesToHex(chunk_digest_buf, .lower);
-            std.debug.print("What is the contents of {s}? '{s}'\n", .{ file, chunk_buf_stream.getWritten() });
-            std.debug.print("What is the hash contents of {s}? {s}\n", .{ file, file_digest_hex });
-            std.debug.print("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hex });
+            _ = chunk_digest_hex;
+            // std.debug.print("What is the contents of {s}? '{s}'\n", .{ file, chunk_buf_stream.getWritten() });
+            // std.debug.print("What is the hash contents of {s}? {s}\n", .{ file, file_digest_hex });
+            // std.debug.print("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hex });
         }
     }
 }

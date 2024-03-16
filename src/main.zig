@@ -116,7 +116,7 @@ test "invoke with add sub-command" {
     try setup_add_test(&tmp);
     const after_stat = try tmp.dir.statFile(".hvrt/work_tree_state.sqlite");
 
-    std.debug.print("before_stat: {}\nafter_stat: {}\n", .{ before_stat, after_stat });
+    std.debug.print("\nbefore_stat: {}\nafter_stat: {}\n", .{ before_stat, after_stat });
     // FIXME: add more content to test files for testing.
     // try std.testing.expect(before_stat.size < after_stat.size);
 }

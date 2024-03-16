@@ -42,19 +42,24 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
         var tx_ok = true;
         const tx = try sqlite.Transaction.init(db, "add_cmd");
         defer if (tx_ok) tx.commit() catch unreachable;
-        errdefer tx.rollback() catch |err| {
+        errdefer {
             tx_ok = false;
-            std.debug.print("Transaction '{s}' rollback failed: {any}\n", .{ tx.name, err });
-        };
+            tx.rollback() catch unreachable;
+        }
 
         for (files) |file| {
+            if (std.fs.path.isAbsolute(file)) {
+                std.log.err("File to add to stage must be relative path: {s}", .{file});
+                return error.AbsoluteFilePath;
+            }
+
             var file_tx_ok = true;
             const file_tx = try sqlite.Transaction.init(db, "add_single_file");
             defer if (file_tx_ok) file_tx.commit() catch unreachable;
-            errdefer file_tx.rollback() catch |err| {
+            errdefer {
                 file_tx_ok = false;
-                std.debug.print("Transaction '{s}' rollback failed: {any}\n", .{ tx.name, err });
-            };
+                file_tx.rollback() catch unreachable;
+            }
 
             const file_path_parts = [_][]const u8{ abs_repo_path, file };
             const abs_path = try std.fs.path.joinZ(alloc, &file_path_parts);

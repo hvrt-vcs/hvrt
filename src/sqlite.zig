@@ -172,13 +172,19 @@ pub const Transaction = struct {
     pub fn commit(self: *const Self) !void {
         var stmt_buf: [buf_sz]u8 = undefined;
         const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _commit_fmt, .{self.name});
-        try self.db.exec(trans_stmt);
+        self.db.exec(trans_stmt) catch |err| {
+            std.log.err("Transaction '{s}' commit failed: {any}\n", .{ self.name, err });
+            return err;
+        };
     }
 
     pub fn rollback(self: *const Self) !void {
         var stmt_buf: [buf_sz]u8 = undefined;
         const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _rollback_fmt, .{self.name});
-        try self.db.exec(trans_stmt);
+        self.db.exec(trans_stmt) catch |err| {
+            std.log.err("Transaction '{s}' rollback failed: {any}\n", .{ self.name, err });
+            return err;
+        };
     }
 };
 

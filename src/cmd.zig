@@ -30,16 +30,16 @@ pub fn internalMain(alloc: std.mem.Allocator, args: []const [:0]const u8) !void 
         } else if (std.mem.eql(u8, sub_cmd, "rm")) {
             try notImplemented(sub_cmd);
         } else {
-            std.debug.print("Unknown sub-command given: {s}.\n", .{sub_cmd});
+            std.log.err("Unknown sub-command given: {s}.\n", .{sub_cmd});
             return error.ArgumentError;
         }
     } else {
-        std.debug.print("No sub-command given.\n", .{});
+        std.log.err("No sub-command given.\n", .{});
         return error.ArgumentError;
     }
 }
 
 fn notImplemented(sub_cmd: []const u8) !void {
-    std.debug.print("Sub-command not implemented yet: {s}.\n", .{sub_cmd});
+    std.log.err("Sub-command not implemented yet: {s}.\n", .{sub_cmd});
     return error.NotImplementedError;
 }

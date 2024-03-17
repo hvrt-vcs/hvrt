@@ -1,6 +1,8 @@
 const std = @import("std");
 const c = @import("c.zig");
 
+const log = std.log.scoped(.libsqlite);
+
 pub const SqliteError = @TypeOf(errors.SQLITE_ERROR);
 
 pub const DataBase = struct {
@@ -173,7 +175,7 @@ pub const Transaction = struct {
         var stmt_buf: [buf_sz]u8 = undefined;
         const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _commit_fmt, .{self.name});
         self.db.exec(trans_stmt) catch |err| {
-            std.log.err("Transaction '{s}' commit failed: {any}\n", .{ self.name, err });
+            log.err("Transaction '{s}' commit failed: {any}\n", .{ self.name, err });
             return err;
         };
     }
@@ -182,7 +184,7 @@ pub const Transaction = struct {
         var stmt_buf: [buf_sz]u8 = undefined;
         const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _rollback_fmt, .{self.name});
         self.db.exec(trans_stmt) catch |err| {
-            std.log.err("Transaction '{s}' rollback failed: {any}\n", .{ self.name, err });
+            log.err("Transaction '{s}' rollback failed: {any}\n", .{ self.name, err });
             return err;
         };
     }
@@ -411,9 +413,9 @@ pub const ResultCode = enum(c_int) {
     pub fn check(code: ResultCode, db_optional: ?DataBase) !ResultCode {
         return if (code.toError()) |err| {
             // How to retrieve SQLite error codes: https://www.sqlite.org/c3ref/errcode.html
-            std.debug.print("SQLite returned code '{s}' ({d}) with message: '{s}'\n", .{ @errorName(err), code.toInt(), c.sqlite3_errstr(code.toInt()) });
+            log.err("SQLite returned code '{s}' ({d}) with message: '{s}'\n", .{ @errorName(err), code.toInt(), c.sqlite3_errstr(code.toInt()) });
             if (db_optional) |db| {
-                std.debug.print("SQLite message for non-null DB pointer: '{s}'\n", .{c.sqlite3_errmsg(db.db)});
+                log.err("SQLite message for non-null DB pointer: '{s}'\n", .{c.sqlite3_errmsg(db.db)});
             }
 
             return err;

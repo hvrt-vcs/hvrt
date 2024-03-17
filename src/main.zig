@@ -61,17 +61,36 @@ fn test_pathz(alloc: std.mem.Allocator, tmp: *std.testing.TmpDir) ![:0]u8 {
     return try alloc.dupeZ(u8, tmp_path);
 }
 
+fn prngRead(prng: std.rand.Random, buffer: []u8) error{}!usize {
+    prng.bytes(buffer);
+    return buffer.len;
+}
+
 fn setup_test_files(tmp: *std.testing.TmpDir, files: []const [:0]const u8) !void {
+    const target_sz = 1024 * 1024;
+    const fifo_buffer_size = 1024 * 4;
+
+    var prng = std.rand.DefaultPrng.init(0);
+    var prngRand = prng.random();
+    var prng_reader = std.io.Reader(std.rand.Random, error{}, prngRead){ .context = prngRand };
+    const fifo_buf = try test_alloc.alloc(u8, fifo_buffer_size);
+    defer test_alloc.free(fifo_buf);
+
+    var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
+
     for (files) |file| {
         // std.debug.print("\nWhat is filename? {s}\n", .{file});
 
         var fp = try tmp.dir.createFile(file, .{ .exclusive = true });
         defer fp.close();
+        var fp_wrtr = fp.writer();
 
-        try fp.writer().print("The filename of this file is '{s}'.\n", .{file});
+        try fp_wrtr.print("The filename of this file is '{s}'.\n", .{file});
+        try fp_wrtr.print("Enjoy some random hex bytes below:\n", .{});
 
-        // var fifo = std.fifo.LinearFifo(u8, .{ .Static = (1024 * 16) }){};
-        // fifo.pump(null, fp.writer());
+        var lr = std.io.limitedReader(prng_reader, target_sz);
+
+        try fifo.pump(lr.reader(), fp.writer());
     }
 }
 
@@ -113,10 +132,12 @@ test "invoke with add sub-command" {
     try setup_init_test(&tmp);
 
     const before_stat = try tmp.dir.statFile(".hvrt/work_tree_state.sqlite");
+    const before_sz = before_stat.size;
     try setup_add_test(&tmp);
     const after_stat = try tmp.dir.statFile(".hvrt/work_tree_state.sqlite");
+    const after_sz = after_stat.size;
 
-    std.debug.print("\n\nbefore_stat: {}\nafter_stat: {}\n\n", .{ before_stat, after_stat });
+    std.debug.print("\n\nbefore_sz: {}\nafter_sz: {}\n\n", .{ before_sz, after_sz });
     // FIXME: add more content to test files for testing.
     // try std.testing.expect(before_stat.size < after_stat.size);
 }

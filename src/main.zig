@@ -54,6 +54,56 @@ pub fn main() !void {
 
 const test_alloc = std.testing.allocator;
 
+/// Wrapper to return two hex bytes for every byte read from the internal
+/// reader reference. Keeps track of leftover byte, if necessary. Adds a
+/// newline character at the specified length.
+pub fn HexReader(comptime ReaderType: type, comptime line_max: u64) type {
+    return struct {
+        internal_reader: ReaderType,
+        line_remaining: u64,
+        leftover_byte: ?u8,
+
+        pub const max_line_len = line_max;
+        pub const Error = ReaderType.Error;
+        pub const Reader = std.io.Reader(*Self, Error, read);
+
+        const Self = @This();
+
+        pub fn read(self: *Self, dest: []u8) Error!usize {
+            var bytes_written: usize = 0;
+            for (dest) |*byte| {
+                if (self.leftover_byte) |lob| {
+                    byte.* = lob;
+                    self.leftover_byte = null;
+                } else if (self.line_remaining == 0) {
+                    byte.* = '\n';
+                    self.line_remaining = max_line_len;
+                } else {
+                    var result: [1]u8 = undefined;
+                    const amt_read = try self.read(result[0..]);
+                    if (amt_read == 0) break;
+                    const hex = std.fmt.bytesToHex(result, .lower);
+                    self.leftover_byte = hex[1];
+                    byte.* = hex[0];
+                }
+                self.line_remaining -= 1;
+                bytes_written += 1;
+            }
+            return bytes_written;
+        }
+
+        pub fn reader(self: *Self) Reader {
+            return .{ .context = self };
+        }
+    };
+}
+
+/// Convenience function to create a concrete HexReader type and return an
+/// instantiation of it.
+pub fn hexReader(reader: anytype, comptime line_max: u64) HexReader(@TypeOf(reader), line_max) {
+    return .{ .internal_reader = reader, .line_remaining = line_max, .leftover_byte = null };
+}
+
 fn test_pathz(alloc: std.mem.Allocator, tmp: *std.testing.TmpDir) ![:0]u8 {
     var tmp_path = try tmp.dir.realpathAlloc(alloc, ".");
     defer alloc.free(tmp_path);
@@ -78,6 +128,7 @@ fn prngReadHex(prng: std.rand.Random, buffer: []u8) !usize {
     @memcpy(buffer, hex_buf[0..buffer.len]);
     return buffer.len;
 }
+
 fn setup_test_files(tmp: *std.testing.TmpDir, files: []const [:0]const u8) !void {
     const target_sz = 1024 * 1024;
     const fifo_buffer_size = 1024 * 4;
@@ -85,6 +136,8 @@ fn setup_test_files(tmp: *std.testing.TmpDir, files: []const [:0]const u8) !void
     var prng = std.rand.DefaultPrng.init(0);
     var prngRand = prng.random();
     var prng_reader = std.io.Reader(std.rand.Random, anyerror, prngRead){ .context = prngRand };
+    var prng_hex_reader = hexReader(prng_reader, 80);
+    _ = prng_hex_reader;
     const fifo_buf = try test_alloc.alloc(u8, fifo_buffer_size);
     defer test_alloc.free(fifo_buf);
 
@@ -101,6 +154,7 @@ fn setup_test_files(tmp: *std.testing.TmpDir, files: []const [:0]const u8) !void
         try fp_wrtr.print("Enjoy some random hex bytes below:\n", .{});
 
         var lr = std.io.limitedReader(prng_reader, target_sz);
+        // var lr = std.io.limitedReader(prng_hex_reader, target_sz);
 
         try fifo.pump(lr.reader(), fp.writer());
     }

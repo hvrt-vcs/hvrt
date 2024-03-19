@@ -22,9 +22,15 @@ pub const DataBase = struct {
 
         // Enable extended error codes
         if (db_optional) |db| {
-            const self = .{ .db = db };
+            const self: DataBase = .{ .db = db };
             rc = c.sqlite3_extended_result_codes(self.db, 1);
             _ = try ResultCode.fromInt(rc).check(self);
+
+            // For Havarti, we almost always want to default these pragmas to
+            // the values below.
+            try self.exec("PRAGMA foreign_keys = true;");
+            try self.exec("PRAGMA ignore_check_constraints = false;");
+            try self.exec("PRAGMA automatic_index = true;");
 
             return self;
         } else {

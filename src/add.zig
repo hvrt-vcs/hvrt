@@ -35,8 +35,12 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
     const sqlfiles = sql.sqlite;
 
+    const file_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.file);
+    defer file_stmt.finalize() catch unreachable;
     const blob_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.blob);
     defer blob_stmt.finalize() catch unreachable;
+    const blob_chunk_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.blob_chunk);
+    defer blob_chunk_stmt.finalize() catch unreachable;
 
     {
         var tx_ok = true;
@@ -55,11 +59,6 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
         var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
 
         for (files) |file| {
-            if (std.fs.path.isAbsolute(file)) {
-                std.log.err("File to add to stage must be relative path: {s}", .{file});
-                return error.AbsoluteFilePath;
-            }
-
             var file_tx_ok = true;
             const file_tx = try sqlite.Transaction.init(db, "add_single_file");
             defer if (file_tx_ok) file_tx.commit() catch unreachable;
@@ -67,6 +66,15 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
                 file_tx_ok = false;
                 file_tx.rollback() catch unreachable;
             }
+
+            if (std.fs.path.isAbsolute(file)) {
+                std.log.err("File to add to stage must be relative path: {s}", .{file});
+                return error.AbsoluteFilePath;
+            }
+
+            var slashed_file = try alloc.dupeZ(u8, file);
+            defer alloc.free(slashed_file);
+            std.mem.replaceScalar(u8, slashed_file, std.fs.path.sep_windows, std.fs.path.sep_posix);
 
             const file_path_parts = [_][]const u8{ abs_repo_path, file };
             const abs_path = try std.fs.path.joinZ(alloc, &file_path_parts);
@@ -76,23 +84,48 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             std.log.debug("What is the absolute path? {s}\n", .{abs_path});
 
             var f_in = try std.fs.openFileAbsolute(abs_path, .{ .lock = .shared });
+            defer f_in.close();
+
+            const f_stat = try f_in.stat();
+            const file_size: i64 = @intCast(f_stat.size);
+            // const file_size: i64 = f_stat.size;
 
             var hash = std.crypto.hash.sha3.Sha3_256.init(.{});
+            const hash_alg = "sha3-256";
 
             try fifo.pump(f_in.reader(), hash.writer());
 
             hash.final(&digest_buf);
             var file_digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
-            std.log.debug("What is the hash contents of {s}? {s}\n", .{ file, file_digest_hex });
+            const file_digest_hexz = try alloc.dupeZ(u8, &file_digest_hex);
+            defer alloc.free(file_digest_hexz);
+
+            // _, err = tx.Exec(blob_script, file_hex_digest, "sha3-256", file_size)
+            std.log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_alg, file_size });
+            try blob_stmt.reset();
+            try blob_stmt.clear_bindings();
+            try blob_stmt.bind(1, file_digest_hexz);
+            try blob_stmt.bind(2, hash_alg);
+            try blob_stmt.bind(3, file_size);
+            try blob_stmt.auto_step();
+
+            std.log.debug("file_path: {s}\nfile_hash: {s}\nfile_hash_alg: {s}\nfile_size: {any}\n", .{ slashed_file, file_digest_hexz, hash_alg, file_size });
+            try file_stmt.reset();
+            try file_stmt.clear_bindings();
+            try file_stmt.bind(1, slashed_file);
+            try file_stmt.bind(2, file_digest_hexz);
+            try file_stmt.bind(3, hash_alg);
+            try file_stmt.bind(4, file_size);
+            try file_stmt.auto_step();
 
             // Rewind to beginning of file before chunking
             try f_in.seekTo(0);
 
-            const f_stat = try f_in.stat();
-            const f_sz = f_stat.size;
             var cur_pos: @TypeOf(f_stat.size) = 0;
-            while (cur_pos < f_sz) : (cur_pos = try f_in.getPos()) {
+            while (cur_pos < file_size) : (cur_pos = try f_in.getPos()) {
                 chunk_buf_stream.reset();
+
+                const compression_algo = "zstd";
 
                 var chunk_hash = std.crypto.hash.sha3.Sha3_256.init(.{});
                 var mwriter = std.io.multiWriter(.{ chunk_hash.writer(), chunk_buf_stream.writer() });
@@ -101,11 +134,30 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
                 try fifo.pump(lr.reader(), mwriter.writer());
 
+                const end_pos = try f_in.getPos();
+
                 chunk_hash.final(&digest_buf);
                 var chunk_digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
 
                 std.log.debug("What is the contents of {s}? '{s}'\n", .{ file, chunk_buf_stream.getWritten() });
                 std.log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hex });
+
+                std.log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {s}\n", .{ file_digest_hexz, hash_alg, chunk_digest_hex, hash_alg, cur_pos, end_pos, compression_algo });
+                // std.debug.print("\nblob_hash: {s}\nblob_hash_algo: {s}\nchunk_hash: {s}\nchunk_hash_algo: {s}\nstart_byte: {any}\nend_byte: {any}\ncompression_algo: {s}\n", .{ file_digest_hexz, hash_alg, chunk_digest_hex, hash_alg, cur_pos, end_pos, compression_algo });
+
+                // TODO: Insert into blob_chunks table.
+                // TODO: Add zstd compression
+
+                // _, err = chunk_stmt.Exec(
+                // 	file_hex_digest,  // 1. blob_hash
+                // 	"sha3-256",       // 2. blob_hash_algo
+                // 	chunk_hex_digest, // 3. chunk_hash
+                // 	"sha3-256",       // 4. chunk_hash_algo
+                // 	cur_byte,         // 5. start_byte
+                // 	cur_byte+num-1,   // 6. end_byte
+                // 	"zstd",           // 7. compression_algo
+                // 	enc_blob,         // 8. data
+                // )
             }
         }
     }

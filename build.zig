@@ -15,7 +15,8 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const sqlite_include_path = "third_party/sqlite_build";
+    const third_party_path = "third_party";
+    const sqlite_include_path = third_party_path ++ "/sqlite3";
 
     const sqlite = b.addStaticLibrary(.{
         .name = "sqlite",
@@ -23,7 +24,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     sqlite.addCSourceFile(.{
-        .file = .{ .path = "third_party/sqlite_build/sqlite3.c" },
+        .file = .{ .path = sqlite_include_path ++ "/sqlite3.c" },
         .flags = &[_][]const u8{
             "-std=c99",
         },

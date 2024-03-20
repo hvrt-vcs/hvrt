@@ -13,6 +13,7 @@ pub const WorkTree = struct {
     add: struct {
         blob: [:0]const u8,
         blob_chunk: [:0]const u8,
+        chunk: [:0]const u8,
         file: [:0]const u8,
     },
 
@@ -71,6 +72,7 @@ pub const sqlite = .{
         .add = .{
             .blob = @embedFile("embedded/sql/sqlite/work_tree/add/blob.sql"),
             .blob_chunk = @embedFile("embedded/sql/sqlite/work_tree/add/blob_chunk.sql"),
+            .chunk = @embedFile("embedded/sql/sqlite/work_tree/add/chunk.sql"),
             .file = @embedFile("embedded/sql/sqlite/work_tree/add/file.sql"),
         },
 

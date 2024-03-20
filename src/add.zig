@@ -5,8 +5,8 @@ const Dir = std.fs.Dir;
 const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
 
-const hvrt_dirname = ".hvrt";
-const work_tree_db_name = "work_tree_state.sqlite";
+const hvrt_dirname: [:0]const u8 = ".hvrt";
+const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
 
 // TODO: use fifo buffer size pulled from config
 const fifo_buffer_size = 1024 * 4;
@@ -41,6 +41,8 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
     defer blob_stmt.finalize() catch unreachable;
     const blob_chunk_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.blob_chunk);
     defer blob_chunk_stmt.finalize() catch unreachable;
+    const chunk_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.chunk);
+    defer chunk_stmt.finalize() catch unreachable;
 
     {
         var tx_ok = true;
@@ -87,11 +89,12 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             defer f_in.close();
 
             const f_stat = try f_in.stat();
-            const file_size: i64 = @intCast(f_stat.size);
+            const file_size = f_stat.size;
+            // const file_size: i64 = @intCast(f_stat.size);
             // const file_size: i64 = f_stat.size;
 
             var hash = std.crypto.hash.sha3.Sha3_256.init(.{});
-            const hash_alg = "sha3-256";
+            const hash_algo: [:0]const u8 = "sha3-256";
 
             try fifo.pump(f_in.reader(), hash.writer());
 
@@ -101,31 +104,32 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             defer alloc.free(file_digest_hexz);
 
             // _, err = tx.Exec(blob_script, file_hex_digest, "sha3-256", file_size)
-            std.log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_alg, file_size });
+            std.log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_algo, file_size });
             try blob_stmt.reset();
             try blob_stmt.clear_bindings();
             try blob_stmt.bind(1, file_digest_hexz);
-            try blob_stmt.bind(2, hash_alg);
-            try blob_stmt.bind(3, file_size);
+            try blob_stmt.bind(2, hash_algo);
+            try blob_stmt.bind(3, @as(i64, @intCast(file_size)));
             try blob_stmt.auto_step();
 
-            std.log.debug("file_path: {s}\nfile_hash: {s}\nfile_hash_alg: {s}\nfile_size: {any}\n", .{ slashed_file, file_digest_hexz, hash_alg, file_size });
+            std.log.debug("file_path: {s}\nfile_hash: {s}\nfile_hash_alg: {s}\nfile_size: {any}\n", .{ slashed_file, file_digest_hexz, hash_algo, file_size });
             try file_stmt.reset();
             try file_stmt.clear_bindings();
             try file_stmt.bind(1, slashed_file);
             try file_stmt.bind(2, file_digest_hexz);
-            try file_stmt.bind(3, hash_alg);
-            try file_stmt.bind(4, file_size);
+            try file_stmt.bind(3, hash_algo);
+            try file_stmt.bind(4, @as(i64, @intCast(file_size)));
             try file_stmt.auto_step();
 
             // Rewind to beginning of file before chunking
             try f_in.seekTo(0);
 
-            var cur_pos: @TypeOf(f_stat.size) = 0;
+            var cur_pos: @TypeOf(file_size) = 0;
             while (cur_pos < file_size) : (cur_pos = try f_in.getPos()) {
                 chunk_buf_stream.reset();
 
-                const compression_algo = "zstd";
+                // const compression_algo: ?[:0]const u8 = "zstd";
+                const compression_algo: ?[:0]const u8 = null;
 
                 var chunk_hash = std.crypto.hash.sha3.Sha3_256.init(.{});
                 var mwriter = std.io.multiWriter(.{ chunk_hash.writer(), chunk_buf_stream.writer() });
@@ -138,34 +142,39 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
                 chunk_hash.final(&digest_buf);
                 var chunk_digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
+                const chunk_digest_hexz = try alloc.dupeZ(u8, &chunk_digest_hex);
+                defer alloc.free(chunk_digest_hexz);
+
+                const data: []const u8 = chunk_buf_stream.getWritten();
 
                 std.log.debug("What is the contents of {s}? '{s}'\n", .{ file, chunk_buf_stream.getWritten() });
                 std.log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hex });
 
-                std.log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {s}\n", .{ file_digest_hexz, hash_alg, chunk_digest_hex, hash_alg, cur_pos, end_pos, compression_algo });
-                // std.debug.print("\nblob_hash: {s}\nblob_hash_algo: {s}\nchunk_hash: {s}\nchunk_hash_algo: {s}\nstart_byte: {any}\nend_byte: {any}\ncompression_algo: {s}\n", .{ file_digest_hexz, hash_alg, chunk_digest_hex, hash_alg, cur_pos, end_pos, compression_algo });
+                std.log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hex, hash_algo, cur_pos, end_pos, compression_algo });
+                // std.debug.print("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hex, hash_algo, cur_pos, end_pos, compression_algo });
 
-                // TODO: Insert into blob_chunks table.
+                // INSERT INTO "chunks"
+                try chunk_stmt.reset();
+                try chunk_stmt.clear_bindings();
+                try chunk_stmt.bind(1, chunk_digest_hexz); // chunk_hash
+                try chunk_stmt.bind(2, hash_algo); // chunk_hash_algo
+                try chunk_stmt.bind(3, compression_algo); // compression_algo
+                try chunk_stmt.bind(4, data); // data
+                try chunk_stmt.auto_step();
+
+                // INSERT INTO "blob_chunks"
+                try blob_chunk_stmt.reset();
+                try blob_chunk_stmt.clear_bindings();
+                try blob_chunk_stmt.bind(1, file_digest_hexz); // blob_hash
+                try blob_chunk_stmt.bind(2, hash_algo); // blob_hash_algo
+                try blob_chunk_stmt.bind(3, chunk_digest_hexz); // chunk_hash
+                try blob_chunk_stmt.bind(4, hash_algo); // chunk_hash_algo
+                try blob_chunk_stmt.bind(5, @as(i64, @intCast(cur_pos))); // start_byte
+                try blob_chunk_stmt.bind(6, @as(i64, @intCast(end_pos))); // end_byte
+                try blob_chunk_stmt.auto_step();
+
                 // TODO: Add zstd compression
-
-                // _, err = chunk_stmt.Exec(
-                // 	file_hex_digest,  // 1. blob_hash
-                // 	"sha3-256",       // 2. blob_hash_algo
-                // 	chunk_hex_digest, // 3. chunk_hash
-                // 	"sha3-256",       // 4. chunk_hash_algo
-                // 	cur_byte,         // 5. start_byte
-                // 	cur_byte+num-1,   // 6. end_byte
-                // 	"zstd",           // 7. compression_algo
-                // 	enc_blob,         // 8. data
-                // )
             }
         }
     }
-}
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
 }

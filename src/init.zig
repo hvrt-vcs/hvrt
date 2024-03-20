@@ -5,14 +5,14 @@ const Dir = std.fs.Dir;
 const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
 
-const hvrt_dirname = ".hvrt";
-const repo_db_name = "repo.hvrt";
-const work_tree_db_name = "work_tree_state.sqlite";
-const default_config_name = "config.toml";
-const default_config = @embedFile("embedded/default.toml");
-const default_branch = "master";
+const hvrt_dirname: [:0]const u8 = ".hvrt";
+const repo_db_name: [:0]const u8 = "repo.hvrt";
+const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
+const default_config_name: [:0]const u8 = "config.toml";
+const default_config: [:0]const u8 = @embedFile("embedded/default.toml");
+const default_branch: [:0]const u8 = "master";
 
-const version = @embedFile("embedded/VERSION.txt");
+const version: [:0]const u8 = @embedFile("embedded/VERSION.txt");
 
 /// It is the responsibility of the caller of `init` to deallocate and
 /// deinit dir_path and alloc, if necessary.

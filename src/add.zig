@@ -94,7 +94,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             // const file_size: i64 = f_stat.size;
 
             var hash = std.crypto.hash.sha3.Sha3_256.init(.{});
-            const hash_algo: [:0]const u8 = "sha3-256";
+            const hash_algo: [:0]const u8 = "sha3_256";
 
             try fifo.pump(f_in.reader(), hash.writer());
 
@@ -103,7 +103,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             const file_digest_hexz = try alloc.dupeZ(u8, &file_digest_hex);
             defer alloc.free(file_digest_hexz);
 
-            // _, err = tx.Exec(blob_script, file_hex_digest, "sha3-256", file_size)
+            // _, err = tx.Exec(blob_script, file_hex_digest, "sha3_256", file_size)
             std.log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_algo, file_size });
             try blob_stmt.reset();
             try blob_stmt.clear_bindings();

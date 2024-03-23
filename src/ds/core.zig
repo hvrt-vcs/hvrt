@@ -1,3 +1,8 @@
+//! Core Data structures are kept here. These are mostly the high level
+//! abstraction for the parts that are hashed into the merkle. For data
+//! structures that are merely implementation details (i.e. not hashed into the
+//! merkle tree), see the `impl.zig` file in the same directory.
+//!
 //! We use slices with a null sentinel throughout the data structures primarily
 //! because we need to interoperate with SQLite and other C code a lot, and
 //! forcing the sentinel to always be there from the beginning makes interop
@@ -134,18 +139,4 @@ pub const FileId = struct {
 
 pub const Blob = struct {
     hash_key: HashKey,
-
-    /// Within a single blob, chunkref byte ranges must not overlap.
-    chunks: []ChunkRef,
-};
-
-pub const ChunkRef = struct {
-    start_byte: u64,
-    end_byte: u64,
-    chunk: *Chunk,
-};
-
-pub const Chunk = struct {
-    hash_key: HashKey,
-    data: []const u8,
 };

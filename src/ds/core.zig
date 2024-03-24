@@ -9,11 +9,9 @@
 //! easier.
 
 const std = @import("std");
-const testing = std.testing;
-
-const hash_mod = std.crypto.hash;
-
 const log = std.log.scoped(.ds);
+
+const testing = std.testing;
 
 pub const HashAlgo = enum {
     sha3_256,
@@ -22,14 +20,14 @@ pub const HashAlgo = enum {
 
 pub fn hashAlgoEnumToType(comptime hash_algo: HashAlgo) type {
     return switch (hash_algo) {
-        .sha3_256 => hash_mod.sha3.Sha3_256,
-        .sha1 => hash_mod.Sha1,
+        .sha3_256 => std.crypto.hash.sha3.Sha3_256,
+        .sha1 => std.crypto.hash.Sha1,
     };
 }
 
 test "test hashAlgoEnumToType" {
     const sha3_type = hashAlgoEnumToType(.sha3_256);
-    try testing.expectEqual(hash_mod.sha3.Sha3_256, sha3_type);
+    try testing.expectEqual(std.crypto.hash.sha3.Sha3_256, sha3_type);
 }
 
 pub const ParentType = enum {
@@ -45,16 +43,20 @@ pub const HashKey = struct {
     hash: [:0]const u8,
     hash_algo: HashAlgo,
 
-    pub fn toStringZ(self: HashKey, alloc: std.mem.Allocator) ![:0]u8 {
+    pub fn equal(self: HashKey, other: HashKey) bool {
+        return self.hash_algo == other.hash_algo and std.mem.eql(u8, self.hash, other.hash);
+    }
+
+    pub fn toString(self: HashKey, alloc: std.mem.Allocator) ![:0]u8 {
         const parts = [_][]const u8{ @tagName(self.hash_algo), self.hash };
         return try std.mem.joinZ(alloc, hash_key_sep, &parts);
     }
 };
 
-test "HashKey toStringZ" {
+test "HashKey toString" {
     const hk = HashKey{ .hash = "deadbeef", .hash_algo = .sha3_256 };
 
-    const hks = try hk.toStringZ(testing.allocator);
+    const hks = try hk.toString(testing.allocator);
     defer testing.allocator.free(hks);
 
     const expected = "sha3_256|deadbeef";
@@ -63,37 +65,35 @@ test "HashKey toStringZ" {
 
 pub const StringMap = std.AutoHashMap([:0]const u8, [:0]const u8);
 
-pub const Commit = struct {
+pub const Headers = struct {
     const illegal_header_chars: [:0]const u8 = "=\n";
-
     alloc: std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
-    hash_key: HashKey,
-    headers: StringMap,
-    parent_edges: []*CommitParent,
-    tree: *Tree,
+    arena_alloc: std.mem.Allocator,
+    header_map: StringMap,
 
-    pub fn init(alloc: std.mem.Allocator, hash_key: HashKey, parent_edges: []*CommitParent, tree: *Tree) !Commit {
+    pub fn init(alloc: std.mem.Allocator) Headers {
         var arena = std.heap.ArenaAllocator.init(alloc);
-        var arena_alloc = arena.allocator();
-
         return .{
-            .alloc = arena_alloc,
+            .alloc = alloc,
             .arena = arena,
-            .hash_key = hash_key,
-            .headers = StringMap.init(arena_alloc),
-            .parent_edges = parent_edges,
-            .tree = tree,
+            .arena_alloc = arena.allocator(),
+            .header_map = StringMap.init(alloc),
         };
     }
 
-    pub fn deinit(self: *Commit) void {
-        self.headers.deinit();
+    pub fn deinit(self: *Headers) void {
         self.arena.deinit();
+        self.header_map.deinit();
         self.* = undefined;
     }
 
-    pub fn insertHeader(self: *Commit, key: [:0]const u8, value: [:0]const u8) !void {
+    pub fn toString(self: Headers, alloc: std.mem.Allocator) ![:0]u8 {
+        _ = alloc;
+        _ = self;
+    }
+
+    pub fn insertHeader(self: Headers, key: [:0]const u8, value: [:0]const u8) !void {
         if (std.mem.indexOfAny(u8, key, illegal_header_chars)) |idx| {
             log.err("Key \'{s}\' contains illegal character: {s}", key, key[idx]);
             return error.IllegalHeaderChar;
@@ -102,13 +102,90 @@ pub const Commit = struct {
             return error.IllegalHeaderChar;
         }
 
-        const key_copy = try self.alloc.dupeZ(u8, key);
-        const value_copy = try self.alloc.dupeZ(u8, value);
+        const key_copy = try self.arena_alloc.dupeZ(u8, key);
+        const value_copy = try self.arena_alloc.dupeZ(u8, value);
 
-        try self.headers.getOrPutValue(key_copy, value_copy);
+        try self.header_map.getOrPutValue(key_copy, value_copy);
+    }
+};
+
+pub const Commit = struct {
+    hash_key: HashKey,
+    headers: Headers,
+    parent_edges: []*CommitParent,
+    tree: *Tree,
+
+    /// A Commit object doesn't "own" anything and does not need to be deinit'd directly.
+    pub fn init(hash_key: HashKey, headers: Headers, parent_edges: []*CommitParent, tree: *Tree) !Commit {
+        return .{
+            .hash_key = hash_key,
+            .headers = headers,
+            .parent_edges = parent_edges,
+            .tree = tree,
+        };
     }
 
-    pub fn toStringZ(self: *Commit, alloc: std.mem.Allocator) ![:0]u8 {
+    /// Hash a commit without actually having a Commit object built yet.
+    pub fn nakedHash(alloc: std.mem.Allocator, parent_edges: []*CommitParent, tree: *Tree, headers: Headers) !HashKey {
+        const Temp = Commit{
+            .hash_key = undefined,
+            .headers = headers,
+            .parent_edges = parent_edges,
+            .tree = tree,
+        };
+
+        return try Temp.hash(alloc);
+    }
+
+    /// Don't pass in an Arena here. A lot of intermediate memory is allocated
+    /// that is simply thrown away. This method should be cleaned up, in that
+    /// sense.
+    pub fn hash(self: Commit, alloc: std.mem.Allocator) !HashKey {
+        var hasher = std.crypto.hash.sha3.Sha3_256.init(.{});
+        var writer = hasher.writer();
+
+        var header_lines_builder = std.ArrayList(u8).init(alloc);
+        defer header_lines_builder.deinit();
+
+        var parent_hashes_builder = std.ArrayList(u8).init(alloc);
+        defer parent_hashes_builder.deinit();
+
+        const header_lines: [:0]const u8 = try header_lines_builder.toOwnedSliceSentinel(0);
+        defer alloc.free(header_lines);
+
+        const parent_hashes: [:0]const u8 = try parent_hashes_builder.toOwnedSliceSentinel(0);
+        defer alloc.free(parent_hashes);
+
+        const hashables = .{
+            parent_hashes,
+            self.tree.toString(),
+            header_lines,
+        };
+
+        for (hashables) |h| {
+            // since hasher.update cannot return an error, this writer cannot
+            // return an error either.
+            writer.print("{s}\n", .{h}) catch unreachable;
+        }
+
+        var digest: [std.crypto.hash.sha3.Sha3_256.digest_length]u8 = undefined;
+
+        hasher.final(&digest);
+
+        const hex_digest = std.fmt.bytesToHex(digest, .lower);
+        const hex_digestz = alloc.dupeZ(u8, hex_digest);
+
+        return .{
+            .hash = hex_digestz,
+            .hash_algo = .sha3_256,
+        };
+    }
+
+    pub fn confirmHash(self: Commit) bool {
+        return self.hash_key.equal(self.hash());
+    }
+
+    pub fn toString(self: *Commit, alloc: std.mem.Allocator) ![:0]u8 {
         _ = self;
 
         var return_value = try alloc.dupeZ(u8, "something, something");
@@ -124,6 +201,13 @@ pub const CommitParent = struct {
 
 pub const Tree = struct {
     tree_entries: []*TreeEntry,
+
+    pub fn toString(self: Tree, alloc: std.mem.Allocator) ![:0]u8 {
+        _ = self;
+
+        var final_value = try alloc.dupeZ(u8, "");
+        return final_value;
+    }
 };
 
 pub const TreeEntry = struct {

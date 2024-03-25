@@ -63,10 +63,11 @@ test "HashKey toString" {
     try testing.expect(std.mem.eql(u8, expected, hks));
 }
 
-pub const StringMap = std.AutoHashMap([:0]const u8, [:0]const u8);
+pub const StringMap = std.StringHashMap([]const u8);
 
 pub const Headers = struct {
     const illegal_header_chars: [:0]const u8 = "=\n";
+
     alloc: std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
     arena_alloc: std.mem.Allocator,
@@ -83,31 +84,93 @@ pub const Headers = struct {
     }
 
     pub fn deinit(self: *Headers) void {
-        self.arena.deinit();
         self.header_map.deinit();
-        self.* = undefined;
+        self.arena.deinit();
+        // self.* = undefined;
     }
 
     pub fn toString(self: Headers, alloc: std.mem.Allocator) ![:0]u8 {
-        _ = alloc;
-        _ = self;
+        var arena = std.heap.ArenaAllocator.init(alloc);
+        defer arena.deinit();
+        var arena_alloc = arena.allocator();
+
+        var keys = std.ArrayList([]const u8).init(arena_alloc);
+        defer keys.deinit();
+
+        var key_iter = self.header_map.keyIterator();
+        while (key_iter.next()) |k| {
+            try keys.append(k.*);
+        }
+        std.sort.insertion([]const u8, keys.items, self, Headers.lessThanCmp);
+
+        var final_string = std.ArrayList(u8).init(arena_alloc);
+        defer final_string.deinit();
+
+        for (keys.items) |key| {
+            const value = self.header_map.get(key) orelse "";
+            const line = try std.fmt.allocPrint(arena_alloc, "{s}={s}\n", .{ key, value });
+            try final_string.appendSlice(line);
+        }
+        return try alloc.dupeZ(u8, final_string.items);
     }
 
-    pub fn insertHeader(self: Headers, key: [:0]const u8, value: [:0]const u8) !void {
+    fn lessThanCmp(_: Headers, lhs: []const u8, rhs: []const u8) bool {
+        return std.mem.lessThan(u8, lhs, rhs);
+    }
+
+    /// Return `true` if header was inserted, false otherwise. Allocation
+    /// errors are bubbled up.
+    pub fn insertHeader(self: *Headers, key: []const u8, value: []const u8) !bool {
         if (std.mem.indexOfAny(u8, key, illegal_header_chars)) |idx| {
-            log.err("Key \'{s}\' contains illegal character: {s}", key, key[idx]);
+            log.err("Key \'{s}\' contains illegal character: {c}", .{ key, key[idx] });
             return error.IllegalHeaderChar;
         } else if (std.mem.indexOfAny(u8, value, illegal_header_chars)) |idx| {
-            log.err("value \'{s}\' contains illegal character: {s}", value, value[idx]);
+            log.err("value \'{s}\' contains illegal character: {c}", .{ value, value[idx] });
             return error.IllegalHeaderChar;
         }
 
-        const key_copy = try self.arena_alloc.dupeZ(u8, key);
-        const value_copy = try self.arena_alloc.dupeZ(u8, value);
+        if (self.header_map.get(key)) |v| {
+            log.err("Key '{s}' already exists in headers with value '{s}'", .{ key, v });
+            return false;
+        } else {
+            const key_copy = try self.arena_alloc.dupeZ(u8, key);
+            const value_copy = try self.arena_alloc.dupeZ(u8, value);
+            try self.header_map.put(key_copy, value_copy);
+            return true;
+        }
+    }
 
-        try self.header_map.getOrPutValue(key_copy, value_copy);
+    /// Returned value is owned by the internal arena allocator inside the
+    /// Header object. Once this object is deinit'd, the value will no longer
+    /// be valid.
+    pub fn popHeader(self: *Headers, key: []const u8) ?[]const u8 {
+        return if (self.header_map.fetchRemove(key)) |kv| kv.value else null;
     }
 };
+
+test "Headers.toString" {
+    var test_headers = Headers.init(testing.allocator);
+    defer test_headers.deinit();
+
+    // FIXME: test runner sees a memory leak here for some reason.
+    try testing.expect(try test_headers.insertHeader("some_key", "some_value") == true);
+    try testing.expect(try test_headers.insertHeader("another_key", "another_value") == true);
+
+    // second attempt to insert same key should fail
+    try testing.expect(try test_headers.insertHeader("some_key", "some_different_value") == false);
+
+    const final_string1 = try test_headers.toString(testing.allocator);
+    defer testing.allocator.free(final_string1);
+    try testing.expect(std.mem.eql(u8, final_string1, "another_key=another_value\nsome_key=some_value\n"));
+
+    try testing.expect(std.mem.eql(u8, test_headers.popHeader("some_key").?, "some_value"));
+
+    const final_string2 = try test_headers.toString(testing.allocator);
+    defer testing.allocator.free(final_string2);
+
+    std.debug.print("\n\nWhat is final_string2? {s}\n\n", .{final_string2});
+    try testing.expect(std.mem.eql(u8, final_string2, "another_key=another_value\n"));
+}
 
 pub const Commit = struct {
     hash_key: HashKey,

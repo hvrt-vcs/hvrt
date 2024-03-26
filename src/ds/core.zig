@@ -37,11 +37,35 @@ pub const ParentType = enum {
     revert,
 };
 
+var fifo = std.fifo.LinearFifo(u8, .{ .Static = 1024 * 4 }).init();
+
 pub const HashKey = struct {
     pub const hash_key_sep: [:0]const u8 = "|";
 
     hash: [:0]const u8,
     hash_algo: HashAlgo,
+
+    /// Allocator is used to allocate the internal hash string. Caller is
+    /// responsible for releasing the memory. If a HashKey must be constructed
+    /// from in memory bytes, the function `std.io.fixedBufferStream` can be
+    /// used to obtain a suitable reader.
+    pub fn fromReader(comptime hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
+        const hasher_type = hashAlgoEnumToType(hash_algo);
+        var hasher = hasher_type.init(.{});
+
+        try fifo.pump(reader, hasher.writer());
+
+        var digest_buf: [hasher_type.digest_length]u8 = undefined;
+        hasher.final(&digest_buf);
+        var file_digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
+        const file_digest_hexz = try alloc.dupeZ(u8, &file_digest_hex);
+        errdefer alloc.free(file_digest_hexz);
+
+        return .{
+            .hash = file_digest_hexz,
+            .hash_algo = hash_algo,
+        };
+    }
 
     pub fn equal(self: HashKey, other: HashKey) bool {
         return self.hash_algo == other.hash_algo and std.mem.eql(u8, self.hash, other.hash);
@@ -53,14 +77,47 @@ pub const HashKey = struct {
     }
 };
 
-test "HashKey toString" {
-    const hk = HashKey{ .hash = "deadbeef", .hash_algo = .sha3_256 };
+test "HashKey.toString" {
+    const hk = HashKey{
+        .hash = "4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e",
+        .hash_algo = .sha3_256,
+    };
+    const expected = "sha3_256|4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e";
 
     const hks = try hk.toString(testing.allocator);
     defer testing.allocator.free(hks);
 
-    const expected = "sha3_256|deadbeef";
     try testing.expect(std.mem.eql(u8, expected, hks));
+}
+
+test "HashKey.fromReader" {
+    const to_hash = "deadbeef";
+    const expected_hash: [:0]const u8 = "4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e";
+
+    var buf_stream = std.io.fixedBufferStream(to_hash);
+    var reader = buf_stream.reader();
+
+    const actual = try HashKey.fromReader(.sha3_256, testing.allocator, reader);
+    defer testing.allocator.free(actual.hash);
+
+    try testing.expectEqual(HashAlgo.sha3_256, actual.hash_algo);
+    try testing.expect(std.mem.eql(u8, expected_hash, actual.hash));
+}
+
+// SHA1 should not ever actually be used in practice, but this is good as an
+// example case.
+test "HashKey.fromReader SHA1" {
+    const to_hash = "deadbeef";
+    const expected_hash: [:0]const u8 = "f49cf6381e322b147053b74e4500af8533ac1e4c";
+
+    var buf_stream = std.io.fixedBufferStream(to_hash);
+    var reader = buf_stream.reader();
+
+    const actual = try HashKey.fromReader(.sha1, testing.allocator, reader);
+    defer testing.allocator.free(actual.hash);
+
+    try testing.expectEqual(HashAlgo.sha1, actual.hash_algo);
+    try testing.expect(std.mem.eql(u8, expected_hash, actual.hash));
 }
 
 pub const StringMap = std.StringHashMap([]const u8);

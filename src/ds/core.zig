@@ -147,11 +147,7 @@ pub const Headers = struct {
     }
 
     pub fn toString(self: Headers, alloc: std.mem.Allocator) ![:0]u8 {
-        var arena = std.heap.ArenaAllocator.init(alloc);
-        defer arena.deinit();
-        var arena_alloc = arena.allocator();
-
-        var keys = std.ArrayList([]const u8).init(arena_alloc);
+        var keys = std.ArrayList([]const u8).init(alloc);
         defer keys.deinit();
 
         var key_iter = self.header_map.keyIterator();
@@ -160,12 +156,13 @@ pub const Headers = struct {
         }
         std.sort.insertion([]const u8, keys.items, self, Headers.lessThanCmp);
 
-        var final_string = std.ArrayList(u8).init(arena_alloc);
+        var final_string = std.ArrayList(u8).init(alloc);
         defer final_string.deinit();
 
         for (keys.items) |key| {
             const value = self.header_map.get(key) orelse "";
-            const line = try std.fmt.allocPrint(arena_alloc, "{s}={s}\n", .{ key, value });
+            const line = try std.fmt.allocPrint(alloc, "{s}={s}\n", .{ key, value });
+            defer alloc.free(line);
             try final_string.appendSlice(line);
         }
         return try alloc.dupeZ(u8, final_string.items);
@@ -186,12 +183,16 @@ pub const Headers = struct {
             return error.IllegalHeaderChar;
         }
 
-        if (self.header_map.get(key)) |v| {
-            log.err("Key '{s}' already exists in headers with value '{s}'", .{ key, v });
+        if (self.header_map.get(key)) |existing_value| {
+            log.err("Key '{s}' already exists in headers with value '{s}'", .{ key, existing_value });
             return false;
         } else {
-            const key_copy = try self.arena_alloc.dupeZ(u8, key);
-            const value_copy = try self.arena_alloc.dupeZ(u8, value);
+            const key_copy = try self.arena_alloc.dupe(u8, key);
+            errdefer self.arena_alloc.free(key_copy);
+
+            const value_copy = try self.arena_alloc.dupe(u8, value);
+            errdefer self.arena_alloc.free(value_copy);
+
             try self.header_map.put(key_copy, value_copy);
             return true;
         }

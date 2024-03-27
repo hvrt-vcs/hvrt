@@ -126,12 +126,14 @@ pub const Headers = struct {
     const illegal_header_chars: [:0]const u8 = "=\n";
 
     alloc: std.mem.Allocator,
-    arena: std.heap.ArenaAllocator,
+    arena: *std.heap.ArenaAllocator,
     arena_alloc: std.mem.Allocator,
     header_map: StringMap,
 
-    pub fn init(alloc: std.mem.Allocator) Headers {
-        var arena = std.heap.ArenaAllocator.init(alloc);
+    pub fn init(alloc: std.mem.Allocator) !Headers {
+        var arena = try alloc.create(std.heap.ArenaAllocator);
+        arena.* = std.heap.ArenaAllocator.init(alloc);
+
         return .{
             .alloc = alloc,
             .arena = arena,
@@ -140,10 +142,12 @@ pub const Headers = struct {
         };
     }
 
+    /// deinit internal StringMap and ArenaAllocator.
     pub fn deinit(self: *Headers) void {
-        self.header_map.deinit();
         self.arena.deinit();
-        // self.* = undefined;
+        self.alloc.destroy(self.arena);
+        self.header_map.deinit();
+        self.* = undefined;
     }
 
     pub fn toString(self: Headers, alloc: std.mem.Allocator) ![:0]u8 {
@@ -184,33 +188,28 @@ pub const Headers = struct {
         }
 
         if (self.header_map.get(key)) |existing_value| {
-            log.err("Key '{s}' already exists in headers with value '{s}'", .{ key, existing_value });
+            log.warn("Key '{s}' already exists in headers with value '{s}'", .{ key, existing_value });
             return false;
         } else {
             const key_copy = try self.arena_alloc.dupe(u8, key);
-            errdefer self.arena_alloc.free(key_copy);
-
             const value_copy = try self.arena_alloc.dupe(u8, value);
-            errdefer self.arena_alloc.free(value_copy);
-
             try self.header_map.put(key_copy, value_copy);
             return true;
         }
     }
 
     /// Returned value is owned by the internal arena allocator inside the
-    /// Header object. Once this object is deinit'd, the value will no longer
-    /// be valid.
+    /// Header object. Once deinit is called on the arena, this value will no
+    /// longer point to valid memory.
     pub fn popHeader(self: *Headers, key: []const u8) ?[]const u8 {
         return if (self.header_map.fetchRemove(key)) |kv| kv.value else null;
     }
 };
 
 test "Headers.toString" {
-    var test_headers = Headers.init(testing.allocator);
+    var test_headers = try Headers.init(testing.allocator);
     defer test_headers.deinit();
 
-    // FIXME: test runner sees a memory leak here for some reason.
     try testing.expect(try test_headers.insertHeader("some_key", "some_value") == true);
     try testing.expect(try test_headers.insertHeader("another_key", "another_value") == true);
 
@@ -219,14 +218,14 @@ test "Headers.toString" {
 
     const final_string1 = try test_headers.toString(testing.allocator);
     defer testing.allocator.free(final_string1);
-    try testing.expect(std.mem.eql(u8, final_string1, "another_key=another_value\nsome_key=some_value\n"));
+    try testing.expectEqualSlices(u8, final_string1, "another_key=another_value\nsome_key=some_value\n");
 
-    try testing.expect(std.mem.eql(u8, test_headers.popHeader("some_key").?, "some_value"));
+    try testing.expectEqualSlices(u8, test_headers.popHeader("some_key").?, "some_value");
+    try testing.expectEqual(test_headers.popHeader("some_key"), null);
 
     const final_string2 = try test_headers.toString(testing.allocator);
     defer testing.allocator.free(final_string2);
 
-    std.debug.print("\n\nWhat is final_string2? {s}\n\n", .{final_string2});
     try testing.expect(std.mem.eql(u8, final_string2, "another_key=another_value\n"));
 }
 

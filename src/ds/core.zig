@@ -178,12 +178,15 @@ pub const Headers = struct {
 
     /// Return `true` if header was inserted, false otherwise. Allocation
     /// errors are bubbled up.
+    ///
+    /// FIXME: printing a newline (`\n`) inside the log formats with a true
+    /// newline. Needs to be be escaped before printing.
     pub fn insertHeader(self: *Headers, key: []const u8, value: []const u8) !bool {
         if (std.mem.indexOfAny(u8, key, illegal_header_chars)) |idx| {
-            log.err("Key \'{s}\' contains illegal character: {c}", .{ key, key[idx] });
+            log.warn("Key \'{s}\' contains illegal character '{c}' at index {any}", .{ key, key[idx], idx });
             return error.IllegalHeaderChar;
         } else if (std.mem.indexOfAny(u8, value, illegal_header_chars)) |idx| {
-            log.err("value \'{s}\' contains illegal character: {c}", .{ value, value[idx] });
+            log.warn("value \'{s}\' contains illegal character '{c}' at index {any}", .{ value, value[idx], idx });
             return error.IllegalHeaderChar;
         }
 
@@ -211,6 +214,7 @@ test "Headers.toString" {
     defer test_headers.deinit();
 
     try testing.expect(try test_headers.insertHeader("some_key", "some_value") == true);
+    try testing.expect(try test_headers.insertHeader("zee_last_key", "zee_last_value") == true);
     try testing.expect(try test_headers.insertHeader("another_key", "another_value") == true);
 
     // second attempt to insert same key should fail
@@ -218,7 +222,7 @@ test "Headers.toString" {
 
     const final_string1 = try test_headers.toString(testing.allocator);
     defer testing.allocator.free(final_string1);
-    try testing.expectEqualSlices(u8, final_string1, "another_key=another_value\nsome_key=some_value\n");
+    try testing.expectEqualSlices(u8, final_string1, "another_key=another_value\nsome_key=some_value\nzee_last_key=zee_last_value\n");
 
     try testing.expectEqualSlices(u8, test_headers.popHeader("some_key").?, "some_value");
     try testing.expectEqual(test_headers.popHeader("some_key"), null);
@@ -226,7 +230,20 @@ test "Headers.toString" {
     const final_string2 = try test_headers.toString(testing.allocator);
     defer testing.allocator.free(final_string2);
 
-    try testing.expect(std.mem.eql(u8, final_string2, "another_key=another_value\n"));
+    try testing.expectEqualSlices(u8, final_string2, "another_key=another_value\nzee_last_key=zee_last_value\n");
+
+    try testing.expect(try test_headers.insertHeader("some_key", "some_different_value") == true);
+
+    const final_string3 = try test_headers.toString(testing.allocator);
+    defer testing.allocator.free(final_string3);
+
+    try testing.expectEqualSlices(u8, final_string3, "another_key=another_value\nsome_key=some_different_value\nzee_last_key=zee_last_value\n");
+
+    const kerr = test_headers.insertHeader("bad=embedded=char", "doesn't matter");
+    try testing.expectError(error.IllegalHeaderChar, kerr);
+
+    const verr = test_headers.insertHeader("good_key", "bad\nvalue");
+    try testing.expectError(error.IllegalHeaderChar, verr);
 }
 
 pub const Commit = struct {

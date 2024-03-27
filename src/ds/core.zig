@@ -16,17 +16,17 @@ const testing = std.testing;
 pub const HashAlgo = enum {
     sha3_256,
     sha1, // for interop with git, maybe?
+
+    pub fn toType(comptime hash_algo: HashAlgo) type {
+        return switch (hash_algo) {
+            .sha3_256 => std.crypto.hash.sha3.Sha3_256,
+            .sha1 => std.crypto.hash.Sha1,
+        };
+    }
 };
 
-pub fn hashAlgoEnumToType(comptime hash_algo: HashAlgo) type {
-    return switch (hash_algo) {
-        .sha3_256 => std.crypto.hash.sha3.Sha3_256,
-        .sha1 => std.crypto.hash.Sha1,
-    };
-}
-
-test "test hashAlgoEnumToType" {
-    const sha3_type = hashAlgoEnumToType(.sha3_256);
+test "HashAlgo.toType" {
+    const sha3_type = HashAlgo.toType(.sha3_256);
     try testing.expectEqual(std.crypto.hash.sha3.Sha3_256, sha3_type);
 }
 
@@ -50,7 +50,7 @@ pub const HashKey = struct {
     /// from in memory bytes, the function `std.io.fixedBufferStream` can be
     /// used to obtain a suitable reader.
     pub fn fromReader(comptime hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
-        const hasher_type = hashAlgoEnumToType(hash_algo);
+        const hasher_type = HashAlgo.toType(hash_algo);
         var hasher = hasher_type.init(.{});
 
         try fifo.pump(reader, hasher.writer());

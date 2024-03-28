@@ -105,7 +105,7 @@ test "HashKey.fromReader" {
 }
 
 // SHA1 should not ever actually be used in practice, but this is good as an
-// example case.
+// example case of using an alternative hash algorithm.
 test "HashKey.fromReader SHA1" {
     const to_hash = "deadbeef";
     const expected_hash: [:0]const u8 = "f49cf6381e322b147053b74e4500af8533ac1e4c";
@@ -331,6 +331,19 @@ pub const Commit = struct {
     }
 };
 
+test "Commit.confirmHash" {
+    var headers = try Headers.init(testing.allocator);
+    defer headers.deinit();
+
+    _ = try headers.insertHeader("Author", "I Am Spartacus<iamspartacus@example.com>");
+    _ = try headers.insertHeader("Committer", "No I Am Spartacus<noiamspartacus@example.com>");
+
+    var parent_edges: []*CommitParent = undefined;
+    parent_edges.len = 0;
+    var tree: *Tree = undefined;
+    _ = tree;
+}
+
 pub const CommitParent = struct {
     commit: *Commit,
     ptype: ParentType,
@@ -353,10 +366,99 @@ pub const TreeEntry = struct {
 };
 
 pub const FileId = struct {
+    pub const type_name = "file_id";
+    /// The optional commit pointer is only truly needed for hashing. This
+    /// points to the parent commit where this file id came into being.
+    /// Ideally, this should probably be a slice, since a commit can have
+    /// multiple parents.
+    commits: []*Commit,
     hash_key: HashKey,
-    path: [:0]const u8,
     parents: []*FileId,
+    path: []const u8,
+
+    pub fn init(path: []const u8, hash_key: HashKey, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) FileId {
+        var parents: []*FileId = undefined;
+        parents.len = 0;
+
+        var commits: []*Commit = undefined;
+        commits.len = 0;
+
+        if (parents_opt) |unwrapped_parents| {
+            parents = unwrapped_parents;
+        }
+
+        if (commits_opt) |unwrapped_commits| {
+            commits = unwrapped_commits;
+        }
+
+        return FileId{
+            .commits = commits,
+            .hash_key = hash_key,
+            .parents = parents,
+            .path = path,
+        };
+    }
+
+    pub fn toString(self: *const FileId, alloc: std.mem.Allocator) ![:0]u8 {
+        const hash_string = try self.hash_key.toString(alloc);
+        defer alloc.free(hash_string);
+
+        const parts = [_][]const u8{ FileId.type_name, hash_string };
+        return try std.mem.joinZ(alloc, HashKey.hash_key_sep, &parts);
+    }
+
+    pub fn nakedHash(alloc: std.mem.Allocator, path: []const u8, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) !HashKey {
+        const temp = FileId.init(path, undefined, parents_opt, commits_opt);
+
+        return try FileId.hash(&temp, alloc);
+    }
+
+    pub fn hash(self: *const FileId, alloc: std.mem.Allocator) !HashKey {
+        const hash_algo = HashAlgo.sha3_256;
+        const hash_algo_type = HashAlgo.toType(hash_algo);
+        var hasher = hash_algo_type.init(.{});
+
+        var arena = std.heap.ArenaAllocator.init(alloc);
+        defer arena.deinit();
+        var arena_alloc = arena.allocator();
+
+        var hwriter = hasher.writer();
+
+        for (self.commits) |commit| {
+            const commit_string = try commit.toString(arena_alloc);
+            try hwriter.writeAll(commit_string);
+            try hwriter.writeAll("\n");
+        }
+
+        for (self.parents) |parent| {
+            const parent_string = try parent.toString(arena_alloc);
+            try hwriter.writeAll(parent_string);
+            try hwriter.writeAll("\n");
+        }
+
+        try hwriter.writeAll(self.path);
+        try hwriter.writeAll("\n");
+
+        var digest: [hash_algo_type.digest_length]u8 = undefined;
+
+        hasher.final(&digest);
+        const hex_digest = std.fmt.bytesToHex(digest, .lower);
+        const hex_digestz = try alloc.dupeZ(u8, hex_digest);
+
+        return HashKey{
+            .hash = hex_digestz,
+            .hash_algo = hash_algo,
+        };
+    }
 };
+
+test "FileId.nakedHash" {
+    const expected_hash = "Bob Loblaws law blog";
+
+    const hash_key = try FileId.nakedHash(testing.allocator, "path/to/file", null, null);
+
+    try testing.expectEqualSlices(u8, &expected_hash, hash_key.hash);
+}
 
 pub const Blob = struct {
     hash_key: HashKey,

@@ -49,7 +49,7 @@ pub const HashKey = struct {
     /// responsible for releasing the memory. If a HashKey must be constructed
     /// from in memory bytes, the function `std.io.fixedBufferStream` can be
     /// used to obtain a suitable reader.
-    pub fn fromReader(comptime hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
+    pub fn fromReaderComptime(comptime hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
         const hasher_type = HashAlgo.toType(hash_algo);
         var hasher = hasher_type.init(.{});
 
@@ -64,6 +64,13 @@ pub const HashKey = struct {
         return .{
             .hash = file_digest_hexz,
             .hash_algo = hash_algo,
+        };
+    }
+
+    pub fn fromReader(hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
+        return switch (hash_algo) {
+            .sha3_256 => try HashKey.fromReaderComptime(.sha3_256, alloc, reader),
+            .sha1 => try HashKey.fromReaderComptime(.sha1, alloc, reader),
         };
     }
 
@@ -97,7 +104,11 @@ test "HashKey.fromReader" {
     var buf_stream = std.io.fixedBufferStream(to_hash);
     var reader = buf_stream.reader();
 
-    const actual = try HashKey.fromReader(.sha3_256, testing.allocator, reader);
+    // declare as var to force runtime evaluation
+    var hash_algo: HashAlgo = undefined;
+    hash_algo = .sha3_256;
+
+    const actual = try HashKey.fromReader(hash_algo, testing.allocator, reader);
     defer testing.allocator.free(actual.hash);
 
     try testing.expectEqual(HashAlgo.sha3_256, actual.hash_algo);
@@ -113,7 +124,11 @@ test "HashKey.fromReader SHA1" {
     var buf_stream = std.io.fixedBufferStream(to_hash);
     var reader = buf_stream.reader();
 
-    const actual = try HashKey.fromReader(.sha1, testing.allocator, reader);
+    // declare as var to force runtime evaluation
+    var hash_algo: HashAlgo = undefined;
+    hash_algo = .sha1;
+
+    const actual = try HashKey.fromReader(hash_algo, testing.allocator, reader);
     defer testing.allocator.free(actual.hash);
 
     try testing.expectEqual(HashAlgo.sha1, actual.hash_algo);
@@ -150,7 +165,7 @@ pub const Headers = struct {
         self.* = undefined;
     }
 
-    pub fn toString(self: Headers, alloc: std.mem.Allocator) ![:0]u8 {
+    pub fn toString(self: *Headers, alloc: std.mem.Allocator) ![:0]u8 {
         var keys = std.ArrayList([]const u8).init(alloc);
         defer keys.deinit();
 
@@ -172,7 +187,7 @@ pub const Headers = struct {
         return try alloc.dupeZ(u8, final_string.items);
     }
 
-    fn lessThanCmp(_: Headers, lhs: []const u8, rhs: []const u8) bool {
+    fn lessThanCmp(_: *Headers, lhs: []const u8, rhs: []const u8) bool {
         return std.mem.lessThan(u8, lhs, rhs);
     }
 
@@ -367,10 +382,10 @@ pub const TreeEntry = struct {
 
 pub const FileId = struct {
     pub const type_name = "file_id";
-    /// The optional commit pointer is only truly needed for hashing. This
-    /// points to the parent commit where this file id came into being.
-    /// Ideally, this should probably be a slice, since a commit can have
-    /// multiple parents.
+
+    /// The commit pointers are only truly needed for hashing. This points to
+    /// the parent commits where this file id came into being. This would be
+    /// the merge parents of the commit when this FileId came into existence.
     commits: []*Commit,
     hash_key: HashKey,
     parents: []*FileId,
@@ -408,56 +423,60 @@ pub const FileId = struct {
     }
 
     pub fn nakedHash(alloc: std.mem.Allocator, path: []const u8, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) !HashKey {
-        const temp = FileId.init(path, undefined, parents_opt, commits_opt);
+        var temp = try FileId.nakedInit(alloc, path, parents_opt, commits_opt);
 
-        return try FileId.hash(&temp, alloc);
+        return temp.hash_key;
     }
 
-    pub fn hash(self: *const FileId, alloc: std.mem.Allocator) !HashKey {
-        const hash_algo = HashAlgo.sha3_256;
-        const hash_algo_type = HashAlgo.toType(hash_algo);
-        var hasher = hash_algo_type.init(.{});
+    pub fn nakedInit(alloc: std.mem.Allocator, path: []const u8, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) !FileId {
+        var temp = FileId.init(path, undefined, parents_opt, commits_opt);
 
+        var hash_key = try FileId.hash(&temp, alloc);
+
+        return FileId.init(path, hash_key, parents_opt, commits_opt);
+    }
+
+    pub fn hash(self: *FileId, alloc: std.mem.Allocator) !HashKey {
         var arena = std.heap.ArenaAllocator.init(alloc);
         defer arena.deinit();
         var arena_alloc = arena.allocator();
 
-        var hwriter = hasher.writer();
+        var buf = try arena_alloc.alloc(u8, 1024 * 64);
+        var buf_stream = std.io.fixedBufferStream(buf);
+
+        var buf_writer = buf_stream.writer();
 
         for (self.commits) |commit| {
             const commit_string = try commit.toString(arena_alloc);
-            try hwriter.writeAll(commit_string);
-            try hwriter.writeAll("\n");
+            try buf_writer.writeAll(commit_string);
+            try buf_writer.writeAll("\n");
         }
 
         for (self.parents) |parent| {
             const parent_string = try parent.toString(arena_alloc);
-            try hwriter.writeAll(parent_string);
-            try hwriter.writeAll("\n");
+            try buf_writer.writeAll(parent_string);
+            try buf_writer.writeAll("\n");
         }
 
-        try hwriter.writeAll(self.path);
-        try hwriter.writeAll("\n");
+        try buf_writer.writeAll(self.path);
+        try buf_writer.writeAll("\n");
 
-        var digest: [hash_algo_type.digest_length]u8 = undefined;
+        try buf_stream.seekTo(0);
+        var buf_reader = buf_stream.reader();
 
-        hasher.final(&digest);
-        const hex_digest = std.fmt.bytesToHex(digest, .lower);
-        const hex_digestz = try alloc.dupeZ(u8, hex_digest);
-
-        return HashKey{
-            .hash = hex_digestz,
-            .hash_algo = hash_algo,
-        };
+        return try HashKey.fromReader(.sha3_256, alloc, buf_reader);
     }
 };
 
 test "FileId.nakedHash" {
-    const expected_hash = "Bob Loblaws law blog";
+    const expected_hash: []const u8 = "f6b17cd5ddc53de29a1aa1cb8f98b705f397dce81d75038d5fe9036f6b8036dd";
 
-    const hash_key = try FileId.nakedHash(testing.allocator, "path/to/file", null, null);
+    const path_to_file: []const u8 = "path/to/file";
 
-    try testing.expectEqualSlices(u8, &expected_hash, hash_key.hash);
+    var hash_key = try FileId.nakedHash(testing.allocator, path_to_file, null, null);
+    defer testing.allocator.free(hash_key.hash);
+
+    try testing.expectEqualSlices(u8, expected_hash, hash_key.hash);
 }
 
 pub const Blob = struct {

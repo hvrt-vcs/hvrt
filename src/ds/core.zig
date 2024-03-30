@@ -42,13 +42,18 @@ var fifo = std.fifo.LinearFifo(u8, .{ .Static = 1024 * 4 }).init();
 pub const HashKey = struct {
     pub const hash_key_sep: [:0]const u8 = "|";
 
+    /// The allocator that originally allocated the hash string. If not
+    /// present, will not be used during deinit.
+    alloc_opt: ?std.mem.Allocator = null,
     hash: [:0]const u8,
     hash_algo: HashAlgo,
 
-    /// Allocator is used to allocate the internal hash string. Caller is
-    /// responsible for releasing the memory. If a HashKey must be constructed
-    /// from in memory bytes, the function `std.io.fixedBufferStream` can be
-    /// used to obtain a suitable reader.
+    pub fn deinit(self: *const HashKey) void {
+        if (self.alloc_opt) |alloc| {
+            alloc.free(self.hash);
+        }
+    }
+
     pub fn fromReaderComptime(comptime hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
         const hasher_type = HashAlgo.toType(hash_algo);
         var hasher = hasher_type.init(.{});
@@ -62,11 +67,15 @@ pub const HashKey = struct {
         errdefer alloc.free(file_digest_hexz);
 
         return .{
+            .alloc_opt = alloc,
             .hash = file_digest_hexz,
             .hash_algo = hash_algo,
         };
     }
 
+    /// Allocator is used to allocate the internal hash string. Caller is
+    /// responsible for releasing the memory by calling `deinit()` on the
+    /// returned `HashKey` object.
     pub fn fromReader(hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
         return switch (hash_algo) {
             .sha3_256 => try HashKey.fromReaderComptime(.sha3_256, alloc, reader),
@@ -74,11 +83,20 @@ pub const HashKey = struct {
         };
     }
 
-    pub fn equal(self: HashKey, other: HashKey) bool {
+    /// Convenience method to wrap in memory buffer in a
+    /// `std.io.FixedBufferStream`, then call `fromReader`.
+    pub fn fromBuffer(hash_algo: HashAlgo, alloc: std.mem.Allocator, buffer: anytype) !HashKey {
+        var buf_stream = std.io.fixedBufferStream(buffer);
+        var reader = buf_stream.reader();
+
+        return try HashKey.fromReader(hash_algo, alloc, reader);
+    }
+
+    pub fn equal(self: *const HashKey, other: *const HashKey) bool {
         return self.hash_algo == other.hash_algo and std.mem.eql(u8, self.hash, other.hash);
     }
 
-    pub fn toString(self: HashKey, alloc: std.mem.Allocator) ![:0]u8 {
+    pub fn toString(self: *const HashKey, alloc: std.mem.Allocator) ![:0]u8 {
         const parts = [_][]const u8{ @tagName(self.hash_algo), self.hash };
         return try std.mem.joinZ(alloc, hash_key_sep, &parts);
     }
@@ -109,7 +127,7 @@ test "HashKey.fromReader" {
     hash_algo = .sha3_256;
 
     const actual = try HashKey.fromReader(hash_algo, testing.allocator, reader);
-    defer testing.allocator.free(actual.hash);
+    defer actual.deinit();
 
     try testing.expectEqual(HashAlgo.sha3_256, actual.hash_algo);
     try testing.expect(std.mem.eql(u8, expected_hash, actual.hash));
@@ -129,7 +147,7 @@ test "HashKey.fromReader SHA1" {
     hash_algo = .sha1;
 
     const actual = try HashKey.fromReader(hash_algo, testing.allocator, reader);
-    defer testing.allocator.free(actual.hash);
+    defer actual.deinit();
 
     try testing.expectEqual(HashAlgo.sha1, actual.hash_algo);
     try testing.expect(std.mem.eql(u8, expected_hash, actual.hash));

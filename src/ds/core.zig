@@ -285,8 +285,15 @@ pub const Commit = struct {
     parent_edges: []*CommitParent,
     tree: *Tree,
 
-    /// A Commit object doesn't "own" anything and does not need to be deinit'd directly.
-    pub fn init(hash_key: HashKey, headers: Headers, parent_edges: []*CommitParent, tree: *Tree) !Commit {
+    pub fn deinit(self: *Commit) void {
+        self.hash_key.deinit();
+        self.headers.deinit();
+        self.* = undefined;
+    }
+
+    pub fn nakedInit(alloc: std.mem.Allocator, parent_edges: []*CommitParent, tree: *Tree, headers: Headers) !Commit {
+        var hash_key = try Commit.nakedHash(alloc, parent_edges, tree, headers);
+
         return .{
             .hash_key = hash_key,
             .headers = headers,
@@ -307,9 +314,9 @@ pub const Commit = struct {
         return try Temp.hash(alloc);
     }
 
-    /// Don't pass in an Arena here. A lot of intermediate memory is allocated
-    /// that is simply thrown away. This method should be cleaned up, in that
-    /// sense.
+    /// Don't pass in an ArenaAllocator here if the result will be long lived.
+    /// A lot of intermediate memory is allocated that is simply thrown away.
+    /// This function should be cleaned up, in that sense.
     pub fn hash(self: Commit, alloc: std.mem.Allocator) !HashKey {
         var hasher = std.crypto.hash.sha3.Sha3_256.init(.{});
         var writer = hasher.writer();
@@ -351,8 +358,13 @@ pub const Commit = struct {
         };
     }
 
-    pub fn confirmHash(self: Commit) bool {
-        return self.hash_key.equal(self.hash());
+    pub fn confirmHash(self: Commit, alloc: std.mem.Allocator) bool {
+        var arena = std.heap.ArenaAllocator.init(alloc);
+        defer arena.deinit();
+        var arena_alloc = arena.allocator();
+
+        var rehash_self = try self.hash(arena_alloc);
+        return self.hash_key.equal(rehash_self);
     }
 
     pub fn toString(self: *Commit, alloc: std.mem.Allocator) ![:0]u8 {

@@ -10,12 +10,15 @@
 
 const std = @import("std");
 const log = std.log.scoped(.ds);
+const Order = std.math.Order;
 
 const testing = std.testing;
 
 pub const HashAlgo = enum {
     sha3_256,
     sha1, // for interop with git, maybe?
+
+    pub const default = .sha3_256;
 
     pub fn toType(comptime hash_algo: HashAlgo) type {
         return switch (hash_algo) {
@@ -184,29 +187,35 @@ pub const Headers = struct {
     }
 
     pub fn toString(self: *Headers, alloc: std.mem.Allocator) ![:0]u8 {
-        var keys = std.ArrayList([]const u8).init(alloc);
-        defer keys.deinit();
+        var key_pq = std.PriorityQueue([]const u8, *Headers, Headers.lessThanCmpOrder).init(alloc, self);
+        defer key_pq.deinit();
 
         var key_iter = self.header_map.keyIterator();
         while (key_iter.next()) |k| {
-            try keys.append(k.*);
+            try key_pq.add(k.*);
         }
-        std.sort.insertion([]const u8, keys.items, self, Headers.lessThanCmp);
 
         var final_string = std.ArrayList(u8).init(alloc);
         defer final_string.deinit();
 
-        for (keys.items) |key| {
+        while (key_pq.removeOrNull()) |key| {
             const value = self.header_map.get(key) orelse "";
             const line = try std.fmt.allocPrint(alloc, "{s}={s}\n", .{ key, value });
             defer alloc.free(line);
             try final_string.appendSlice(line);
         }
+
         return try alloc.dupeZ(u8, final_string.items);
     }
 
-    fn lessThanCmp(_: *Headers, lhs: []const u8, rhs: []const u8) bool {
-        return std.mem.lessThan(u8, lhs, rhs);
+    fn lessThanCmpOrder(_: *Headers, lhs: []const u8, rhs: []const u8) Order {
+        if (std.mem.eql(u8, lhs, rhs)) {
+            return Order.eq;
+        } else if (std.mem.lessThan(u8, lhs, rhs)) {
+            return Order.lt;
+        } else {
+            return Order.gt;
+        }
     }
 
     /// Return `true` if header was inserted, false otherwise. Allocation
@@ -291,8 +300,8 @@ pub const Commit = struct {
         self.* = undefined;
     }
 
-    pub fn nakedInit(alloc: std.mem.Allocator, parent_edges: []*CommitParent, tree: *Tree, headers: Headers) !Commit {
-        var hash_key = try Commit.nakedHash(alloc, parent_edges, tree, headers);
+    pub fn nakedInit(alloc: std.mem.Allocator, hash_algo: ?HashAlgo, parent_edges: []*CommitParent, tree: *Tree, headers: Headers) !Commit {
+        var hash_key = try Commit.nakedHash(alloc, hash_algo, parent_edges, tree, headers);
 
         return .{
             .hash_key = hash_key,
@@ -303,7 +312,8 @@ pub const Commit = struct {
     }
 
     /// Hash a commit without actually having a Commit object built yet.
-    pub fn nakedHash(alloc: std.mem.Allocator, parent_edges: []*CommitParent, tree: *Tree, headers: Headers) !HashKey {
+    pub fn nakedHash(alloc: std.mem.Allocator, hash_algo: ?HashAlgo, parent_edges: []*CommitParent, tree: *Tree, headers: Headers) !HashKey {
+        const final_algo = hash_algo orelse HashAlgo.default;
         const Temp = Commit{
             .hash_key = undefined,
             .headers = headers,
@@ -311,51 +321,36 @@ pub const Commit = struct {
             .tree = tree,
         };
 
-        return try Temp.hash(alloc);
+        return try Temp.hash(alloc, final_algo);
     }
 
     /// Don't pass in an ArenaAllocator here if the result will be long lived.
     /// A lot of intermediate memory is allocated that is simply thrown away.
     /// This function should be cleaned up, in that sense.
-    pub fn hash(self: Commit, alloc: std.mem.Allocator) !HashKey {
-        var hasher = std.crypto.hash.sha3.Sha3_256.init(.{});
-        var writer = hasher.writer();
+    pub fn hash(self: Commit, alloc: std.mem.Allocator, hash_algo: HashAlgo) !HashKey {
+        var bytes_builder = std.ArrayList(u8).init(alloc);
+        defer bytes_builder.deinit();
 
-        var header_lines_builder = std.ArrayList(u8).init(alloc);
-        defer header_lines_builder.deinit();
+        // add header lines
+        const header_string = try self.headers.toString(alloc);
+        defer alloc.free(header_string);
+        try bytes_builder.appendSlice(header_string);
 
-        var parent_hashes_builder = std.ArrayList(u8).init(alloc);
-        defer parent_hashes_builder.deinit();
-
-        const header_lines: [:0]const u8 = try header_lines_builder.toOwnedSliceSentinel(0);
-        defer alloc.free(header_lines);
-
-        const parent_hashes: [:0]const u8 = try parent_hashes_builder.toOwnedSliceSentinel(0);
-        defer alloc.free(parent_hashes);
-
-        const hashables = .{
-            parent_hashes,
-            self.tree.toString(),
-            header_lines,
-        };
-
-        for (hashables) |h| {
-            // since hasher.update cannot return an error, this writer cannot
-            // return an error either.
-            writer.print("{s}\n", .{h}) catch unreachable;
+        // TODO: add parent commit hashes
+        for (self.parent_edges) |pe| {
+            _ = pe;
         }
 
-        var digest: [std.crypto.hash.sha3.Sha3_256.digest_length]u8 = undefined;
+        // add tree hash
+        const tree_string = try self.tree.toString(alloc);
+        defer alloc.free(tree_string);
+        try bytes_builder.appendSlice(tree_string);
 
-        hasher.final(&digest);
+        const hash_buf: []const u8 = bytes_builder.items;
+        var buf_stream = std.io.fixedBufferStream(hash_buf);
+        var reader = buf_stream.reader();
 
-        const hex_digest = std.fmt.bytesToHex(digest, .lower);
-        const hex_digestz = alloc.dupeZ(u8, hex_digest);
-
-        return .{
-            .hash = hex_digestz,
-            .hash_algo = .sha3_256,
-        };
+        return try HashKey.fromReader(hash_algo, alloc, reader);
     }
 
     pub fn confirmHash(self: Commit, alloc: std.mem.Allocator) bool {
@@ -363,7 +358,7 @@ pub const Commit = struct {
         defer arena.deinit();
         var arena_alloc = arena.allocator();
 
-        var rehash_self = try self.hash(arena_alloc);
+        var rehash_self = try self.hash(arena_alloc, self.hash_key.hash_algo);
         return self.hash_key.equal(rehash_self);
     }
 

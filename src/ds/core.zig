@@ -547,5 +547,26 @@ test "FileId.toString" {
 }
 
 pub const Blob = struct {
+    pub const type_name = "blob";
+
     hash_key: HashKey,
+
+    pub fn toString(self: *const Blob, alloc: std.mem.Allocator) ![:0]u8 {
+        return try self.hash_key.fmtToString(alloc, .{Blob.type_name});
+    }
 };
+
+test "Blob.toString" {
+    const expected_string: []const u8 = "blob|sha3_256|deadbeef";
+    const fake_hash = "deadbeef";
+
+    var blob: Blob = .{ .hash_key = .{
+        .hash = fake_hash,
+        .hash_algo = .sha3_256,
+    } };
+
+    const blob_string = try blob.toString(testing.allocator);
+    defer testing.allocator.free(blob_string);
+
+    try testing.expectEqualSlices(u8, expected_string, blob_string);
+}

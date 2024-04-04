@@ -16,6 +16,13 @@ const assert = std.debug.assert;
 
 const testing = std.testing;
 
+// TODO: convert all object pointers into HashKey objects. These can then be
+// used to point into HashMaps holding the actual objects.
+pub const CommitHashMap = std.HashMap(HashKey, Commit, HashKey.HashMapContext, 80);
+pub const TreeHashMap = std.HashMap(HashKey, Tree, HashKey.HashMapContext, 80);
+pub const FileIdHashMap = std.HashMap(HashKey, FileId, HashKey.HashMapContext, 80);
+pub const BlobHashMap = std.HashMap(HashKey, Blob, HashKey.HashMapContext, 80);
+
 var fifo = std.fifo.LinearFifo(u8, .{ .Static = 1024 * 4 }).init();
 
 pub const HashAlgo = enum {
@@ -31,7 +38,7 @@ pub const HashAlgo = enum {
         };
     }
 
-    pub fn fromReaderComptime(comptime hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) ![:0]u8 {
+    fn fromReaderComptime(comptime hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) ![:0]u8 {
         const hasher_type = HashAlgo.toType(hash_algo);
         var hasher = hasher_type.init(.{});
 
@@ -83,6 +90,21 @@ pub const HashKey = struct {
     hash: [:0]const u8,
     hash_algo: HashAlgo = HashAlgo.default,
 
+    pub const HashMapContext = struct {
+        const Self = @This();
+
+        pub fn hash(_: Self, a: HashKey) u64 {
+            var final_hash: u64 = 0;
+            for (@tagName(a.hash_algo)) |byte| final_hash = final_hash +% byte;
+            for (a.hash) |byte| final_hash = final_hash +% byte;
+            return final_hash;
+        }
+
+        pub fn eql(_: Self, a: HashKey, b: HashKey) bool {
+            return a.hash_algo == b.hash_algo and std.mem.eql(u8, a, b);
+        }
+    };
+
     pub fn deinit(self: *const HashKey) void {
         if (self.alloc_opt) |alloc| {
             alloc.free(self.hash);
@@ -92,7 +114,11 @@ pub const HashKey = struct {
     /// Allocator is used to allocate the internal hash string. Caller is
     /// responsible for releasing the memory by calling `deinit()` on the
     /// returned `HashKey` object.
-    pub fn initFromReader(hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
+    ///
+    /// If you do not want to initialize from a reader-like object and/or call
+    /// `deinit`, then create a HashKey directly with struct literal syntax and
+    /// be certain to release hash string memory elsewhere.
+    pub fn init(hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
         const file_digest_hexz = try hash_algo.fromReader(alloc, reader);
 
         return .{
@@ -154,7 +180,7 @@ test "HashKey.fromReader" {
     var hash_algo: HashAlgo = undefined;
     hash_algo = .sha3_256;
 
-    const actual = try HashKey.initFromReader(hash_algo, testing.allocator, reader);
+    const actual = try HashKey.init(hash_algo, testing.allocator, reader);
     defer actual.deinit();
 
     try testing.expectEqual(HashAlgo.sha3_256, actual.hash_algo);
@@ -174,7 +200,7 @@ test "HashKey.fromReader SHA1" {
     var hash_algo: HashAlgo = undefined;
     hash_algo = .sha1;
 
-    const actual = try HashKey.initFromReader(hash_algo, testing.allocator, reader);
+    const actual = try HashKey.init(hash_algo, testing.allocator, reader);
     defer actual.deinit();
 
     try testing.expectEqual(HashAlgo.sha1, actual.hash_algo);
@@ -316,7 +342,7 @@ test "Headers.toString" {
 pub const Commit = struct {
     hash_key: HashKey,
     headers: Headers,
-    parent_edges: []*CommitParent,
+    parent_edges: []CommitParent,
     tree: *Tree,
 
     pub fn deinit(self: *Commit) void {
@@ -351,7 +377,6 @@ pub const Commit = struct {
 
     /// Don't pass in an ArenaAllocator here if the result will be long lived.
     /// A lot of intermediate memory is allocated that is simply thrown away.
-    /// This function should be cleaned up, in that sense.
     pub fn hash(self: Commit, alloc: std.mem.Allocator, hash_algo: HashAlgo) !HashKey {
         var bytes_builder = std.ArrayList(u8).init(alloc);
         defer bytes_builder.deinit();
@@ -375,7 +400,7 @@ pub const Commit = struct {
         var buf_stream = std.io.fixedBufferStream(hash_buf);
         var reader = buf_stream.reader();
 
-        return try HashKey.initFromReader(hash_algo, alloc, reader);
+        return try HashKey.init(hash_algo, alloc, reader);
     }
 
     pub fn confirmHash(self: Commit, alloc: std.mem.Allocator) bool {
@@ -447,26 +472,24 @@ pub const FileId = struct {
     pub fn init(path: []const u8, hash_key: HashKey, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) FileId {
         assert(path.len > 0);
 
-        var parents: []*FileId = undefined;
-        parents.len = 0;
-
-        var commits: []*Commit = undefined;
-        commits.len = 0;
-
-        if (parents_opt) |unwrapped_parents| {
-            parents = unwrapped_parents;
-        }
-
-        if (commits_opt) |unwrapped_commits| {
-            commits = unwrapped_commits;
-        }
-
+        var commits: []*Commit = commits_opt orelse &[_]*Commit{};
+        var parents: []*FileId = parents_opt orelse &[_]*FileId{};
         return FileId{
             .commits = commits,
             .hash_key = hash_key,
             .parents = parents,
             .path = path,
         };
+    }
+
+    /// The allocator is used to allocate the internal hash string inside the hash key.
+    pub fn initAndHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) !FileId {
+        const final_algo = hash_algo orelse HashAlgo.default;
+        var temp = FileId.init(path, undefined, parents_opt, commits_opt);
+
+        var hash_key = try FileId.hash(&temp, alloc, final_algo);
+
+        return FileId.init(path, hash_key, parents_opt, commits_opt);
     }
 
     pub fn deinit(self: *FileId) void {
@@ -477,21 +500,13 @@ pub const FileId = struct {
         return try self.hash_key.fmtToString(alloc, .{FileId.type_name});
     }
 
-    pub fn nakedHash(alloc: std.mem.Allocator, path: []const u8, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) !HashKey {
-        var temp = try FileId.nakedInit(alloc, path, parents_opt, commits_opt);
+    pub fn createHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) !HashKey {
+        var temp = try FileId.initAndHash(alloc, path, hash_algo, parents_opt, commits_opt);
 
         return temp.hash_key;
     }
 
-    pub fn nakedInit(alloc: std.mem.Allocator, path: []const u8, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) !FileId {
-        var temp = FileId.init(path, undefined, parents_opt, commits_opt);
-
-        var hash_key = try FileId.hash(&temp, alloc);
-
-        return FileId.init(path, hash_key, parents_opt, commits_opt);
-    }
-
-    pub fn hash(self: *FileId, alloc: std.mem.Allocator) !HashKey {
+    pub fn hash(self: *FileId, alloc: std.mem.Allocator, hash_algo: HashAlgo) !HashKey {
         var arena = std.heap.ArenaAllocator.init(alloc);
         defer arena.deinit();
         var arena_alloc = arena.allocator();
@@ -517,7 +532,7 @@ pub const FileId = struct {
         var buf_stream = std.io.fixedBufferStream(buf_array.items);
         var buf_reader = buf_stream.reader();
 
-        return try HashKey.initFromReader(.sha3_256, alloc, buf_reader);
+        return try HashKey.init(hash_algo, alloc, buf_reader);
     }
 };
 
@@ -526,7 +541,7 @@ test "FileId.nakedHash" {
 
     const path_to_file: []const u8 = "path/to/file";
 
-    var hash_key = try FileId.nakedHash(testing.allocator, path_to_file, null, null);
+    var hash_key = try FileId.createHash(testing.allocator, path_to_file, null, null, null);
     defer hash_key.deinit();
 
     try testing.expectEqualSlices(u8, expected_hash, hash_key.hash);
@@ -537,7 +552,7 @@ test "FileId.toString" {
 
     const path_to_file: []const u8 = "path/to/file";
 
-    var file_id = try FileId.nakedInit(testing.allocator, path_to_file, null, null);
+    var file_id = try FileId.initAndHash(testing.allocator, path_to_file, null, null, null);
     defer file_id.deinit();
 
     const file_id_string = try file_id.toString(testing.allocator);

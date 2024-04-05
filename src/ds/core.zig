@@ -343,7 +343,7 @@ pub const Commit = struct {
     hash_key: HashKey,
     headers: Headers,
     parent_edges: []CommitParent,
-    tree: *Tree,
+    tree: HashKey,
 
     pub fn deinit(self: *Commit) void {
         self.hash_key.deinit();
@@ -351,7 +351,7 @@ pub const Commit = struct {
         self.* = undefined;
     }
 
-    pub fn nakedInit(alloc: std.mem.Allocator, hash_algo: ?HashAlgo, parent_edges: []*CommitParent, tree: *Tree, headers: Headers) !Commit {
+    pub fn nakedInit(alloc: std.mem.Allocator, hash_algo: ?HashAlgo, parent_edges: []CommitParent, tree: HashKey, headers: Headers) !Commit {
         var hash_key = try Commit.nakedHash(alloc, hash_algo, parent_edges, tree, headers);
 
         return .{
@@ -363,7 +363,7 @@ pub const Commit = struct {
     }
 
     /// Hash a commit without actually having a Commit object built yet.
-    pub fn nakedHash(alloc: std.mem.Allocator, hash_algo: ?HashAlgo, parent_edges: []*CommitParent, tree: *Tree, headers: Headers) !HashKey {
+    pub fn nakedHash(alloc: std.mem.Allocator, hash_algo: ?HashAlgo, parent_edges: []CommitParent, tree: *Tree, headers: Headers) !HashKey {
         const final_algo = hash_algo orelse HashAlgo.default;
         const Temp = Commit{
             .hash_key = undefined,
@@ -428,19 +428,19 @@ test "Commit.confirmHash" {
     _ = try headers.insertHeader("Author", "I Am Spartacus<iamspartacus@example.com>");
     _ = try headers.insertHeader("Committer", "No I Am Spartacus<noiamspartacus@example.com>");
 
-    var parent_edges: []*CommitParent = undefined;
+    var parent_edges: []CommitParent = undefined;
     parent_edges.len = 0;
-    var tree: *Tree = undefined;
+    var tree: HashKey = undefined;
     _ = tree;
 }
 
 pub const CommitParent = struct {
-    commit: *Commit,
+    commit: HashKey,
     ptype: ParentType,
 };
 
 pub const Tree = struct {
-    tree_entries: []*TreeEntry,
+    tree_entries: []TreeEntry,
 
     pub fn toString(self: Tree, alloc: std.mem.Allocator) ![:0]u8 {
         _ = self;
@@ -451,8 +451,8 @@ pub const Tree = struct {
 };
 
 pub const TreeEntry = struct {
-    file_id: *FileId,
-    blob: *Blob,
+    file_id: HashKey,
+    blob: HashKey,
 };
 
 pub const FileId = struct {
@@ -565,20 +565,26 @@ pub const Blob = struct {
     pub const type_name = "blob";
 
     hash_key: HashKey,
+    num_bytes: u64,
 
     pub fn toString(self: *const Blob, alloc: std.mem.Allocator) ![:0]u8 {
-        return try self.hash_key.fmtToString(alloc, .{Blob.type_name});
+        var numbuf: [32]u8 = undefined;
+        const pos = std.fmt.formatIntBuf(&numbuf, self.num_bytes, 10, .lower, .{});
+        return try self.hash_key.fmtToString(alloc, .{ Blob.type_name, numbuf[0..pos] });
     }
 };
 
 test "Blob.toString" {
-    const expected_string: []const u8 = "blob|sha3_256|deadbeef";
+    const expected_string: []const u8 = "blob|5|sha3_256|deadbeef";
     const fake_hash = "deadbeef";
 
-    var blob: Blob = .{ .hash_key = .{
-        .hash = fake_hash,
-        .hash_algo = .sha3_256,
-    } };
+    var blob: Blob = .{
+        .hash_key = .{
+            .hash = fake_hash,
+            .hash_algo = .sha3_256,
+        },
+        .num_bytes = 5,
+    };
 
     const blob_string = try blob.toString(testing.allocator);
     defer testing.allocator.free(blob_string);

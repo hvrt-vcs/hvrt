@@ -463,17 +463,17 @@ pub const FileId = struct {
     /// the merge parents of the commit when this FileId came into existence.
     /// Order of commits must match parent merging order of commit this came
     /// into existence, or hashing will not match properly.
-    commits: []*Commit,
+    commits: []HashKey,
     hash_key: HashKey,
-    parents: []*FileId,
+    parents: []HashKey,
     path: []const u8,
 
     /// Asserts that `len` of `path` is greater than 0.
-    pub fn init(path: []const u8, hash_key: HashKey, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) FileId {
+    pub fn init(path: []const u8, hash_key: HashKey, parents_opt: ?[]HashKey, commits_opt: ?[]HashKey) FileId {
         assert(path.len > 0);
 
-        var commits: []*Commit = commits_opt orelse &[_]*Commit{};
-        var parents: []*FileId = parents_opt orelse &[_]*FileId{};
+        var commits: []HashKey = commits_opt orelse &[_]HashKey{};
+        var parents: []HashKey = parents_opt orelse &[_]HashKey{};
         return FileId{
             .commits = commits,
             .hash_key = hash_key,
@@ -483,7 +483,7 @@ pub const FileId = struct {
     }
 
     /// The allocator is used to allocate the internal hash string inside the hash key.
-    pub fn initAndHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) !FileId {
+    pub fn initAndHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]HashKey, commits_opt: ?[]HashKey) !FileId {
         const final_algo = hash_algo orelse HashAlgo.default;
         var temp = FileId.init(path, undefined, parents_opt, commits_opt);
 
@@ -500,7 +500,7 @@ pub const FileId = struct {
         return try self.hash_key.fmtToString(alloc, .{FileId.type_name});
     }
 
-    pub fn createHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]*FileId, commits_opt: ?[]*Commit) !HashKey {
+    pub fn createHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]HashKey, commits_opt: ?[]HashKey) !HashKey {
         var temp = try FileId.initAndHash(alloc, path, hash_algo, parents_opt, commits_opt);
 
         return temp.hash_key;

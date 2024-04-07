@@ -154,16 +154,15 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
                 // std.debug.print("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hex, hash_algo, cur_pos, end_pos, compression_algo });
 
                 // INSERT INTO "chunks"
-                try chunk_stmt.reset();
                 try chunk_stmt.clear_bindings();
                 try chunk_stmt.bind(1, chunk_digest_hexz); // chunk_hash
                 try chunk_stmt.bind(2, hash_algo); // chunk_hash_algo
                 try chunk_stmt.bind(3, compression_algo); // compression_algo
                 try chunk_stmt.bind(4, data); // data
                 try chunk_stmt.auto_step();
+                try chunk_stmt.reset();
 
                 // INSERT INTO "blob_chunks"
-                try blob_chunk_stmt.reset();
                 try blob_chunk_stmt.clear_bindings();
                 try blob_chunk_stmt.bind(1, file_digest_hexz); // blob_hash
                 try blob_chunk_stmt.bind(2, hash_algo); // blob_hash_algo
@@ -172,6 +171,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
                 try blob_chunk_stmt.bind(5, @as(i64, @intCast(cur_pos))); // start_byte
                 try blob_chunk_stmt.bind(6, @as(i64, @intCast(end_pos))); // end_byte
                 try blob_chunk_stmt.auto_step();
+                try blob_chunk_stmt.reset();
 
                 // TODO: Add zstd compression
             }

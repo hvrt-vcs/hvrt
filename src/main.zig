@@ -206,7 +206,8 @@ test "invoke with add sub-command" {
 }
 
 test "invoke without args" {
-    // TODO: disable failure on error message here. See: https://github.com/ziglang/zig/issues/5738
+    // TODO: disable failure on error message here. See:
+    // https://github.com/ziglang/zig/issues/5738#issuecomment-1466902082
     std.testing.log_level;
     const basic_args = [_][:0]const u8{"test_prog_name"};
     cmd.internalMain(std.testing.allocator, &basic_args) catch |err| {

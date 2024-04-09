@@ -451,9 +451,38 @@ pub const Tree = struct {
 };
 
 pub const TreeEntry = struct {
-    file_id: HashKey,
+    pub const type_name = "tree_entry";
+
+    file_id: FileId,
     blob: HashKey,
+
+    pub fn toString(self: *const TreeEntry, alloc: std.mem.Allocator) ![:0]u8 {
+        const sep: [:0]const u8 = " ";
+
+        const fid_hash = try self.file_id.toString(alloc);
+        defer alloc.free(fid_hash);
+
+        const blob_hash = try self.blob.toString(alloc);
+        defer alloc.free(blob_hash);
+
+        const all_parts = [_][]const u8{ TreeEntry.type_name, fid_hash, blob_hash };
+        return try std.mem.joinZ(alloc, sep, &all_parts);
+    }
 };
+
+// test "TreeEntry.toString" {
+//     const expected_string: []const u8 = "tree_entry file_id|path/to/file|sha3_256|2dce61c76e93ee7da2fe615cf5140b54ed0f5346e285b5c90a661f1850c17e41";
+
+//     const path_to_file: []const u8 = "path/to/file";
+
+//     var file_id = try FileId.initAndHash(testing.allocator, path_to_file, null, null, null);
+//     defer file_id.deinit();
+
+//     const file_id_string = try file_id.toString(testing.allocator);
+//     defer testing.allocator.free(file_id_string);
+
+//     try testing.expectEqualSlices(u8, expected_string, file_id_string);
+// }
 
 pub const FileId = struct {
     pub const type_name = "file_id";
@@ -497,7 +526,7 @@ pub const FileId = struct {
     }
 
     pub fn toString(self: *const FileId, alloc: std.mem.Allocator) ![:0]u8 {
-        return try self.hash_key.fmtToString(alloc, .{FileId.type_name});
+        return try self.hash_key.fmtToString(alloc, .{ FileId.type_name, self.path });
     }
 
     pub fn createHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]HashKey, commits_opt: ?[]HashKey) !HashKey {
@@ -548,7 +577,7 @@ test "FileId.nakedHash" {
 }
 
 test "FileId.toString" {
-    const expected_string: []const u8 = "file_id|sha3_256|2dce61c76e93ee7da2fe615cf5140b54ed0f5346e285b5c90a661f1850c17e41";
+    const expected_string: []const u8 = "file_id|path/to/file|sha3_256|2dce61c76e93ee7da2fe615cf5140b54ed0f5346e285b5c90a661f1850c17e41";
 
     const path_to_file: []const u8 = "path/to/file";
 

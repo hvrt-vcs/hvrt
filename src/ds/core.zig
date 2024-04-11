@@ -31,7 +31,7 @@ pub const HashAlgo = enum {
 
     pub const default = .sha3_256;
 
-    pub fn toType(comptime hash_algo: HashAlgo) type {
+    pub fn HasherType(comptime hash_algo: HashAlgo) type {
         return switch (hash_algo) {
             .sha1 => std.crypto.hash.Sha1,
             .sha3_256 => std.crypto.hash.sha3.Sha3_256,
@@ -39,7 +39,7 @@ pub const HashAlgo = enum {
     }
 
     fn fromReaderComptime(comptime hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) ![:0]u8 {
-        const hasher_type = HashAlgo.toType(hash_algo);
+        const hasher_type = hash_algo.HasherType();
         var hasher = hasher_type.init(.{});
 
         try fifo.pump(reader, hasher.writer());
@@ -70,7 +70,7 @@ pub const HashAlgo = enum {
 };
 
 test "HashAlgo.toType" {
-    const sha3_type = HashAlgo.toType(.sha3_256);
+    const sha3_type = HashAlgo.HasherType(.sha3_256);
     try testing.expectEqual(std.crypto.hash.sha3.Sha3_256, sha3_type);
 }
 

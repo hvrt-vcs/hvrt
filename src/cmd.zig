@@ -1,11 +1,16 @@
 const std = @import("std");
 
-const init = @import("init.zig");
-const add = @import("add.zig");
+const parseArgs = @import("parse_args.zig").parseArgs;
+const init = @import("init.zig").init;
+const add = @import("add.zig").add;
+const commit = @import("commit.zig").commit;
 
 /// It is the responsibility of the caller of `internalMain` to deallocate and
 /// deinit args and alloc, if necessary.
 pub fn internalMain(alloc: std.mem.Allocator, args: []const [:0]const u8) !void {
+    const parsed_args = try parseArgs(alloc, args);
+    defer parsed_args.deinit();
+
     if (args.len > 1) {
         const sub_cmd = args[1];
         const repo_dir = if (args.len > 2) try std.fs.realpathAlloc(alloc, args[2]) else try std.process.getCwdAlloc(alloc);
@@ -14,15 +19,15 @@ pub fn internalMain(alloc: std.mem.Allocator, args: []const [:0]const u8) !void 
         defer alloc.free(repo_dirZ);
 
         if (std.mem.eql(u8, sub_cmd, "init")) {
-            try init.init(alloc, repo_dirZ);
+            try init(alloc, repo_dirZ);
         } else if (std.mem.eql(u8, sub_cmd, "add")) {
             // FIXME: this doesn't work if they don't pass a repo path. Need to
             // do args parsing at some point.
             const files = if (args.len > 3) args[3..] else args[2..];
 
-            try add.add(alloc, repo_dirZ, files);
+            try add(alloc, repo_dirZ, files);
         } else if (std.mem.eql(u8, sub_cmd, "commit")) {
-            try notImplemented(sub_cmd);
+            try commit(alloc, repo_dirZ, "Dummy message");
         } else if (std.mem.eql(u8, sub_cmd, "mv")) {
             try notImplemented(sub_cmd);
         } else if (std.mem.eql(u8, sub_cmd, "cp")) {

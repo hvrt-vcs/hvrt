@@ -180,6 +180,18 @@ fn setup_add_test(tmp: *std.testing.TmpDir) !void {
     try cmd.internalMain(test_alloc, &basic_args);
 }
 
+fn setup_commit_test(tmp: *std.testing.TmpDir) !void {
+    const tmp_pathz = try test_pathz(test_alloc, tmp);
+    defer test_alloc.free(tmp_pathz);
+
+    const files = [_][:0]const u8{ "foo.txt", "bar.txt" };
+
+    try setup_test_files(tmp, &files);
+
+    const basic_args = [_][:0]const u8{ "hvrt", "commit", "Some message" };
+    try cmd.internalMain(test_alloc, &basic_args);
+}
+
 test "invoke with init sub-command" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -201,8 +213,22 @@ test "invoke with add sub-command" {
     try setup_add_test(&tmp);
     const after_stat = try tmp.dir.statFile(".hvrt/work_tree_state.sqlite");
 
-    // std.debug.print("\n\before_stat.size: {}\nafter_stat.size: {}\n\n", .{ before_stat.size, after_stat.size });
     try std.testing.expect(before_stat.size < after_stat.size);
+}
+
+test "invoke with commit sub-command" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try setup_init_test(&tmp);
+    try setup_add_test(&tmp);
+
+    const before_stat = try tmp.dir.statFile(".hvrt/repo.hvrt");
+    try setup_commit_test(&tmp);
+    const after_stat = try tmp.dir.statFile(".hvrt/repo.hvrt");
+
+    std.debug.print("\nbefore_stat.size: {}\nafter_stat.size: {}\n\n", .{ before_stat.size, after_stat.size });
+    // try std.testing.expect(before_stat.size < after_stat.size);
 }
 
 test "invoke without args" {

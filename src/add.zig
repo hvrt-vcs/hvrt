@@ -61,12 +61,12 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
         var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
 
         for (files) |file| {
-            var file_tx_ok = true;
-            const file_tx = try sqlite.Transaction.init(db, "add_single_file");
-            defer if (file_tx_ok) file_tx.commit() catch unreachable;
+            var file_sp_ok = true;
+            const file_sp = try tx.createSavepoint("add_single_file");
+            defer if (file_sp_ok) file_sp.commit() catch unreachable;
             errdefer {
-                file_tx_ok = false;
-                file_tx.rollback() catch unreachable;
+                file_sp_ok = false;
+                file_sp.rollback() catch unreachable;
             }
 
             if (std.fs.path.isAbsolute(file)) {

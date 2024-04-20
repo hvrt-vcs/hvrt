@@ -174,7 +174,7 @@ pub const Statement = struct {
     }
 };
 
-pub const Transaction = struct {
+pub const Savepoint = struct {
     const _begin_fmt = "SAVEPOINT {s};";
     const _commit_fmt = "RELEASE SAVEPOINT {s};";
     const _rollback_fmt = "ROLLBACK TO SAVEPOINT {s};";
@@ -189,8 +189,8 @@ pub const Transaction = struct {
 
     /// Creates an (optionally) named transaction. This does not use parameter
     /// binding or escaping, so the name should be a valid SQLite identifier.
-    pub fn init(db: DataBase, name: ?[:0]const u8) !Transaction {
-        const self: Transaction = .{ .db = db, .name = name orelse default_name };
+    pub fn init(db: DataBase, name: ?[:0]const u8) !Savepoint {
+        const self: Savepoint = .{ .db = db, .name = name orelse default_name };
 
         // Add 1 for the sentinel `0` value in the cstring.
         if (self.name.len + _max_fmt_sz + 1 > buf_sz) return error.NameTooLong;
@@ -214,7 +214,7 @@ pub const Transaction = struct {
         var stmt_buf: [buf_sz]u8 = undefined;
         const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _commit_fmt, .{self.name});
         self.db.exec(trans_stmt) catch |err| {
-            log.err("Transaction '{s}' commit failed: {any}\n", .{ self.name, err });
+            log.err("Savepoint '{s}' commit failed: {any}\n", .{ self.name, err });
             return err;
         };
     }
@@ -223,9 +223,49 @@ pub const Transaction = struct {
         var stmt_buf: [buf_sz]u8 = undefined;
         const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _rollback_fmt, .{self.name});
         self.db.exec(trans_stmt) catch |err| {
+            log.err("Savepoint '{s}' rollback failed: {any}\n", .{ self.name, err });
+            return err;
+        };
+    }
+};
+
+pub const Transaction = struct {
+    const _begin_stmt = "BEGIN TRANSACTION;";
+    const _commit_stmt = "COMMIT TRANSACTION;";
+    const _rollback_stmt = "ROLLBACK TRANSACTION;";
+
+    const Self = @This();
+    const default_name = "default_transaction_name";
+    const buf_sz = 128;
+
+    db: DataBase,
+    name: [:0]const u8,
+
+    /// Creates an (optionally) named transaction. This does not use parameter
+    /// binding or escaping, so the name should be a valid SQLite identifier.
+    pub fn init(db: DataBase, name: ?[:0]const u8) !Transaction {
+        const self: Transaction = .{ .db = db, .name = name orelse default_name };
+
+        try self.db.exec(_begin_stmt);
+        return self;
+    }
+
+    pub fn commit(self: *const Self) !void {
+        self.db.exec(_commit_stmt) catch |err| {
+            log.err("Transaction '{s}' commit failed: {any}\n", .{ self.name, err });
+            return err;
+        };
+    }
+
+    pub fn rollback(self: *const Self) !void {
+        self.db.exec(_rollback_stmt) catch |err| {
             log.err("Transaction '{s}' rollback failed: {any}\n", .{ self.name, err });
             return err;
         };
+    }
+
+    pub fn createSavepoint(self: *const Self, name: [:0]const u8) !Savepoint {
+        return try Savepoint.init(self.db, name);
     }
 };
 

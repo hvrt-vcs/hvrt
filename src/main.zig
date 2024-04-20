@@ -184,11 +184,11 @@ fn setup_commit_test(tmp: *std.testing.TmpDir) !void {
     const tmp_pathz = try test_pathz(test_alloc, tmp);
     defer test_alloc.free(tmp_pathz);
 
-    const files = [_][:0]const u8{ "foo.txt", "bar.txt" };
+    // const files = [_][:0]const u8{ "foo.txt", "bar.txt" };
 
-    try setup_test_files(tmp, &files);
+    // try setup_test_files(tmp, &files);
 
-    const basic_args = [_][:0]const u8{ "hvrt", "commit", "Some message" };
+    const basic_args = [_][:0]const u8{ "hvrt", "commit", tmp_pathz, "Some message" };
     try cmd.internalMain(test_alloc, &basic_args);
 }
 
@@ -228,7 +228,7 @@ test "invoke with commit sub-command" {
     const after_stat = try tmp.dir.statFile(".hvrt/repo.hvrt");
 
     std.debug.print("\nbefore_stat.size: {}\nafter_stat.size: {}\n\n", .{ before_stat.size, after_stat.size });
-    // try std.testing.expect(before_stat.size < after_stat.size);
+    try std.testing.expect(before_stat.size < after_stat.size);
 }
 
 test "invoke without args" {

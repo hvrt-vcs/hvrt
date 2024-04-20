@@ -62,7 +62,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
 
     {
         var repo_tx_ok = true;
-        const repo_tx = try sqlite.Transaction.init(repo_db, "commit_cmd");
+        const repo_tx = try sqlite.Transaction.init(repo_db, "repo_commit_cmd");
         defer if (repo_tx_ok) repo_tx.commit() catch unreachable;
         errdefer {
             repo_tx_ok = false;
@@ -70,7 +70,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
         }
 
         var wt_tx_ok = true;
-        const wt_tx = try sqlite.Transaction.init(wt_db, "commit_cmd");
+        const wt_tx = try sqlite.Transaction.init(wt_db, "work_tree_commit_cmd");
         defer if (wt_tx_ok) wt_tx.commit() catch unreachable;
         errdefer {
             wt_tx_ok = false;

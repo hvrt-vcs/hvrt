@@ -57,8 +57,8 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     defer read_blob_chunks_stmt.finalize() catch unreachable;
     const read_chunks_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.work_tree.read_chunks);
     defer read_chunks_stmt.finalize() catch unreachable;
-    const read_head_commit_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.work_tree.read_head_commit);
-    defer read_head_commit_stmt.finalize() catch unreachable;
+    // const read_head_commit_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.work_tree.read_head_commit);
+    // defer read_head_commit_stmt.finalize() catch unreachable;
 
     // Repo statements
     const blob_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.repo.commit.blob);
@@ -85,6 +85,28 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
         errdefer {
             wt_tx_ok = false;
             wt_tx.rollback() catch unreachable;
+        }
+
+        // SELECT "hash", "hash_algo", "byte_length" FROM "blobs";
+
+        std.debug.print("\nIterating over blob entries in work tree.\n", .{});
+        var entry_count = @as(u64, 0);
+        while (read_blobs_stmt.step()) |rc| {
+            _ = try rc.check(read_blobs_stmt.db);
+
+            if (rc == sqlite.ResultCode.SQLITE_ROW) {
+                entry_count += 1;
+
+                std.debug.print("blob entry # {}\n", .{entry_count});
+
+                const hash = read_blobs_stmt.column_text(0) orelse continue;
+                const hash_algo = read_blobs_stmt.column_text(1) orelse continue;
+                const byte_length = read_blobs_stmt.column_i64(2);
+
+                std.debug.print("{}:hash_algo {s}, hash {s}, byte_length {}\n", .{ entry_count, hash_algo, hash, byte_length });
+            } else {
+                std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
+            }
         }
 
         const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;

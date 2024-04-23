@@ -172,6 +172,57 @@ pub const Statement = struct {
             else => @compileError("Cannot bind type: " ++ @typeName(@TypeOf(value))),
         }
     }
+
+    pub fn column_f64(stmt: Statement, index: u16) f64 {
+        return c.sqlite3_column_double(stmt.stmt, index);
+    }
+
+    pub fn column_i32(stmt: Statement, index: u16) i32 {
+        return c.sqlite3_column_int(stmt.stmt, index);
+    }
+
+    pub fn column_i64(stmt: Statement, index: u16) i64 {
+        return c.sqlite3_column_int64(stmt.stmt, index);
+    }
+
+    pub fn column_text(stmt: Statement, index: u16) ?[:0]const u8 {
+        if (@as(?[*:0]const u8, c.sqlite3_column_text(stmt.stmt, index))) |text_ptr| {
+            const text_size: i64 = c.sqlite3_column_bytes(stmt.stmt, index);
+            std.debug.assert(text_size > 0);
+            const coerced_size = @as(usize, @intCast(text_size));
+            return text_ptr[0..coerced_size :0];
+        } else {
+            // Zero length text
+            return null;
+        }
+    }
+
+    pub fn column_blob(stmt: Statement, index: u16) ?[]const u8 {
+        if (@as(?[*]const u8, c.sqlite3_column_blob(stmt.stmt, index))) |blob_ptr| {
+            const blob_size: i64 = c.sqlite3_column_bytes(stmt.stmt, index);
+            std.debug.assert(blob_size > 0);
+            const coerced_size = @as(usize, @intCast(blob_size));
+            return blob_ptr[0..coerced_size];
+        } else {
+            // Zero length blob
+            return null;
+        }
+    }
+
+    pub fn column(stmt: Statement, index: u16, comptime return_type: type) !return_type {
+        return switch (return_type) {
+            f64 => try stmt.column_float(index),
+            i32 => try stmt.column_i32(index),
+            i64 => try stmt.column_i64(index),
+
+            ?[:0]const u8 => try stmt.column_text(index),
+
+            // A slice without without a null sentinel is treated as a binary blob.
+            ?[]const u8 => try stmt.column_blob(index),
+
+            else => @compileError("Cannot bind type: " ++ @typeName(return_type)),
+        };
+    }
 };
 
 pub const Savepoint = struct {

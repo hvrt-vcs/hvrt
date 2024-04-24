@@ -186,29 +186,23 @@ pub const Statement = struct {
     }
 
     pub fn column_text(stmt: Statement, index: u16) ?[:0]const u8 {
-        if (@as(?[*:0]const u8, c.sqlite3_column_text(stmt.stmt, index))) |text_ptr| {
-            const text_size: i64 = c.sqlite3_column_bytes(stmt.stmt, index);
-            std.debug.assert(text_size > 0);
-            const coerced_size = @as(usize, @intCast(text_size));
-            return text_ptr[0..coerced_size :0];
-        } else {
-            // Zero length text
-            return null;
-        }
+        const text_ptr = @as(?[*:0]const u8, c.sqlite3_column_text(stmt.stmt, index)) orelse return null;
+        const text_size: i64 = c.sqlite3_column_bytes(stmt.stmt, index);
+        std.debug.assert(text_size > 0);
+        const coerced_size = @as(usize, @intCast(text_size));
+        return text_ptr[0..coerced_size :0];
     }
 
     pub fn column_blob(stmt: Statement, index: u16) ?[]const u8 {
-        if (@as(?[*]const u8, c.sqlite3_column_blob(stmt.stmt, index))) |blob_ptr| {
-            const blob_size: i64 = c.sqlite3_column_bytes(stmt.stmt, index);
-            std.debug.assert(blob_size > 0);
-            const coerced_size = @as(usize, @intCast(blob_size));
-            return blob_ptr[0..coerced_size];
-        } else {
-            // Zero length blob
-            return null;
-        }
+        const blob_ptr = @as(?[*]const u8, c.sqlite3_column_blob(stmt.stmt, index)) orelse return null;
+        const blob_size: i64 = c.sqlite3_column_bytes(stmt.stmt, index);
+        std.debug.assert(blob_size > 0);
+        const coerced_size = @as(usize, @intCast(blob_size));
+        return blob_ptr[0..coerced_size];
     }
 
+    // Retrieve column value based on a comptime known return type:
+    // https://www.sqlite.org/c3ref/column_blob.html
     pub fn column(stmt: Statement, index: u16, comptime return_type: type) !return_type {
         return switch (return_type) {
             f64 => try stmt.column_float(index),

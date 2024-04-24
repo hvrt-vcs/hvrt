@@ -51,14 +51,14 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     const sqlfiles = sql.sqlite;
 
     // worktree statements
-    const read_blobs_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.work_tree.read_blobs);
+    const read_blobs_stmt = try sqlite.Statement.prepare(wt_db, sqlfiles.work_tree.read_blobs);
     defer read_blobs_stmt.finalize() catch unreachable;
-    const read_blob_chunks_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.work_tree.read_blob_chunks);
+    const read_blob_chunks_stmt = try sqlite.Statement.prepare(wt_db, sqlfiles.work_tree.read_blob_chunks);
     defer read_blob_chunks_stmt.finalize() catch unreachable;
-    const read_chunks_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.work_tree.read_chunks);
+    const read_chunks_stmt = try sqlite.Statement.prepare(wt_db, sqlfiles.work_tree.read_chunks);
     defer read_chunks_stmt.finalize() catch unreachable;
-    // const read_head_commit_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.work_tree.read_head_commit);
-    // defer read_head_commit_stmt.finalize() catch unreachable;
+    const read_head_commit_stmt = try sqlite.Statement.prepare(wt_db, sqlfiles.work_tree.read_head_commit);
+    defer read_head_commit_stmt.finalize() catch unreachable;
 
     // Repo statements
     const blob_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.repo.commit.blob);

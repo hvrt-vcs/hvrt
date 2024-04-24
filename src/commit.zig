@@ -45,8 +45,8 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     const fifo_buf = try alloc.alloc(u8, fifo_buffer_size);
     defer alloc.free(fifo_buf);
 
-    var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
-    _ = fifo;
+    // var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
+    // _ = fifo;
 
     const sqlfiles = sql.sqlite;
 
@@ -110,13 +110,14 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
         }
 
         const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;
-        var digest_buf: [digest_length]u8 = undefined;
-        _ = digest_buf;
+        _ = digest_length;
+        // var digest_buf: [digest_length]u8 = undefined;
+        // _ = digest_buf;
 
         const chunk_buffer = try alloc.alloc(u8, chunk_size);
         defer alloc.free(chunk_buffer);
-        var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
-        _ = chunk_buf_stream;
+        // var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
+        // _ = chunk_buf_stream;
 
         try wt_db.exec(sqlfiles.work_tree.clear);
     }

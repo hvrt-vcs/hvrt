@@ -105,7 +105,7 @@ pub fn hexReader(reader: anytype, comptime line_max: u64) HexReader(@TypeOf(read
 }
 
 fn test_pathz(alloc: std.mem.Allocator, tmp: *std.testing.TmpDir) ![:0]u8 {
-    var tmp_path = try tmp.dir.realpathAlloc(alloc, ".");
+    const tmp_path = try tmp.dir.realpathAlloc(alloc, ".");
     defer alloc.free(tmp_path);
 
     return try alloc.dupeZ(u8, tmp_path);
@@ -121,7 +121,7 @@ fn prngReadHex(prng: std.rand.Random, buffer: []u8) !usize {
 
     const hex_len = buffer.len / 2 + (buffer.len % 2);
     // var base_buff: [hex_len]u8 = undefined;
-    var base_buff = try test_alloc.alloc(u8, hex_len);
+    const base_buff = try test_alloc.alloc(u8, hex_len);
     defer test_alloc.free(base_buff);
     prng.bytes(base_buff);
     var hex_buf = std.fmt.bytesToHex(base_buff, .lower);
@@ -134,9 +134,9 @@ fn setup_test_files(tmp: *std.testing.TmpDir, files: []const [:0]const u8) !void
     const fifo_buffer_size = 1024 * 4;
 
     var prng = std.rand.DefaultPrng.init(0);
-    var prngRand = prng.random();
-    var prng_reader = std.io.Reader(std.rand.Random, anyerror, prngRead){ .context = prngRand };
-    var prng_hex_reader = hexReader(prng_reader, 80);
+    const prngRand = prng.random();
+    const prng_reader = std.io.Reader(std.rand.Random, anyerror, prngRead){ .context = prngRand };
+    const prng_hex_reader = hexReader(prng_reader, 80);
     _ = prng_hex_reader;
     const fifo_buf = try test_alloc.alloc(u8, fifo_buffer_size);
     defer test_alloc.free(fifo_buf);

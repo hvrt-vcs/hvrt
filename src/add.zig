@@ -74,7 +74,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
                 return error.AbsoluteFilePath;
             }
 
-            var slashed_file = try alloc.dupeZ(u8, file);
+            const slashed_file = try alloc.dupeZ(u8, file);
             defer alloc.free(slashed_file);
             std.mem.replaceScalar(u8, slashed_file, std.fs.path.sep_windows, std.fs.path.sep_posix);
 

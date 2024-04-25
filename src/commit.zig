@@ -113,7 +113,14 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
 
                 const byte_length = read_blobs_stmt.column_i64(2);
 
-                std.debug.print("{}:hash_algo {s}, hash {s}, byte_length {}\n", .{ entry_count, hash_algo, hash, byte_length });
+                std.debug.print("entry: {}, hash: {s}, hash_algo: {s}, byte_length: {}\n", .{ entry_count, hash_algo, hash, byte_length });
+
+                try blob_stmt.bind(1, hash);
+                try blob_stmt.bind(2, hash_algo);
+                try blob_stmt.bind(3, byte_length);
+                try blob_stmt.auto_step();
+                try blob_stmt.reset();
+                try blob_stmt.clear_bindings();
             } else {
                 std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
             }

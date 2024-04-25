@@ -33,8 +33,8 @@ pub fn main() !void {
 
         cmd.internalMain(allocator, args) catch |err| {
             status_code = switch (err) {
-                sqlite.errors.SQLITE_ERROR => 3,
-                sqlite.errors.SQLITE_CANTOPEN => 4,
+                sqlite.Error.SQLITE_ERROR => 3,
+                sqlite.Error.SQLITE_CANTOPEN => 4,
                 else => {
                     // Any error other than the explicitly listed ones in the
                     // switch should just bubble up normally, printing a stack

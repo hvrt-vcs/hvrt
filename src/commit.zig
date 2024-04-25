@@ -89,18 +89,28 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
 
         // SELECT "hash", "hash_algo", "byte_length" FROM "blobs";
 
+        var hash_buffer: [128]u8 = undefined;
+        var hash_algo_buffer: [16]u8 = undefined;
         std.debug.print("\nIterating over blob entries in work tree.\n", .{});
         var entry_count = @as(u64, 0);
         while (read_blobs_stmt.step()) |rc| {
-            _ = try rc.check(read_blobs_stmt.db);
+            try rc.check(read_blobs_stmt.db);
 
             if (rc == sqlite.ResultCode.SQLITE_ROW) {
                 entry_count += 1;
 
                 std.debug.print("blob entry # {}\n", .{entry_count});
 
-                const hash = read_blobs_stmt.column_text(0) orelse continue;
-                const hash_algo = read_blobs_stmt.column_text(1) orelse continue;
+                const hash_tmp = read_blobs_stmt.column_text(0) orelse continue;
+                @memset(&hash_buffer, 0);
+                std.mem.copyForwards(u8, &hash_buffer, hash_tmp);
+                const hash = hash_buffer[0..hash_tmp.len :0];
+
+                const hash_algo_tmp = read_blobs_stmt.column_text(1) orelse continue;
+                @memset(&hash_algo_buffer, 0);
+                std.mem.copyForwards(u8, &hash_algo_buffer, hash_algo_tmp);
+                const hash_algo = hash_algo_buffer[0..hash_algo_tmp.len :0];
+
                 const byte_length = read_blobs_stmt.column_i64(2);
 
                 std.debug.print("{}:hash_algo {s}, hash {s}, byte_length {}\n", .{ entry_count, hash_algo, hash, byte_length });

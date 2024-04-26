@@ -95,35 +95,34 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
         var entry_count = @as(u64, 0);
         while (read_blobs_stmt.step()) |rc| {
             try rc.check(read_blobs_stmt.db);
+            entry_count += 1;
+            std.debug.print("blob entry # {}\n", .{entry_count});
 
-            if (rc == sqlite.ResultCode.SQLITE_ROW) {
-                entry_count += 1;
-
-                std.debug.print("blob entry # {}\n", .{entry_count});
-
-                const hash_tmp = read_blobs_stmt.column_text(0) orelse continue;
-                @memset(&hash_buffer, 0);
-                std.mem.copyForwards(u8, &hash_buffer, hash_tmp);
-                const hash = hash_buffer[0..hash_tmp.len :0];
-
-                const hash_algo_tmp = read_blobs_stmt.column_text(1) orelse continue;
-                @memset(&hash_algo_buffer, 0);
-                std.mem.copyForwards(u8, &hash_algo_buffer, hash_algo_tmp);
-                const hash_algo = hash_algo_buffer[0..hash_algo_tmp.len :0];
-
-                const byte_length = read_blobs_stmt.column_i64(2);
-
-                std.debug.print("entry: {}, hash: {s}, hash_algo: {s}, byte_length: {}\n", .{ entry_count, hash_algo, hash, byte_length });
-
-                try blob_stmt.bind(1, hash);
-                try blob_stmt.bind(2, hash_algo);
-                try blob_stmt.bind(3, byte_length);
-                try blob_stmt.auto_step();
-                try blob_stmt.reset();
-                try blob_stmt.clear_bindings();
-            } else {
+            if (rc != sqlite.ResultCode.SQLITE_ROW) {
                 std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
+                return error.NotImplemented;
             }
+
+            const hash_tmp = read_blobs_stmt.column_text(0) orelse continue;
+            std.mem.copyForwards(u8, &hash_buffer, hash_tmp);
+            hash_buffer[hash_tmp.len] = 0;
+            const hash = hash_buffer[0..hash_tmp.len :0];
+
+            const hash_algo_tmp = read_blobs_stmt.column_text(1) orelse continue;
+            std.mem.copyForwards(u8, &hash_algo_buffer, hash_algo_tmp);
+            hash_algo_buffer[hash_algo_tmp.len] = 0;
+            const hash_algo = hash_algo_buffer[0..hash_algo_tmp.len :0];
+
+            const byte_length = read_blobs_stmt.column_i64(2);
+
+            std.debug.print("entry: {}, hash: {s}, hash_algo: {s}, byte_length: {}\n", .{ entry_count, hash_algo, hash, byte_length });
+
+            try blob_stmt.bind(1, hash);
+            try blob_stmt.bind(2, hash_algo);
+            try blob_stmt.bind(3, byte_length);
+            try blob_stmt.auto_step();
+            try blob_stmt.reset();
+            try blob_stmt.clear_bindings();
         }
 
         const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;

@@ -121,7 +121,7 @@ pub const Statement = struct {
         try ResultCode.fromInt(rc).check(stmt.db);
     }
 
-    pub fn bind_text(stmt: Statement, index: u16, value_opt: ?[:0]const u8) !void {
+    pub fn bind_text(stmt: Statement, index: u16, mem_copy: bool, value_opt: ?[:0]const u8) !void {
         // Using text64 should make it so that we don't need to do any casting
         // to pass the len of the slice. Since it is null terminated, we add
         // one to the len for the null sentinel. Using `c.SQLITE_TRANSIENT`
@@ -130,7 +130,14 @@ pub const Statement = struct {
         // private copy.
         const rc = blk: {
             if (value_opt) |value| {
-                break :blk c.sqlite3_bind_text64(stmt.stmt, index, value.ptr, value.len, c.SQLITE_TRANSIENT, c.SQLITE_UTF8);
+                break :blk c.sqlite3_bind_text64(
+                    stmt.stmt,
+                    index,
+                    value.ptr,
+                    value.len,
+                    (if (mem_copy) c.SQLITE_TRANSIENT else c.SQLITE_STATIC),
+                    c.SQLITE_UTF8,
+                );
             } else {
                 break :blk c.sqlite3_bind_null(stmt.stmt, index);
             }
@@ -138,14 +145,20 @@ pub const Statement = struct {
         try ResultCode.fromInt(rc).check(stmt.db);
     }
 
-    pub fn bind_blob(stmt: Statement, index: u16, value_opt: ?[]const u8) !void {
+    pub fn bind_blob(stmt: Statement, index: u16, mem_copy: bool, value_opt: ?[]const u8) !void {
         // Using blob64 should make it so that we don't need to do any casting
         // to pass the len of the slice. Using `c.SQLITE_TRANSIENT` ensures that
         // SQLite makes a its own copy of the blob before returning from the
         // function. SQLite will manage the lifetime of its private copy.
         const rc = blk: {
             if (value_opt) |value| {
-                break :blk c.sqlite3_bind_blob64(stmt.stmt, index, value.ptr, value.len, c.SQLITE_TRANSIENT);
+                break :blk c.sqlite3_bind_blob64(
+                    stmt.stmt,
+                    index,
+                    value.ptr,
+                    value.len,
+                    (if (mem_copy) c.SQLITE_TRANSIENT else c.SQLITE_STATIC),
+                );
             } else {
                 break :blk c.sqlite3_bind_null(stmt.stmt, index);
             }
@@ -157,17 +170,17 @@ pub const Statement = struct {
     /// on the type passed in. This can't stop the caller from making the mistake
     /// of binding values of the incorrect type to parameter indices. See docs here
     /// for the bind interface: https://www.sqlite.org/c3ref/bind_blob.html
-    pub fn bind(stmt: Statement, index: u16, value: anytype) !void {
+    pub fn bind(stmt: Statement, index: u16, mem_copy: bool, value: anytype) !void {
         // TODO: use @typeInfo builtin to make this logic more robust for optionals, ints, etc.
         switch (@TypeOf(value)) {
             @TypeOf(null) => try stmt.bind_null(index),
             f16, f32, f64, comptime_float => try stmt.bind_float(index, value),
             u8, i8, u16, i16, i32, u32, i64, comptime_int => try stmt.bind_int(index, value),
 
-            [:0]u8, [:0]const u8, ?[:0]u8, ?[:0]const u8 => try stmt.bind_text(index, value),
+            [:0]u8, [:0]const u8, ?[:0]u8, ?[:0]const u8 => try stmt.bind_text(index, mem_copy, value),
 
             // A slice without without a null sentinel is treated as a binary blob.
-            []u8, []const u8, ?[]u8, ?[]const u8 => try stmt.bind_blob(index, value),
+            []u8, []const u8, ?[]u8, ?[]const u8 => try stmt.bind_blob(index, mem_copy, value),
 
             else => @compileError("Cannot bind type: " ++ @typeName(@TypeOf(value))),
         }

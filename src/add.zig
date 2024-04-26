@@ -105,18 +105,18 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
             // _, err = tx.Exec(blob_script, file_hex_digest, "sha3_256", file_size)
             std.log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_algo, file_size });
-            try blob_stmt.bind(1, file_digest_hexz);
-            try blob_stmt.bind(2, hash_algo);
-            try blob_stmt.bind(3, @as(i64, @intCast(file_size)));
+            try blob_stmt.bind(1, false, file_digest_hexz);
+            try blob_stmt.bind(2, false, hash_algo);
+            try blob_stmt.bind(3, false, @as(i64, @intCast(file_size)));
             try blob_stmt.auto_step();
             try blob_stmt.reset();
             try blob_stmt.clear_bindings();
 
             std.log.debug("file_path: {s}\nfile_hash: {s}\nfile_hash_alg: {s}\nfile_size: {any}\n", .{ slashed_file, file_digest_hexz, hash_algo, file_size });
-            try file_stmt.bind(1, slashed_file);
-            try file_stmt.bind(2, file_digest_hexz);
-            try file_stmt.bind(3, hash_algo);
-            try file_stmt.bind(4, @as(i64, @intCast(file_size)));
+            try file_stmt.bind(1, false, slashed_file);
+            try file_stmt.bind(2, false, file_digest_hexz);
+            try file_stmt.bind(3, false, hash_algo);
+            try file_stmt.bind(4, false, @as(i64, @intCast(file_size)));
             try file_stmt.auto_step();
             try file_stmt.reset();
             try file_stmt.clear_bindings();
@@ -154,21 +154,21 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
                 // std.debug.print("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hex, hash_algo, cur_pos, end_pos, compression_algo });
 
                 // INSERT INTO "chunks"
-                try chunk_stmt.bind(1, chunk_digest_hexz); // chunk_hash
-                try chunk_stmt.bind(2, hash_algo); // chunk_hash_algo
-                try chunk_stmt.bind(3, compression_algo); // compression_algo
-                try chunk_stmt.bind(4, data); // data
+                try chunk_stmt.bind(1, false, chunk_digest_hexz); // chunk_hash
+                try chunk_stmt.bind(2, false, hash_algo); // chunk_hash_algo
+                try chunk_stmt.bind(3, false, compression_algo); // compression_algo
+                try chunk_stmt.bind(4, false, data); // data
                 try chunk_stmt.auto_step();
                 try chunk_stmt.reset();
                 try chunk_stmt.clear_bindings();
 
                 // INSERT INTO "blob_chunks"
-                try blob_chunk_stmt.bind(1, file_digest_hexz); // blob_hash
-                try blob_chunk_stmt.bind(2, hash_algo); // blob_hash_algo
-                try blob_chunk_stmt.bind(3, chunk_digest_hexz); // chunk_hash
-                try blob_chunk_stmt.bind(4, hash_algo); // chunk_hash_algo
-                try blob_chunk_stmt.bind(5, @as(i64, @intCast(cur_pos))); // start_byte
-                try blob_chunk_stmt.bind(6, @as(i64, @intCast(end_pos))); // end_byte
+                try blob_chunk_stmt.bind(1, false, file_digest_hexz); // blob_hash
+                try blob_chunk_stmt.bind(2, false, hash_algo); // blob_hash_algo
+                try blob_chunk_stmt.bind(3, false, chunk_digest_hexz); // chunk_hash
+                try blob_chunk_stmt.bind(4, false, hash_algo); // chunk_hash_algo
+                try blob_chunk_stmt.bind(5, false, @as(i64, @intCast(cur_pos))); // start_byte
+                try blob_chunk_stmt.bind(6, false, @as(i64, @intCast(end_pos))); // end_byte
                 try blob_chunk_stmt.auto_step();
                 try blob_chunk_stmt.reset();
                 try blob_chunk_stmt.clear_bindings();

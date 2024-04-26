@@ -117,9 +117,9 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
 
             std.debug.print("entry: {}, hash: {s}, hash_algo: {s}, byte_length: {}\n", .{ entry_count, hash_algo, hash, byte_length });
 
-            try blob_stmt.bind(1, hash);
-            try blob_stmt.bind(2, hash_algo);
-            try blob_stmt.bind(3, byte_length);
+            try blob_stmt.bind(1, false, hash);
+            try blob_stmt.bind(2, false, hash_algo);
+            try blob_stmt.bind(3, false, byte_length);
             try blob_stmt.auto_step();
             try blob_stmt.reset();
             try blob_stmt.clear_bindings();

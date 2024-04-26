@@ -67,20 +67,20 @@ fn initDatabase(db_uri: [:0]const u8, tx_name: [:0]const u8, sqlfiles: anytype) 
     const prepared_stmt1 = try sqlite.Statement.prepare(db, sqlfiles.init.version);
     defer prepared_stmt1.finalize() catch unreachable;
 
-    try prepared_stmt1.bind(1, version);
+    try prepared_stmt1.bind(1, false, version);
     try prepared_stmt1.auto_step();
 
     // default branch1
     const prepared_stmt2 = try sqlite.Statement.prepare(db, sqlfiles.init.branch1);
     defer prepared_stmt2.finalize() catch unreachable;
 
-    try prepared_stmt2.bind(1, default_branch);
+    try prepared_stmt2.bind(1, false, default_branch);
     try prepared_stmt2.auto_step();
 
     // default branch2
     const prepared_stmt3 = try sqlite.Statement.prepare(db, sqlfiles.init.branch2);
     defer prepared_stmt3.finalize() catch unreachable;
 
-    try prepared_stmt3.bind(1, default_branch);
+    try prepared_stmt3.bind(1, false, default_branch);
     try prepared_stmt3.auto_step();
 }

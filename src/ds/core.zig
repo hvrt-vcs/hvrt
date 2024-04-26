@@ -23,6 +23,18 @@ pub const TreeHashMap = std.HashMap(HashKey, Tree, HashKey.HashMapContext, 80);
 pub const FileIdHashMap = std.HashMap(HashKey, FileId, HashKey.HashMapContext, 80);
 pub const BlobHashMap = std.HashMap(HashKey, Blob, HashKey.HashMapContext, 80);
 
+pub const CompressionAlgo = enum {
+    // TODO: store no compression algo as string "none" in database, instead of a SQL `NULL` value.
+    none,
+    zstd,
+
+    pub fn compress(self: CompressionAlgo, reader: anytype, writer: anytype) !void {
+        _ = writer;
+        _ = reader;
+        _ = self;
+    }
+};
+
 var fifo = std.fifo.LinearFifo(u8, .{ .Static = 1024 * 4 }).init();
 
 pub const HashAlgo = enum {
@@ -63,7 +75,7 @@ pub const HashAlgo = enum {
     /// `std.io.FixedBufferStream`, then call `fromReader`.
     pub fn fromBuffer(hash_algo: HashAlgo, alloc: std.mem.Allocator, buffer: anytype) ![:0]u8 {
         var buf_stream = std.io.fixedBufferStream(buffer);
-        var reader = buf_stream.reader();
+        const reader = buf_stream.reader();
 
         return try hash_algo.fromReader(alloc, reader);
     }
@@ -174,7 +186,7 @@ test "HashKey.fromReader" {
     const expected_hash: [:0]const u8 = "4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e";
 
     var buf_stream = std.io.fixedBufferStream(to_hash);
-    var reader = buf_stream.reader();
+    const reader = buf_stream.reader();
 
     // declare as var to force runtime evaluation
     var hash_algo: HashAlgo = undefined;
@@ -194,7 +206,7 @@ test "HashKey.fromReader SHA1" {
     const expected_hash: [:0]const u8 = "f49cf6381e322b147053b74e4500af8533ac1e4c";
 
     var buf_stream = std.io.fixedBufferStream(to_hash);
-    var reader = buf_stream.reader();
+    const reader = buf_stream.reader();
 
     // declare as var to force runtime evaluation
     var hash_algo: HashAlgo = undefined;
@@ -352,7 +364,7 @@ pub const Commit = struct {
     }
 
     pub fn nakedInit(alloc: std.mem.Allocator, hash_algo: ?HashAlgo, parent_edges: []CommitParent, tree: HashKey, headers: Headers) !Commit {
-        var hash_key = try Commit.nakedHash(alloc, hash_algo, parent_edges, tree, headers);
+        const hash_key = try Commit.nakedHash(alloc, hash_algo, parent_edges, tree, headers);
 
         return .{
             .hash_key = hash_key,
@@ -398,7 +410,7 @@ pub const Commit = struct {
 
         const hash_buf: []const u8 = bytes_builder.items;
         var buf_stream = std.io.fixedBufferStream(hash_buf);
-        var reader = buf_stream.reader();
+        const reader = buf_stream.reader();
 
         return try HashKey.init(hash_algo, alloc, reader);
     }
@@ -406,16 +418,16 @@ pub const Commit = struct {
     pub fn confirmHash(self: Commit, alloc: std.mem.Allocator) bool {
         var arena = std.heap.ArenaAllocator.init(alloc);
         defer arena.deinit();
-        var arena_alloc = arena.allocator();
+        const arena_alloc = arena.allocator();
 
-        var rehash_self = try self.hash(arena_alloc, self.hash_key.hash_algo);
+        const rehash_self = try self.hash(arena_alloc, self.hash_key.hash_algo);
         return self.hash_key.equal(rehash_self);
     }
 
     pub fn toString(self: *Commit, alloc: std.mem.Allocator) ![:0]u8 {
         _ = self;
 
-        var return_value = try alloc.dupeZ(u8, "something, something");
+        const return_value = try alloc.dupeZ(u8, "something, something");
 
         return return_value;
     }
@@ -430,8 +442,8 @@ test "Commit.confirmHash" {
 
     var parent_edges: []CommitParent = undefined;
     parent_edges.len = 0;
-    var tree: HashKey = undefined;
-    _ = tree;
+    // var tree: HashKey = undefined;
+    // _ = tree;
 }
 
 pub const CommitParent = struct {
@@ -445,7 +457,7 @@ pub const Tree = struct {
     pub fn toString(self: Tree, alloc: std.mem.Allocator) ![:0]u8 {
         _ = self;
 
-        var final_value = try alloc.dupeZ(u8, "");
+        const final_value = try alloc.dupeZ(u8, "");
         return final_value;
     }
 };
@@ -501,8 +513,8 @@ pub const FileId = struct {
     pub fn init(path: []const u8, hash_key: HashKey, parents_opt: ?[]HashKey, commits_opt: ?[]HashKey) FileId {
         assert(path.len > 0);
 
-        var commits: []HashKey = commits_opt orelse &[_]HashKey{};
-        var parents: []HashKey = parents_opt orelse &[_]HashKey{};
+        const commits: []HashKey = commits_opt orelse &[_]HashKey{};
+        const parents: []HashKey = parents_opt orelse &[_]HashKey{};
         return FileId{
             .commits = commits,
             .hash_key = hash_key,
@@ -516,7 +528,7 @@ pub const FileId = struct {
         const final_algo = hash_algo orelse HashAlgo.default;
         var temp = FileId.init(path, undefined, parents_opt, commits_opt);
 
-        var hash_key = try FileId.hash(&temp, alloc, final_algo);
+        const hash_key = try FileId.hash(&temp, alloc, final_algo);
 
         return FileId.init(path, hash_key, parents_opt, commits_opt);
     }
@@ -530,7 +542,7 @@ pub const FileId = struct {
     }
 
     pub fn createHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]HashKey, commits_opt: ?[]HashKey) !HashKey {
-        var temp = try FileId.initAndHash(alloc, path, hash_algo, parents_opt, commits_opt);
+        const temp = try FileId.initAndHash(alloc, path, hash_algo, parents_opt, commits_opt);
 
         return temp.hash_key;
     }
@@ -538,7 +550,7 @@ pub const FileId = struct {
     pub fn hash(self: *FileId, alloc: std.mem.Allocator, hash_algo: HashAlgo) !HashKey {
         var arena = std.heap.ArenaAllocator.init(alloc);
         defer arena.deinit();
-        var arena_alloc = arena.allocator();
+        const arena_alloc = arena.allocator();
 
         var buf_array = std.ArrayList(u8).init(alloc);
         defer buf_array.deinit();
@@ -559,7 +571,7 @@ pub const FileId = struct {
         try buf_array.append('\n');
 
         var buf_stream = std.io.fixedBufferStream(buf_array.items);
-        var buf_reader = buf_stream.reader();
+        const buf_reader = buf_stream.reader();
 
         return try HashKey.init(hash_algo, alloc, buf_reader);
     }

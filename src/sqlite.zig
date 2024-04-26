@@ -221,7 +221,7 @@ pub const Statement = struct {
     // Thus, returned slice is only guaranteed valid until one of the above
     // states occurs.
     pub fn column_blob(stmt: Statement, index: u16) ?[]const u8 {
-        const blob_ptr = @as(?[*]const u8, c.sqlite3_column_blob(stmt.stmt, index)) orelse return null;
+        const blob_ptr = @as(?[*]const u8, @ptrCast(c.sqlite3_column_blob(stmt.stmt, index))) orelse return null;
         const blob_size: i64 = c.sqlite3_column_bytes(stmt.stmt, index);
         std.debug.assert(blob_size > 0);
         const coerced_size = @as(usize, @intCast(blob_size));
@@ -308,7 +308,6 @@ pub const Transaction = struct {
 
     const Self = @This();
     const default_name = "default_transaction_name";
-    const buf_sz = 128;
 
     db: DataBase,
     name: [:0]const u8,

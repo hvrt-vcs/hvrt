@@ -21,6 +21,18 @@ const chunk_size = 1024 * 4;
 pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]const u8) !void {
     std.log.debug("what is the message: {s}\n", .{message});
 
+    // We allocate lots of short lived memory for copying between databases.
+    // Instead of using manually manipulating stack allocated fixed size
+    // buffers, or using a (potentially slow) heap allocator, just use a
+    // `FixedBufferAllocator`. We get the best of both worlds this way.
+
+    // XXX: Do we need more than 64k? Should the buffer be dynamically
+    // allocated from the allocator passed into this function? Would this mess
+    // up cache locality on the CPU?
+    var fixed_buffer: [1024 * 64]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&fixed_buffer);
+    var buf_alloc = fba.allocator();
+
     const abs_repo_path = try std.fs.realpathAlloc(alloc, repo_path);
     defer alloc.free(abs_repo_path);
 
@@ -87,35 +99,26 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             wt_tx.rollback() catch unreachable;
         }
 
-        // SELECT "hash", "hash_algo", "byte_length" FROM "blobs";
-
-        var hash_buffer: [128]u8 = undefined;
-        var hash_algo_buffer: [16]u8 = undefined;
         std.debug.print("\nIterating over blob entries in work tree.\n", .{});
-        var entry_count = @as(u64, 0);
-        while (read_blobs_stmt.step()) |rc| {
+        var i: u64 = 0;
+        while (read_blobs_stmt.step()) |rc| : (i += 1) {
             try rc.check(read_blobs_stmt.db);
-            entry_count += 1;
-            std.debug.print("blob entry # {}\n", .{entry_count});
-
             if (rc != sqlite.ResultCode.SQLITE_ROW) {
                 std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;
             }
 
-            const hash_tmp = read_blobs_stmt.column_text(0) orelse continue;
-            std.mem.copyForwards(u8, &hash_buffer, hash_tmp);
-            hash_buffer[hash_tmp.len] = 0;
-            const hash = hash_buffer[0..hash_tmp.len :0];
+            const hash_tmp = read_blobs_stmt.column_text(0) orelse unreachable;
+            const hash = try buf_alloc.dupeZ(u8, hash_tmp);
+            defer buf_alloc.free(hash);
 
-            const hash_algo_tmp = read_blobs_stmt.column_text(1) orelse continue;
-            std.mem.copyForwards(u8, &hash_algo_buffer, hash_algo_tmp);
-            hash_algo_buffer[hash_algo_tmp.len] = 0;
-            const hash_algo = hash_algo_buffer[0..hash_algo_tmp.len :0];
+            const hash_algo_tmp = read_blobs_stmt.column_text(1) orelse unreachable;
+            const hash_algo = try buf_alloc.dupeZ(u8, hash_algo_tmp);
+            defer buf_alloc.free(hash_algo);
 
             const byte_length = read_blobs_stmt.column_i64(2);
 
-            std.debug.print("entry: {}, hash: {s}, hash_algo: {s}, byte_length: {}\n", .{ entry_count, hash_algo, hash, byte_length });
+            std.debug.print("blob_entry: {}, hash: {s}, hash_algo: {s}, byte_length: {}\n", .{ i, hash_algo, hash, byte_length });
 
             try blob_stmt.bind(1, false, hash);
             try blob_stmt.bind(2, false, hash_algo);
@@ -125,16 +128,99 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             try blob_stmt.clear_bindings();
         }
 
-        const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;
-        _ = digest_length;
-        // var digest_buf: [digest_length]u8 = undefined;
-        // _ = digest_buf;
+        i = 0;
+        while (read_chunks_stmt.step()) |rc| : (i += 1) {
+            try rc.check(read_chunks_stmt.db);
+            if (rc != sqlite.ResultCode.SQLITE_ROW) {
+                std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
+                return error.NotImplemented;
+            }
 
-        const chunk_buffer = try alloc.alloc(u8, chunk_size);
-        defer alloc.free(chunk_buffer);
-        // var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
-        // _ = chunk_buf_stream;
+            const hash_tmp = read_chunks_stmt.column_text(0) orelse unreachable;
+            const hash = try buf_alloc.dupeZ(u8, hash_tmp);
+            defer buf_alloc.free(hash);
 
+            const hash_algo_tmp = read_chunks_stmt.column_text(1) orelse unreachable;
+            const hash_algo = try buf_alloc.dupeZ(u8, hash_algo_tmp);
+            defer buf_alloc.free(hash_algo);
+
+            // FIXME: Make compression algo a non-optional column in the
+            // worktree and repo databases. Just use a constant string like
+            // "none" or the empty string ("") when no compression is used.
+            const compression_algo_tmp_opt = read_chunks_stmt.column_text(2);
+            const compression_algo_opt: ?[:0]const u8 = if (compression_algo_tmp_opt) |compression_algo_tmp| try buf_alloc.dupeZ(u8, compression_algo_tmp) else null;
+            defer if (compression_algo_opt) |compression_algo| buf_alloc.free(compression_algo);
+
+            const data_blob_tmp = read_chunks_stmt.column_blob(3) orelse unreachable;
+            const data_blob = try buf_alloc.dupe(u8, data_blob_tmp);
+            defer buf_alloc.free(data_blob);
+
+            std.debug.print("chunk_entry: {}, hash_algo: {s}, hash: {s}, compression_algo: {any}, data_blob.len: {}\n", .{ i, hash_algo, hash, compression_algo_opt, data_blob.len });
+
+            try chunk_stmt.bind(1, false, hash);
+            try chunk_stmt.bind(2, false, hash_algo);
+            try chunk_stmt.bind(3, false, compression_algo_opt);
+            try chunk_stmt.bind(4, false, data_blob);
+            try chunk_stmt.auto_step();
+            try chunk_stmt.reset();
+            try chunk_stmt.clear_bindings();
+        }
+
+        i = 0;
+        while (read_blob_chunks_stmt.step()) |rc| : (i += 1) {
+            try rc.check(read_blob_chunks_stmt.db);
+            if (rc != sqlite.ResultCode.SQLITE_ROW) {
+                std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
+                return error.NotImplemented;
+            }
+
+            // SELECT "blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte", "end_byte" FROM "blob_chunks";
+
+            const blob_hash_tmp = read_blob_chunks_stmt.column_text(0) orelse unreachable;
+            const blob_hash = try buf_alloc.dupeZ(u8, blob_hash_tmp);
+            defer buf_alloc.free(blob_hash);
+
+            const blob_hash_algo_tmp = read_blob_chunks_stmt.column_text(1) orelse unreachable;
+            const blob_hash_algo = try buf_alloc.dupeZ(u8, blob_hash_algo_tmp);
+            defer buf_alloc.free(blob_hash_algo);
+
+            const chunk_hash_tmp = read_blob_chunks_stmt.column_text(2) orelse unreachable;
+            const chunk_hash = try buf_alloc.dupeZ(u8, chunk_hash_tmp);
+            defer buf_alloc.free(chunk_hash);
+
+            const chunk_hash_algo_tmp = read_blob_chunks_stmt.column_text(3) orelse unreachable;
+            const chunk_hash_algo = try buf_alloc.dupeZ(u8, chunk_hash_algo_tmp);
+            defer buf_alloc.free(chunk_hash_algo);
+
+            const start_byte = read_blob_chunks_stmt.column_i64(4);
+            const end_byte = read_blob_chunks_stmt.column_i64(5);
+
+            // FIXME: Seems like blob chunk start/end indices are being
+            // calculated with an off by one error in the initial `add` to work
+            // tree DB implementation.
+            std.debug.print(
+                \\blob_chunk_entry: {}
+                \\    blob_hash_algo: {s}
+                \\    blob_hash: {s}
+                \\    chunk_hash_algo: {s}
+                \\    chunk_hash: {s}
+                \\    start_byte: {}
+                \\    end_byte: {}
+                \\
+            ,
+                .{
+                    i,
+                    blob_hash_algo,
+                    blob_hash,
+                    chunk_hash_algo,
+                    chunk_hash,
+                    start_byte,
+                    end_byte,
+                },
+            );
+        }
+
+        // Should only be run when no errors have occured.
         try wt_db.exec(sqlfiles.work_tree.clear);
     }
 }

@@ -263,6 +263,53 @@ CREATE INDEX tmemb_file_id_hashes_idx ON tree_members("file_id_hash");
 CREATE INDEX tmemb_paths_idx ON tree_members("path");
 CREATE INDEX tmemb_blobs_idx ON tree_members("blob_hash", "blob_hash_algo");
 
+CREATE TABLE new_tree_members (
+	"tree_hash"	TEXT NOT NULL,
+	"tree_hash_algo"	TEXT NOT NULL,
+	"name"	TEXT NOT NULL,
+	"type"	TEXT NOT NULL CHECK ( type in ('tree', 'blob') ),
+	UNIQUE ("tree_hash", "tree_hash_algo", "name")
+	PRIMARY KEY ("tree_hash", "tree_hash_algo", "name")
+	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE INDEX ntmemb_trees_idx ON new_tree_members("tree_hash", "tree_hash_algo");
+CREATE INDEX ntmemb_names_idx ON new_tree_members("name");
+CREATE INDEX ntmemb_types_idx ON new_tree_members("type");
+
+CREATE TABLE tree_tree_members (
+	"tree_hash"	TEXT NOT NULL,
+	"tree_hash_algo"	TEXT NOT NULL,
+	"name"	TEXT NOT NULL,
+	"child_hash"	TEXT NOT NULL,
+	"child_hash_algo"	TEXT NOT NULL,
+	UNIQUE ("tree_hash", "tree_hash_algo", "name")
+	PRIMARY KEY ("tree_hash", "tree_hash_algo", "child_hash", "child_hash_algo")
+	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	FOREIGN KEY ("child_hash", "child_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	CHECK (NOT (tree_hash = child_hash AND tree_hash_algo = child_hash_algo))
+);
+
+CREATE INDEX ttmemb_trees_idx ON tree_tree_members("tree_hash", "tree_hash_algo");
+CREATE INDEX ttmemb_names_idx ON tree_tree_members("name");
+CREATE INDEX ttmemb_blobs_idx ON tree_tree_members("child_hash", "child_hash_algo");
+
+CREATE TABLE tree_blob_members (
+	"tree_hash"	TEXT NOT NULL,
+	"tree_hash_algo"	TEXT NOT NULL,
+	"name"	TEXT NOT NULL,
+	"child_hash"	TEXT NOT NULL,
+	"child_hash_algo"	TEXT NOT NULL,
+	UNIQUE ("tree_hash", "tree_hash_algo", "name")
+	PRIMARY KEY ("tree_hash", "tree_hash_algo", "child_hash", "child_hash_algo")
+	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	FOREIGN KEY ("child_hash", "child_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE INDEX tbmemb_trees_idx ON tree_blob_members("tree_hash", "tree_hash_algo");
+CREATE INDEX tbmemb_names_idx ON tree_blob_members("name");
+CREATE INDEX tbmemb_blobs_idx ON tree_blob_members("child_hash", "child_hash_algo");
+
 CREATE TABLE chunks (
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,

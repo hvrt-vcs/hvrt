@@ -267,7 +267,16 @@ CREATE TABLE new_tree_members (
 	"tree_hash"	TEXT NOT NULL,
 	"tree_hash_algo"	TEXT NOT NULL,
 	"name"	TEXT NOT NULL,
-	"type"	TEXT NOT NULL CHECK ( type in ('tree', 'blob') ),
+
+	-- TODO: use integers instead because they are smaller and faster to compare
+	-- octal mode meanings from this link: https://stackoverflow.com/a/8347325/1733321
+	--   0100­000­000000000 (040000): Directory
+	--   1000­000­110100100 (100644): Regular non-executable file
+	--   1000­000­110110100 (100664): Regular non-executable group-writeable file (unused)
+	--   1000­000­111101101 (100755): Regular executable file
+	--   1010­000­000000000 (120000): Symbolic link
+	--   1110­000­000000000 (160000): Gitlink
+	"mode" TEXT NOT NULL CHECK ( mode in ('040000', '100644', '100664', '100755', '120000', '160000') ),
 	UNIQUE ("tree_hash", "tree_hash_algo", "name")
 	PRIMARY KEY ("tree_hash", "tree_hash_algo", "name")
 	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED

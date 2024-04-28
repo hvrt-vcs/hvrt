@@ -46,7 +46,8 @@ CREATE TABLE commits (
 	"hash_algo"	TEXT NOT NULL,
 
 	-- The tree hash and algo cannot be header entries since we need referential
-	-- integrity of DB entries.
+	-- integrity of DB entries. There is only one root tree per commit and each
+	-- commit *must* have a tree associated with it.
 	"tree_hash"	TEXT NOT NULL,
 	"tree_hash_algo"	TEXT NOT NULL,
 	PRIMARY KEY ("hash", "hash_algo")
@@ -76,30 +77,29 @@ CREATE TABLE commit_headers (
 CREATE INDEX commit_headers_idx ON commit_headers ("key", "value");
 
 CREATE TABLE commit_annotations (
-	-- TODO: make annotations point to a hashable parent somehow, and hash the
-	-- results of the header key/value. This way we can know that data was not
-	-- lost in transit over the wire.
-
-	-- annotations are NOT considered when hashing commits
+	-- annotations are considered when hashing commits
 
 	"id" INTEGER,
-	"commit_hash"	TEXT NOT NULL,
-	"commit_hash_algo"	TEXT NOT NULL,
+	"parent_commit_hash"	TEXT NOT NULL,
+	"parent_commit_hash_algo"	TEXT NOT NULL,
 
-	-- Latest annotation "wins". Previous annotations are listed as "Previous edits".
-	"created_at" INTEGER NOT NULL,
+	"reference_commit_hash"	TEXT NOT NULL,
+	"reference_commit_hash_algo"	TEXT NOT NULL ,
 
 	-- Can be any key/value pair, not just ones previously specified on commit.
 	-- Perhaps this is the best place to put signatures for commits?
 	"key"	TEXT NOT NULL,
 	"value"	TEXT NOT NULL,
-
+	CHECK ( NOT (parent_commit_hash = reference_commit_hash AND parent_commit_hash_algo = reference_commit_hash_algo) )
 	PRIMARY KEY ("id" AUTOINCREMENT)
-	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+
+	UNIQUE ("parent_commit_hash", "parent_commit_hash_algo", "reference_commit_hash", "reference_commit_hash_algo", "key", "value")
+	FOREIGN KEY ("parent_commit_hash", "parent_commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+	FOREIGN KEY ("reference_commit_hash", "reference_commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
-CREATE INDEX annotation_hashes_idx ON commit_annotations("commit_hash", "commit_hash_algo");
-CREATE INDEX annotation_creation_idx ON commit_annotations("created_at");
+CREATE INDEX annotation_parent_hash_idx ON commit_annotations("parent_commit_hash", "parent_commit_hash_algo");
+CREATE INDEX annotation_reference_hash_idx ON commit_annotations("reference_commit_hash", "reference_commit_hash_algo");
 
 CREATE TABLE commit_tags (
 	-- associated branch names/ids are NOT considered when hashing commits
@@ -318,6 +318,23 @@ CREATE TABLE tree_blob_members (
 CREATE INDEX tbmemb_trees_idx ON tree_blob_members("tree_hash", "tree_hash_algo");
 CREATE INDEX tbmemb_names_idx ON tree_blob_members("name");
 CREATE INDEX tbmemb_blobs_idx ON tree_blob_members("child_hash", "child_hash_algo");
+
+-- FIXME: This won't work when a tree is referencing itself. i.e. `.` (period)
+CREATE TABLE tree_copy_sources (
+	"dst_tree_hash"	TEXT NOT NULL,
+	"dst_tree_hash_algo"	TEXT NOT NULL,
+	"dst_name"	TEXT NOT NULL,
+	"src_tree_hash"	TEXT NOT NULL,
+	"src_tree_hash_algo"	TEXT NOT NULL,
+	"src_name"	TEXT NOT NULL,
+	"order"	INTEGER NOT NULL,
+	PRIMARY KEY ("dst_tree_hash", "dst_tree_hash_algo", "dst_name", "src_tree_hash", "src_tree_hash_algo", "src_name")
+
+	-- two sources should not be able to be put into the same location in the order.
+	UNIQUE ("dst_tree_hash", "dst_tree_hash_algo", "order")
+	FOREIGN KEY ("dst_tree_hash", "dst_tree_hash_algo", "dst_name") REFERENCES "new_tree_members" ("hash", "hash_algo", "name") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	FOREIGN KEY ("src_tree_hash", "src_tree_hash_algo", "src_name") REFERENCES "new_tree_members" ("hash", "hash_algo", "name") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+);
 
 CREATE TABLE chunks (
 	"hash"	TEXT NOT NULL,

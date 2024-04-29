@@ -144,22 +144,19 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             const hash_algo = try buf_alloc.dupeZ(u8, hash_algo_tmp);
             defer buf_alloc.free(hash_algo);
 
-            // FIXME: Make compression algo a non-optional column in the
-            // worktree and repo databases. Just use a constant string like
-            // "none" or the empty string ("") when no compression is used.
-            const compression_algo_tmp_opt = read_chunks_stmt.column_text(2);
-            const compression_algo_opt: ?[:0]const u8 = if (compression_algo_tmp_opt) |compression_algo_tmp| try buf_alloc.dupeZ(u8, compression_algo_tmp) else null;
-            defer if (compression_algo_opt) |compression_algo| buf_alloc.free(compression_algo);
+            const compression_algo_tmp = read_chunks_stmt.column_text(2) orelse unreachable;
+            const compression_algo = try buf_alloc.dupeZ(u8, compression_algo_tmp);
+            defer buf_alloc.free(compression_algo);
 
             const data_blob_tmp = read_chunks_stmt.column_blob(3) orelse unreachable;
             const data_blob = try buf_alloc.dupe(u8, data_blob_tmp);
             defer buf_alloc.free(data_blob);
 
-            std.debug.print("chunk_entry: {}, hash_algo: {s}, hash: {s}, compression_algo: {any}, data_blob.len: {}\n", .{ i, hash_algo, hash, compression_algo_opt, data_blob.len });
+            std.debug.print("chunk_entry: {}, hash_algo: {s}, hash: {s}, compression_algo: {s}, data_blob.len: {}\n", .{ i, hash_algo, hash, compression_algo, data_blob.len });
 
             try chunk_stmt.bind(1, false, hash);
             try chunk_stmt.bind(2, false, hash_algo);
-            try chunk_stmt.bind(3, false, compression_algo_opt);
+            try chunk_stmt.bind(3, false, compression_algo);
             try chunk_stmt.bind(4, false, data_blob);
             try chunk_stmt.auto_step();
             try chunk_stmt.reset();

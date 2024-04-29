@@ -30,7 +30,7 @@ CREATE TABLE chunks (
 
 	-- Each chunk is compressed individually, so that we can decompress them
 	-- individually later when streaming them.
-	"compression_algo"	TEXT, -- may be NULL to indicate uncompressed data
+	"compression_algo"	TEXT NOT NULL, -- may be string value "none" to indicate uncompressed data
 	"data"	BLOB NOT NULL,
 	PRIMARY KEY ("hash", "hash_algo") ON CONFLICT IGNORE
 );

@@ -128,8 +128,8 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             while (cur_pos < file_size) : (cur_pos = try f_in.getPos()) {
                 chunk_buf_stream.reset();
 
-                // const compression_algo: ?[:0]const u8 = "zstd";
-                const compression_algo: ?[:0]const u8 = null;
+                // const compression_algo: [:0]const u8 = "zstd";
+                const compression_algo: [:0]const u8 = "none";
 
                 var chunk_hash = std.crypto.hash.sha3.Sha3_256.init(.{});
                 var mwriter = std.io.multiWriter(.{ chunk_hash.writer(), chunk_buf_stream.writer() });

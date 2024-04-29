@@ -16,6 +16,9 @@ const fifo_buffer_size = 1024 * 4;
 // TODO: use chunk size pulled from config
 const chunk_size = 1024 * 4;
 
+// TODO: maybe use fba size pulled from config
+const fba_size = 1024 * 64;
+
 /// It is the responsibility of the caller of `commit` to deallocate and
 /// deinit alloc, repo_path, and files, if necessary.
 pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]const u8) !void {
@@ -29,7 +32,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     // XXX: Do we need more than 64k? Should the buffer be dynamically
     // allocated from the allocator passed into this function? Would this mess
     // up cache locality on the CPU?
-    var fixed_buffer: [1024 * 64]u8 = undefined;
+    var fixed_buffer: [fba_size]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&fixed_buffer);
     var buf_alloc = fba.allocator();
 

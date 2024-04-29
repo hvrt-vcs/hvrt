@@ -13,10 +13,13 @@ const repo_db_name: [:0]const u8 = "repo.hvrt";
 
 // TODO: use fifo buffer size pulled from config
 const fifo_buffer_size = 1024 * 4;
+
 // TODO: use chunk size pulled from config
 const chunk_size = 1024 * 4;
 
-// TODO: maybe use fba size pulled from config
+// TODO: maybe use fba size pulled from config, or somewhere else dynamic, like
+// getting the max chunk size in the work tree database, and allocate double
+// that size for the fba.
 const fba_size = 1024 * 64;
 
 /// It is the responsibility of the caller of `commit` to deallocate and
@@ -25,15 +28,13 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     std.log.debug("what is the message: {s}\n", .{message});
 
     // We allocate lots of short lived memory for copying between databases.
-    // Instead of using manually manipulating stack allocated fixed size
+    // Instead of using manually manipulated stack allocated fixed size
     // buffers, or using a (potentially slow) heap allocator, just use a
     // `FixedBufferAllocator`. We get the best of both worlds this way.
+    const fixed_buffer = try alloc.alloc(u8, fba_size);
+    defer alloc.free(fixed_buffer);
 
-    // XXX: Do we need more than 64k? Should the buffer be dynamically
-    // allocated from the allocator passed into this function? Would this mess
-    // up cache locality on the CPU?
-    var fixed_buffer: [fba_size]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&fixed_buffer);
+    var fba = std.heap.FixedBufferAllocator.init(fixed_buffer);
     var buf_alloc = fba.allocator();
 
     const abs_repo_path = try std.fs.realpathAlloc(alloc, repo_path);

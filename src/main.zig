@@ -14,20 +14,24 @@ pub fn main() !void {
     var status_code: u8 = 0;
 
     {
-        // Args parsing from here: https://ziggit.dev/t/read-command-line-arguments/220/7
+        var env_var_buf: [128]u8 = undefined;
+        var fba_state = std.heap.FixedBufferAllocator.init(&env_var_buf);
+        const fba = fba_state.allocator();
+
+        const debug_opt: ?[]u8 = std.process.getEnvVarOwned(fba, "HVRT_DEBUG") catch null;
+        defer if (debug_opt) |debug_slice| fba.free(debug_slice);
 
         // Get allocator
-        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-        defer _ = gpa.deinit();
-        const gpalloc = gpa.allocator();
-
-        const debug_opt: ?[]u8 = std.process.getEnvVarOwned(gpalloc, "HVRT_DEBUG") catch null;
-        defer if (debug_opt) |debug_slice| gpalloc.free(debug_slice);
+        var gpa_state = std.heap.GeneralPurposeAllocator(.{}){};
+        defer _ = gpa_state.deinit();
+        const gpa = gpa_state.allocator();
 
         // c_allocator is vastly faster, but less safe than the current GeneralPurposeAllocator.
-        const allocator = if (debug_opt != null) gpalloc else std.heap.c_allocator;
+        const allocator = if (debug_opt != null) gpa else std.heap.c_allocator;
 
-        // Parse args into string array (error union needs 'try')
+        // Args parsing from here: https://ziggit.dev/t/read-command-line-arguments/220/7
+
+        // Parse args into string array
         const args = try std.process.argsAlloc(allocator);
         defer std.process.argsFree(allocator, args);
 
@@ -37,7 +41,7 @@ pub fn main() !void {
                 sqlite.Error.SQLITE_CANTOPEN => 4,
                 else => {
                     // Any error other than the explicitly listed ones in the
-                    // switch should just bubble up normally, printing a stack
+                    // switch should just bubble up normally, printing a error
                     // trace.
                     return err;
                 },

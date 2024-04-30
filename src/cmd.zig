@@ -45,11 +45,11 @@ pub fn internalMain(alloc: std.mem.Allocator, args: []const [:0]const u8) !void 
                 },
             }
         } else {
-            std.log.err("Unknown sub-command given: {s}\n", .{sub_cmd});
+            std.log.warn("Unknown sub-command given: {s}\n", .{sub_cmd});
             return error.ArgumentError;
         }
     } else {
-        std.log.err("No sub-command given.\n", .{});
+        std.log.warn("No sub-command given.\n", .{});
         return error.ArgumentError;
     }
 }

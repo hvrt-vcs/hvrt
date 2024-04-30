@@ -64,26 +64,27 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     // var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
     // _ = fifo;
 
-    const sqlfiles = sql.sqlite;
+    const wt_sql = sql.sqlite.work_tree orelse unreachable;
+    const repo_sql = sql.sqlite.repo orelse unreachable;
 
     // worktree statements
-    const read_blobs_stmt = try sqlite.Statement.prepare(wt_db, sqlfiles.work_tree.read_blobs);
+    const read_blobs_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.read_blobs);
     defer read_blobs_stmt.finalize() catch unreachable;
-    const read_blob_chunks_stmt = try sqlite.Statement.prepare(wt_db, sqlfiles.work_tree.read_blob_chunks);
+    const read_blob_chunks_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.read_blob_chunks);
     defer read_blob_chunks_stmt.finalize() catch unreachable;
-    const read_chunks_stmt = try sqlite.Statement.prepare(wt_db, sqlfiles.work_tree.read_chunks);
+    const read_chunks_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.read_chunks);
     defer read_chunks_stmt.finalize() catch unreachable;
-    const read_head_commit_stmt = try sqlite.Statement.prepare(wt_db, sqlfiles.work_tree.read_head_commit);
+    const read_head_commit_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.read_head_commit);
     defer read_head_commit_stmt.finalize() catch unreachable;
 
     // Repo statements
-    const blob_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.repo.commit.blob);
+    const blob_stmt = try sqlite.Statement.prepare(repo_db, repo_sql.commit.blob);
     defer blob_stmt.finalize() catch unreachable;
-    const blob_chunk_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.repo.commit.blob_chunk);
+    const blob_chunk_stmt = try sqlite.Statement.prepare(repo_db, repo_sql.commit.blob_chunk);
     defer blob_chunk_stmt.finalize() catch unreachable;
-    const chunk_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.repo.commit.chunk);
+    const chunk_stmt = try sqlite.Statement.prepare(repo_db, repo_sql.commit.chunk);
     defer chunk_stmt.finalize() catch unreachable;
-    const header_stmt = try sqlite.Statement.prepare(repo_db, sqlfiles.repo.commit.header);
+    const header_stmt = try sqlite.Statement.prepare(repo_db, repo_sql.commit.header);
     defer header_stmt.finalize() catch unreachable;
 
     {
@@ -222,6 +223,6 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
         }
 
         // Should only be run when no errors have occured.
-        try wt_db.exec(sqlfiles.work_tree.clear);
+        try wt_db.exec(wt_sql.clear);
     }
 }

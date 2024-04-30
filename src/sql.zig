@@ -45,7 +45,17 @@ pub const Repo = struct {
     },
 };
 
-pub const sqlite = .{
+/// A supported database should support one or both of Repo and WorkTree
+pub const DatabaseFiles = struct {
+    // FIXME: it may make more sense to just make every Database implementation
+    // support both `Repo` and `WorkTree` and make these fields non-optional.
+    // Even if SQLite make the sense in most circumstances, there is no good
+    // reason to limit users regarding how they use the VCS.
+    repo: ?Repo,
+    work_tree: ?WorkTree,
+};
+
+pub const sqlite = DatabaseFiles{
     .repo = Repo{
         .commit = .{
             .blob = @embedFile("embedded/sql/sqlite/repo/commit/blob.sql"),
@@ -86,10 +96,10 @@ pub const sqlite = .{
 };
 
 /// TODO: add postgres support
-pub const postgres = .{ .repo = @compileError("PostgreSQL is not implemented yet.") };
+pub const postgres = DatabaseFiles{ .repo = @compileError("PostgreSQL is not implemented yet."), .work_tree = @compileError("PostgreSQL is not implemented yet.") };
 
 test "check if sqlfiles compiles" {
-    try std.testing.expectEqual(WorkTree, @TypeOf(sqlite.work_tree));
-    try std.testing.expectEqual(Repo, @TypeOf(sqlite.repo));
+    try std.testing.expectEqual(?WorkTree, @TypeOf(sqlite.work_tree));
+    try std.testing.expectEqual(?Repo, @TypeOf(sqlite.repo));
     // try std.testing.expectEqual(Repo, @TypeOf(postgres.repo));
 }

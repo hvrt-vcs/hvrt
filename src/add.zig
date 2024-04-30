@@ -33,15 +33,15 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
     var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
 
-    const sqlfiles = sql.sqlite;
+    const wt_sql = sql.sqlite.work_tree orelse unreachable;
 
-    const file_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.file);
+    const file_stmt = try sqlite.Statement.prepare(db, wt_sql.add.file);
     defer file_stmt.finalize() catch unreachable;
-    const blob_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.blob);
+    const blob_stmt = try sqlite.Statement.prepare(db, wt_sql.add.blob);
     defer blob_stmt.finalize() catch unreachable;
-    const blob_chunk_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.blob_chunk);
+    const blob_chunk_stmt = try sqlite.Statement.prepare(db, wt_sql.add.blob_chunk);
     defer blob_chunk_stmt.finalize() catch unreachable;
-    const chunk_stmt = try sqlite.Statement.prepare(db, sqlfiles.work_tree.add.chunk);
+    const chunk_stmt = try sqlite.Statement.prepare(db, wt_sql.add.chunk);
     defer chunk_stmt.finalize() catch unreachable;
 
     {

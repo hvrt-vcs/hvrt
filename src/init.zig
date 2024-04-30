@@ -38,17 +38,17 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     defer alloc.free(wt_db_path);
     std.log.debug("what is wt_db_path: {s}\n", .{wt_db_path});
 
-    const wt_sqlfiles = sql.sqlite.work_tree;
-    try initDatabase(wt_db_path, "worktree_init", wt_sqlfiles);
+    const wt_sql = sql.sqlite.work_tree orelse unreachable;
+    try initDatabase(wt_db_path, "worktree_init", wt_sql);
 
     // Repo
     const repo_db_path_parts = [_][]const u8{ repo_path, hvrt_dirname, repo_db_name };
     const repo_db_path = try fspath.joinZ(alloc, &repo_db_path_parts);
     defer alloc.free(repo_db_path);
 
-    // FIXME: no postgres support at the moment, so this `if` statement is just for show.
-    const repo_sqlfiles = if (true) sql.sqlite.repo else sql.postgres.repo;
-    try initDatabase(repo_db_path, "repo_init", repo_sqlfiles);
+    // TODO: add postgres support
+    const repo_sql = sql.sqlite.repo orelse unreachable;
+    try initDatabase(repo_db_path, "repo_init", repo_sql);
 }
 
 fn initDatabase(db_uri: [:0]const u8, tx_name: [:0]const u8, sqlfiles: anytype) !void {

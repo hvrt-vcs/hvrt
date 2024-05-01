@@ -50,6 +50,24 @@ CREATE TABLE commits (
 	-- commit *must* have a tree associated with it.
 	"tree_hash"	TEXT NOT NULL,
 	"tree_hash_algo"	TEXT NOT NULL,
+
+	-- * author: who authored the commit
+	"author" TEXT NOT NULL,
+	-- * author_time: whole seconds since the unix epoch in UTC
+	"author_time" INTEGER NOT NULL,
+	-- * author_tz_offset: used to shift "author_time" by the given UTC offset (mostly for display purposes). Represented in minutes. Between -720 and 720.
+	"author_tz_offset" INTEGER NOT NULL CHECK ( author_tz_offset >= -720  AND author_tz_offset <= 720 ),
+
+	-- * committer: usually same as author
+	"committer" TEXT NOT NULL,
+	-- * committer_time: whole seconds since the unix epoch in UTC
+	"committer_time" INTEGER NOT NULL,
+	-- * committer_tz_offset: used to shift "committer_time" by the given UTC offset (mostly for display purposes). Represented in minutes. Between -720 and 720.
+	"committer_tz_offset" INTEGER NOT NULL CHECK ( committer_tz_offset >= -720  AND committer_tz_offset <= 720 ),
+
+	-- * message: Commit message
+	"message" TEXT NOT NULL,
+
 	PRIMARY KEY ("hash", "hash_algo")
 	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );

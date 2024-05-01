@@ -6,6 +6,9 @@ const Dir = std.fs.Dir;
 const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
 
+const core_ds = @import("ds/core.zig");
+const HashKey = core_ds.HashKey;
+
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
@@ -21,6 +24,40 @@ const chunk_size = 1024 * 4;
 // getting the max chunk size in the work tree database, and allocate double
 // that size for the fba.
 const fba_size = 1024 * 64;
+
+const Commit = struct {
+    tree: HashKey,
+
+    parents: []HashKey,
+
+    /// Author name/email combo
+    author: [:0]const u8,
+
+    /// Seconds since the epoch
+    author_time: i64,
+
+    /// UTC offset in minutes. Between -720 and 720.
+    author_utc_offset: i11,
+
+    /// Commiter name/email combo
+    commiter: [:0]const u8,
+
+    /// Seconds since the epoch
+    commiter_time: i64,
+
+    /// UTC offset in minutes. Between -720 and 720.
+    commiter_utc_offset: i11,
+
+    /// Commit message
+    message: [:0]const u8,
+
+    pub fn init() !void {}
+
+    pub fn hashBytes(self: Commit, alloc: std.mem.Allocator) ![:0]const u8 {
+        _ = self;
+        _ = alloc;
+    }
+};
 
 /// It is the responsibility of the caller of `commit` to deallocate and
 /// deinit alloc, repo_path, and files, if necessary.
@@ -221,6 +258,23 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
                 },
             );
         }
+
+        var parents: []HashKey = undefined;
+        parents.len = 0;
+
+        const commit_obj = Commit{
+            .author = "",
+            .author_time = 0,
+            .author_utc_offset = 0,
+            .commiter = "",
+            .commiter_time = 0,
+            .commiter_utc_offset = 0,
+            .message = "",
+            .parents = parents,
+            .tree = .{ .hash = "deadbeef" },
+        };
+
+        std.debug.print("commit_obj: {}\n", .{commit_obj});
 
         // Should only be run when no errors have occured.
         try wt_db.exec(wt_sql.clear);

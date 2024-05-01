@@ -55,15 +55,15 @@ CREATE TABLE commits (
 	"author" TEXT NOT NULL,
 	-- * author_time: whole seconds since the unix epoch in UTC
 	"author_time" INTEGER NOT NULL,
-	-- * author_tz_offset: used to shift "author_time" by the given UTC offset (mostly for display purposes). Represented in minutes. Between -720 and 720.
-	"author_tz_offset" INTEGER NOT NULL CHECK ( author_tz_offset >= -720  AND author_tz_offset <= 720 ),
+	-- * author_utc_offset: used to shift "author_time" by the given UTC offset (mostly for display purposes). Represented in minutes. Between -720 and 720.
+	"author_utc_offset" INTEGER NOT NULL CHECK ( author_utc_offset >= -720  AND author_utc_offset <= 720 ),
 
 	-- * committer: usually same as author
 	"committer" TEXT NOT NULL,
 	-- * committer_time: whole seconds since the unix epoch in UTC
 	"committer_time" INTEGER NOT NULL,
-	-- * committer_tz_offset: used to shift "committer_time" by the given UTC offset (mostly for display purposes). Represented in minutes. Between -720 and 720.
-	"committer_tz_offset" INTEGER NOT NULL CHECK ( committer_tz_offset >= -720  AND committer_tz_offset <= 720 ),
+	-- * committer_utc_offset: used to shift "committer_time" by the given UTC offset (mostly for display purposes). Represented in minutes. Between -720 and 720.
+	"committer_utc_offset" INTEGER NOT NULL CHECK ( committer_utc_offset >= -720  AND committer_utc_offset <= 720 ),
 
 	-- * message: Commit message
 	"message" TEXT NOT NULL,

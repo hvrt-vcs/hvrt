@@ -8,6 +8,8 @@ const sql = @import("sql.zig");
 
 const core_ds = @import("ds/core.zig");
 const HashKey = core_ds.HashKey;
+const CommitParent = core_ds.CommitParent;
+const ParentType = core_ds.ParentType;
 
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 
@@ -28,7 +30,7 @@ const fba_size = 1024 * 64;
 const Commit = struct {
     tree: HashKey,
 
-    parents: []HashKey,
+    parents: []CommitParent,
 
     /// Author name/email combo
     author: [:0]const u8,
@@ -39,23 +41,79 @@ const Commit = struct {
     /// UTC offset in minutes. Between -720 and 720.
     author_utc_offset: i11,
 
-    /// Commiter name/email combo
-    commiter: [:0]const u8,
+    /// Committer name/email combo
+    committer: [:0]const u8,
 
     /// Seconds since the epoch
-    commiter_time: i64,
+    committer_time: i64,
 
     /// UTC offset in minutes. Between -720 and 720.
-    commiter_utc_offset: i11,
+    committer_utc_offset: i11,
 
     /// Commit message
     message: [:0]const u8,
 
     pub fn init() !void {}
 
+    fn fmtAuthor(alloc: std.mem.Allocator, author: [:0]const u8, author_time: i64, author_utc_offset: i11) ![:0]u8 {
+        const space: u8 = ' ';
+        const atype = std.ArrayList(u8);
+        var array = atype.init(alloc);
+        defer array.deinit();
+
+        try array.appendSlice(author);
+        try array.append(space);
+
+        try std.fmt.formatInt(author_time, 10, .lower, .{}, array.writer());
+
+        try array.append(space);
+
+        const sign: u8 = if (author_utc_offset < 0) '-' else '+';
+
+        const hours = @divTrunc(author_time, 60);
+        const minutes = @mod(author_time, 60);
+
+        try array.append(sign);
+        try std.fmt.formatInt(hours, 10, .lower, .{ .fill = '0', .width = 2 }, array.writer());
+        try std.fmt.formatInt(minutes, 10, .lower, .{ .fill = '0', .width = 2 }, array.writer());
+
+        return try alloc.dupeZ(u8, array.items);
+    }
+
     pub fn hashBytes(self: Commit, alloc: std.mem.Allocator) ![:0]const u8 {
-        _ = self;
-        _ = alloc;
+        const new_line: u8 = '\n';
+        var array = std.ArrayList(u8).init(alloc);
+        defer array.deinit();
+
+        const tree_str = try self.tree.prePostToString(alloc, .{"tree"}, .{});
+        defer alloc.free(tree_str);
+        try array.appendSlice(tree_str);
+        try array.append(new_line);
+
+        for (self.parents) |parent| {
+            const parent_str = try parent.toString(alloc);
+            defer alloc.free(parent_str);
+            try array.appendSlice(parent_str);
+            try array.append(new_line);
+        }
+
+        const author = try fmtAuthor(alloc, self.author, self.author_time, self.author_utc_offset);
+        defer alloc.free(author);
+        try array.appendSlice("author ");
+        try array.appendSlice(author);
+        try array.append(new_line);
+
+        const committer = try fmtAuthor(alloc, self.committer, self.committer_time, self.committer_utc_offset);
+        defer alloc.free(committer);
+        try array.appendSlice("committer ");
+        try array.appendSlice(committer);
+        try array.append(new_line);
+
+        try array.append(new_line);
+        try array.appendSlice(self.message);
+        try array.append(new_line);
+
+        return try alloc.dupeZ(u8, array.items);
     }
 };
 
@@ -259,22 +317,27 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             );
         }
 
-        var parents: []HashKey = undefined;
+        var parents: []CommitParent = undefined;
         parents.len = 0;
 
         const commit_obj = Commit{
-            .author = "",
+            .author = "Some author guy <author@example.com>",
             .author_time = 0,
             .author_utc_offset = 0,
-            .commiter = "",
-            .commiter_time = 0,
-            .commiter_utc_offset = 0,
-            .message = "",
+            .committer = "Some committer guy <committer@example.com>",
+            .committer_time = 0,
+            .committer_utc_offset = 0,
+            .message = "Here is some sort of message",
             .parents = parents,
             .tree = .{ .hash = "deadbeef" },
         };
 
         std.debug.print("commit_obj: {}\n", .{commit_obj});
+
+        const hash_bytes = try commit_obj.hashBytes(alloc);
+        defer alloc.free(hash_bytes);
+
+        std.debug.print("\n\n\ncommit_obj.hashBytes: {s}\n\n\n", .{hash_bytes});
 
         // Should only be run when no errors have occured.
         try wt_db.exec(wt_sql.clear);

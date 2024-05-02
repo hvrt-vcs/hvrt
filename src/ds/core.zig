@@ -153,6 +153,14 @@ pub const HashKey = struct {
         const all_parts = parts ++ [_][]const u8{ @tagName(self.hash_algo), self.hash };
         return try std.mem.joinZ(alloc, hash_key_sep, &all_parts);
     }
+
+    pub fn prePostToString(self: *const HashKey, alloc: std.mem.Allocator, prefix_parts: anytype, postfix_parts: anytype) ![:0]u8 {
+        const hash_str = try self.toString(alloc);
+        defer alloc.free(hash_str);
+
+        const all_parts = prefix_parts ++ [_][]const u8{hash_str} ++ postfix_parts;
+        return try std.mem.joinZ(alloc, " ", &all_parts);
+    }
 };
 
 test "HashKey.fmtToString" {
@@ -448,7 +456,25 @@ test "Commit.confirmHash" {
 
 pub const CommitParent = struct {
     commit: HashKey,
-    ptype: ParentType,
+    parent_type: ParentType,
+
+    pub fn toString(self: CommitParent, alloc: std.mem.Allocator) ![:0]u8 {
+        return try self.commit.prePostToString(
+            alloc,
+            .{ "parent", @tagName(self.parent_type) },
+            .{},
+        );
+    }
+
+    test toString {
+        const expected = "parent regular sha3_256|deadbeef";
+
+        const commit_parent = CommitParent{ .commit = .{ .hash = "deadbeef" }, .parent_type = .regular };
+        const actual = try commit_parent.toString(std.testing.allocator);
+        defer std.testing.allocator.free(actual);
+
+        try std.testing.expectEqualStrings(expected, actual);
+    }
 };
 
 pub const Tree = struct {

@@ -61,21 +61,24 @@ const Commit = struct {
         var array = atype.init(alloc);
         defer array.deinit();
 
-        try array.appendSlice(author);
-        try array.append(space);
+        var writer = array.writer();
 
-        try std.fmt.formatInt(author_time, 10, .lower, .{}, array.writer());
+        try writer.writeAll(author);
+        try writer.writeByte(space);
 
-        try array.append(space);
+        try std.fmt.formatInt(author_time, 10, .lower, .{}, writer);
+        try writer.writeByte(space);
 
         const sign: u8 = if (author_utc_offset < 0) '-' else '+';
 
-        const hours = @divTrunc(author_time, 60);
-        const minutes = @mod(author_time, 60);
+        const hours = @divTrunc(author_utc_offset, 60);
+        const minutes = @mod(author_utc_offset, 60);
 
-        try array.append(sign);
-        try std.fmt.formatInt(hours, 10, .lower, .{ .fill = '0', .width = 2 }, array.writer());
-        try std.fmt.formatInt(minutes, 10, .lower, .{ .fill = '0', .width = 2 }, array.writer());
+        try writer.writeByte(sign);
+        // try std.fmt.formatInt(hours, 10, .lower, .{ .fill = '0', .width = 2 }, writer);
+        // try std.fmt.formatInt(minutes, 10, .lower, .{ .fill = '0', .width = 2 }, writer);
+        try std.fmt.formatInt(hours, 10, .lower, .{}, writer);
+        try std.fmt.formatInt(minutes, 10, .lower, .{}, writer);
 
         return try alloc.dupeZ(u8, array.items);
     }
@@ -317,29 +320,42 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             );
         }
 
-        var parents: []CommitParent = undefined;
-        parents.len = 0;
-
-        const commit_obj = Commit{
-            .author = "Some author guy <author@example.com>",
-            .author_time = 0,
-            .author_utc_offset = 0,
-            .committer = "Some committer guy <committer@example.com>",
-            .committer_time = 0,
-            .committer_utc_offset = 0,
-            .message = "Here is some sort of message",
-            .parents = parents,
-            .tree = .{ .hash = "deadbeef" },
-        };
-
-        std.debug.print("commit_obj: {}\n", .{commit_obj});
-
-        const hash_bytes = try commit_obj.hashBytes(alloc);
-        defer alloc.free(hash_bytes);
-
-        std.debug.print("\n\n\ncommit_obj.hashBytes: {s}\n\n\n", .{hash_bytes});
-
         // Should only be run when no errors have occured.
         try wt_db.exec(wt_sql.clear);
     }
+}
+
+test "commit objects" {
+    const alloc = std.testing.allocator;
+
+    const expected =
+        \\tree sha3_256|deadbeef
+        \\author Some author guy <author@example.com> 1 +0000
+        \\committer Some committer guy <committer@example.com> 2 +0000
+        \\
+        \\Here is some sort of message
+        \\
+    ;
+
+    var parents: []CommitParent = undefined;
+    parents.len = 0;
+
+    const commit_obj = Commit{
+        .author = "Some author guy <author@example.com>",
+        .author_time = 1,
+        .author_utc_offset = 660,
+        .committer = "Some committer guy <committer@example.com>",
+        .committer_time = 2,
+        .committer_utc_offset = 660,
+        .message = "Here is some sort of message",
+        .parents = parents,
+        .tree = .{ .hash = "deadbeef" },
+    };
+
+    std.debug.print("commit_obj: {}\n", .{commit_obj});
+
+    const hash_bytes = try commit_obj.hashBytes(alloc);
+    defer alloc.free(hash_bytes);
+
+    try std.testing.expectEqualStrings(expected, hash_bytes);
 }

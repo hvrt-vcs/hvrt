@@ -359,99 +359,143 @@ test "Headers.toString" {
     try testing.expectError(error.IllegalHeaderChar, verr);
 }
 
-pub const Commit = struct {
-    hash_key: HashKey,
-    headers: Headers,
-    parent_edges: []CommitParent,
+const Commit = struct {
     tree: HashKey,
 
-    pub fn deinit(self: *Commit) void {
-        self.hash_key.deinit();
-        self.headers.deinit();
-        self.* = undefined;
+    parents: []CommitParent,
+
+    /// Author name/email combo
+    author: [:0]const u8,
+
+    /// Seconds since the epoch
+    author_time: i64,
+
+    /// UTC offset in minutes. Between -720 and 720.
+    author_utc_offset: i11,
+
+    /// Committer name/email combo
+    committer: [:0]const u8,
+
+    /// Seconds since the epoch
+    committer_time: i64,
+
+    /// UTC offset in minutes. Between -720 and 720.
+    committer_utc_offset: i11,
+
+    /// Commit message
+    message: [:0]const u8,
+
+    fn fmtAuthor(alloc: std.mem.Allocator, author: [:0]const u8, author_time: i64, author_utc_offset: i11) ![:0]u8 {
+        const space: u8 = ' ';
+        const fill = '0';
+        const atype = std.ArrayList(u8);
+        var array = atype.init(alloc);
+        defer array.deinit();
+
+        var writer = array.writer();
+
+        try writer.writeAll(author);
+        try writer.writeByte(space);
+
+        try std.fmt.formatInt(author_time, 10, .lower, .{}, writer);
+        try writer.writeByte(space);
+
+        const sign: u8 = if (author_utc_offset < 0) '-' else '+';
+        try writer.writeByte(sign);
+
+        const hours = @divTrunc(author_utc_offset, 60);
+        const minutes = @mod(author_utc_offset, 60);
+
+        var buf: [4]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        const fb_writer = fbs.writer();
+
+        try std.fmt.formatInt(hours, 10, .lower, .{}, fb_writer);
+        if (fbs.getWritten().len == 1) {
+            try writer.writeByte(fill);
+        }
+        try writer.writeAll(fbs.getWritten());
+
+        fbs.reset();
+        try std.fmt.formatInt(minutes, 10, .lower, .{}, fb_writer);
+        if (fbs.getWritten().len == 1) {
+            try writer.writeByte(fill);
+        }
+        try writer.writeAll(fbs.getWritten());
+
+        return try alloc.dupeZ(u8, array.items);
     }
 
-    pub fn nakedInit(alloc: std.mem.Allocator, hash_algo: ?HashAlgo, parent_edges: []CommitParent, tree: HashKey, headers: Headers) !Commit {
-        const hash_key = try Commit.nakedHash(alloc, hash_algo, parent_edges, tree, headers);
+    pub fn hashBytes(self: Commit, alloc: std.mem.Allocator) ![:0]const u8 {
+        const new_line: u8 = '\n';
+        var array = std.ArrayList(u8).init(alloc);
+        defer array.deinit();
 
-        return .{
-            .hash_key = hash_key,
-            .headers = headers,
-            .parent_edges = parent_edges,
-            .tree = tree,
-        };
-    }
+        const tree_str = try self.tree.prePostToString(alloc, .{"tree"}, .{});
+        defer alloc.free(tree_str);
+        try array.appendSlice(tree_str);
+        try array.append(new_line);
 
-    /// Hash a commit without actually having a Commit object built yet.
-    pub fn nakedHash(alloc: std.mem.Allocator, hash_algo: ?HashAlgo, parent_edges: []CommitParent, tree: *Tree, headers: Headers) !HashKey {
-        const final_algo = hash_algo orelse HashAlgo.default;
-        const Temp = Commit{
-            .hash_key = undefined,
-            .headers = headers,
-            .parent_edges = parent_edges,
-            .tree = tree,
-        };
-
-        return try Temp.hash(alloc, final_algo);
-    }
-
-    /// Don't pass in an ArenaAllocator here if the result will be long lived.
-    /// A lot of intermediate memory is allocated that is simply thrown away.
-    pub fn hash(self: Commit, alloc: std.mem.Allocator, hash_algo: HashAlgo) !HashKey {
-        var bytes_builder = std.ArrayList(u8).init(alloc);
-        defer bytes_builder.deinit();
-
-        // add header lines
-        const header_string = try self.headers.toString(alloc);
-        defer alloc.free(header_string);
-        try bytes_builder.appendSlice(header_string);
-
-        // TODO: add parent commit hashes
-        for (self.parent_edges) |pe| {
-            _ = pe;
+        for (self.parents) |parent| {
+            const parent_str = try parent.toString(alloc);
+            defer alloc.free(parent_str);
+            try array.appendSlice(parent_str);
+            try array.append(new_line);
         }
 
-        // add tree hash
-        const tree_string = try self.tree.toString(alloc);
-        defer alloc.free(tree_string);
-        try bytes_builder.appendSlice(tree_string);
+        const author = try fmtAuthor(alloc, self.author, self.author_time, self.author_utc_offset);
+        defer alloc.free(author);
+        try array.appendSlice("author ");
+        try array.appendSlice(author);
+        try array.append(new_line);
 
-        const hash_buf: []const u8 = bytes_builder.items;
-        var buf_stream = std.io.fixedBufferStream(hash_buf);
-        const reader = buf_stream.reader();
+        const committer = try fmtAuthor(alloc, self.committer, self.committer_time, self.committer_utc_offset);
+        defer alloc.free(committer);
+        try array.appendSlice("committer ");
+        try array.appendSlice(committer);
+        try array.append(new_line);
 
-        return try HashKey.init(hash_algo, alloc, reader);
-    }
+        try array.append(new_line);
+        try array.appendSlice(self.message);
+        try array.append(new_line);
 
-    pub fn confirmHash(self: Commit, alloc: std.mem.Allocator) bool {
-        var arena = std.heap.ArenaAllocator.init(alloc);
-        defer arena.deinit();
-        const arena_alloc = arena.allocator();
-
-        const rehash_self = try self.hash(arena_alloc, self.hash_key.hash_algo);
-        return self.hash_key.equal(rehash_self);
-    }
-
-    pub fn toString(self: *Commit, alloc: std.mem.Allocator) ![:0]u8 {
-        _ = self;
-
-        const return_value = try alloc.dupeZ(u8, "something, something");
-
-        return return_value;
+        return try alloc.dupeZ(u8, array.items);
     }
 };
 
-test "Commit.confirmHash" {
-    var headers = try Headers.init(testing.allocator);
-    defer headers.deinit();
+test "commit objects" {
+    const alloc = std.testing.allocator;
 
-    _ = try headers.insertHeader("Author", "I Am Spartacus<iamspartacus@example.com>");
-    _ = try headers.insertHeader("Committer", "No I Am Spartacus<noiamspartacus@example.com>");
+    const expected =
+        \\tree sha3_256|deadbeef
+        \\author Some author guy <author@example.com> 1 +1100
+        \\committer Some committer guy <committer@example.com> 2 +1052
+        \\
+        \\Here is some sort of message
+        \\
+    ;
 
-    var parent_edges: []CommitParent = undefined;
-    parent_edges.len = 0;
-    // var tree: HashKey = undefined;
-    // _ = tree;
+    var parents: []CommitParent = undefined;
+    parents.len = 0;
+
+    const commit_obj = Commit{
+        .author = "Some author guy <author@example.com>",
+        .author_time = 1,
+        .author_utc_offset = 660,
+        .committer = "Some committer guy <committer@example.com>",
+        .committer_time = 2,
+        .committer_utc_offset = 652,
+        .message = "Here is some sort of message",
+        .parents = parents,
+        .tree = .{ .hash = "deadbeef" },
+    };
+
+    // std.debug.print("commit_obj: {}\n", .{commit_obj});
+
+    const hash_bytes = try commit_obj.hashBytes(alloc);
+    defer alloc.free(hash_bytes);
+
+    try std.testing.expectEqualStrings(expected, hash_bytes);
 }
 
 pub const CommitParent = struct {

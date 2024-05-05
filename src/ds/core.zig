@@ -144,9 +144,22 @@ pub const HashKey = struct {
         return self.hash_algo == other.hash_algo and std.mem.eql(u8, self.hash, other.hash);
     }
 
-    pub fn toString(self: *const HashKey, alloc: std.mem.Allocator) ![:0]u8 {
+    pub fn toString(self: HashKey, alloc: std.mem.Allocator) ![:0]u8 {
+        var array_list = std.ArrayList(u8).init(alloc);
+        defer array_list.deinit();
+
+        const writer = array_list.writer();
+        try self.writeSelf(writer);
+
+        return try array_list.toOwnedSliceSentinel(0);
+    }
+
+    pub fn writeSelf(self: HashKey, writer: anytype) !void {
         const parts = [_][]const u8{ @tagName(self.hash_algo), self.hash };
-        return try std.mem.joinZ(alloc, hash_key_sep, &parts);
+        for (parts, 0..) |part, i| {
+            if (i != 0) try writer.writeAll(hash_key_sep);
+            try writer.writeAll(part);
+        }
     }
 
     pub fn fmtToString(self: *const HashKey, alloc: std.mem.Allocator, parts: anytype) ![:0]u8 {
@@ -160,6 +173,24 @@ pub const HashKey = struct {
 
         const all_parts = prefix_parts ++ [_][]const u8{hash_str} ++ postfix_parts;
         return try std.mem.joinZ(alloc, " ", &all_parts);
+    }
+
+    pub fn prePostWriter(self: *const HashKey, prefix_parts_opt: ?[]const []const u8, postfix_parts_opt: ?[]const []const u8, writer: anytype) !void {
+        const prefix_parts = prefix_parts_opt orelse &.{};
+        const postfix_parts = postfix_parts_opt orelse &.{};
+
+        for (prefix_parts, 0..) |part, i| {
+            if (i != 0) try writer.writeByte(' ');
+            try writer.writeAll(part);
+        }
+
+        if (prefix_parts.len != 0) try writer.writeByte(' ');
+        try self.writeSelf(writer);
+
+        for (postfix_parts) |part| {
+            try writer.writeByte(' ');
+            try writer.writeAll(part);
+        }
     }
 };
 
@@ -227,138 +258,6 @@ test "HashKey.fromReader SHA1" {
     try testing.expect(std.mem.eql(u8, expected_hash, actual.hash));
 }
 
-pub const StringMap = std.StringHashMap([]const u8);
-
-pub const Headers = struct {
-    const illegal_header_chars: [:0]const u8 = "=\n";
-
-    alloc: std.mem.Allocator,
-    arena: *std.heap.ArenaAllocator,
-    arena_alloc: std.mem.Allocator,
-    header_map: StringMap,
-
-    pub fn init(alloc: std.mem.Allocator) !Headers {
-        var arena = try alloc.create(std.heap.ArenaAllocator);
-        arena.* = std.heap.ArenaAllocator.init(alloc);
-
-        return .{
-            .alloc = alloc,
-            .arena = arena,
-            .arena_alloc = arena.allocator(),
-            .header_map = StringMap.init(alloc),
-        };
-    }
-
-    /// deinit internal StringMap and ArenaAllocator.
-    pub fn deinit(self: *Headers) void {
-        self.arena.deinit();
-        self.alloc.destroy(self.arena);
-        self.header_map.deinit();
-        self.* = undefined;
-    }
-
-    pub fn toString(self: *Headers, alloc: std.mem.Allocator) ![:0]u8 {
-        var key_pq = std.PriorityQueue([]const u8, *Headers, Headers.lessThanCmpOrder).init(alloc, self);
-        defer key_pq.deinit();
-
-        var key_iter = self.header_map.keyIterator();
-        while (key_iter.next()) |k| {
-            try key_pq.add(k.*);
-        }
-
-        var final_string = std.ArrayList(u8).init(alloc);
-        defer final_string.deinit();
-
-        while (key_pq.removeOrNull()) |key| {
-            const value = self.header_map.get(key) orelse "";
-            const line = try std.fmt.allocPrint(alloc, "{s}={s}\n", .{ key, value });
-            defer alloc.free(line);
-            try final_string.appendSlice(line);
-        }
-
-        return try alloc.dupeZ(u8, final_string.items);
-    }
-
-    fn lessThanCmpOrder(_: *Headers, lhs: []const u8, rhs: []const u8) Order {
-        if (std.mem.eql(u8, lhs, rhs)) {
-            return Order.eq;
-        } else if (std.mem.lessThan(u8, lhs, rhs)) {
-            return Order.lt;
-        } else {
-            return Order.gt;
-        }
-    }
-
-    /// Return `true` if header was inserted, false otherwise. Allocation
-    /// errors are bubbled up.
-    ///
-    /// FIXME: printing a newline (`\n`) inside the log formats with a true
-    /// newline. Needs to be be escaped before printing.
-    pub fn insertHeader(self: *Headers, key: []const u8, value: []const u8) !bool {
-        if (std.mem.indexOfAny(u8, key, illegal_header_chars)) |idx| {
-            log.warn("Key \'{s}\' contains illegal character '{c}' at index {any}", .{ key, key[idx], idx });
-            return error.IllegalHeaderChar;
-        } else if (std.mem.indexOfAny(u8, value, illegal_header_chars)) |idx| {
-            log.warn("value \'{s}\' contains illegal character '{c}' at index {any}", .{ value, value[idx], idx });
-            return error.IllegalHeaderChar;
-        }
-
-        if (self.header_map.get(key)) |existing_value| {
-            log.warn("Key '{s}' already exists in headers with value '{s}'", .{ key, existing_value });
-            return false;
-        } else {
-            const key_copy = try self.arena_alloc.dupe(u8, key);
-            const value_copy = try self.arena_alloc.dupe(u8, value);
-            try self.header_map.put(key_copy, value_copy);
-            return true;
-        }
-    }
-
-    /// Returned value is owned by the internal arena allocator inside the
-    /// Header object. Once deinit is called on the arena, this value will no
-    /// longer point to valid memory.
-    pub fn popHeader(self: *Headers, key: []const u8) ?[]const u8 {
-        return if (self.header_map.fetchRemove(key)) |kv| kv.value else null;
-    }
-};
-
-test "Headers.toString" {
-    var test_headers = try Headers.init(testing.allocator);
-    defer test_headers.deinit();
-
-    try testing.expect(try test_headers.insertHeader("some_key", "some_value") == true);
-    try testing.expect(try test_headers.insertHeader("zee_last_key", "zee_last_value") == true);
-    try testing.expect(try test_headers.insertHeader("another_key", "another_value") == true);
-
-    // second attempt to insert same key should fail
-    try testing.expect(try test_headers.insertHeader("some_key", "some_different_value") == false);
-
-    const final_string1 = try test_headers.toString(testing.allocator);
-    defer testing.allocator.free(final_string1);
-    try testing.expectEqualSlices(u8, final_string1, "another_key=another_value\nsome_key=some_value\nzee_last_key=zee_last_value\n");
-
-    try testing.expectEqualSlices(u8, test_headers.popHeader("some_key").?, "some_value");
-    try testing.expectEqual(test_headers.popHeader("some_key"), null);
-
-    const final_string2 = try test_headers.toString(testing.allocator);
-    defer testing.allocator.free(final_string2);
-
-    try testing.expectEqualSlices(u8, final_string2, "another_key=another_value\nzee_last_key=zee_last_value\n");
-
-    try testing.expect(try test_headers.insertHeader("some_key", "some_different_value") == true);
-
-    const final_string3 = try test_headers.toString(testing.allocator);
-    defer testing.allocator.free(final_string3);
-
-    try testing.expectEqualSlices(u8, final_string3, "another_key=another_value\nsome_key=some_different_value\nzee_last_key=zee_last_value\n");
-
-    const kerr = test_headers.insertHeader("bad=embedded=char", "doesn't matter");
-    try testing.expectError(error.IllegalHeaderChar, kerr);
-
-    const verr = test_headers.insertHeader("good_key", "bad\nvalue");
-    try testing.expectError(error.IllegalHeaderChar, verr);
-}
-
 const Commit = struct {
     tree: HashKey,
 
@@ -385,14 +284,9 @@ const Commit = struct {
     /// Commit message
     message: [:0]const u8,
 
-    fn fmtAuthor(alloc: std.mem.Allocator, author: [:0]const u8, author_time: i64, author_utc_offset: i11) ![:0]u8 {
+    fn writeAuthor(author: [:0]const u8, author_time: i64, author_utc_offset: i11, writer: anytype) !void {
         const space: u8 = ' ';
-        const fill = '0';
-        const atype = std.ArrayList(u8);
-        var array = atype.init(alloc);
-        defer array.deinit();
-
-        var writer = array.writer();
+        const fill: u8 = '0';
 
         try writer.writeAll(author);
         try writer.writeByte(space);
@@ -422,51 +316,37 @@ const Commit = struct {
             try writer.writeByte(fill);
         }
         try writer.writeAll(fbs.getWritten());
-
-        return try alloc.dupeZ(u8, array.items);
     }
 
-    pub fn hashBytes(self: Commit, alloc: std.mem.Allocator) ![:0]const u8 {
+    pub fn writeHashBytes(self: Commit, writer: anytype) !void {
         const new_line: u8 = '\n';
-        var array = std.ArrayList(u8).init(alloc);
-        defer array.deinit();
 
-        const tree_str = try self.tree.prePostToString(alloc, .{"tree"}, .{});
-        defer alloc.free(tree_str);
-        try array.appendSlice(tree_str);
-        try array.append(new_line);
+        try self.tree.prePostWriter(&.{"tree"}, null, writer);
+        try writer.writeByte(new_line);
 
         for (self.parents) |parent| {
-            const parent_str = try parent.toString(alloc);
-            defer alloc.free(parent_str);
-            try array.appendSlice(parent_str);
-            try array.append(new_line);
+            try parent.writeSelf(writer);
+            try writer.writeByte(new_line);
         }
 
-        const author = try fmtAuthor(alloc, self.author, self.author_time, self.author_utc_offset);
-        defer alloc.free(author);
-        try array.appendSlice("author ");
-        try array.appendSlice(author);
-        try array.append(new_line);
+        try writer.writeAll("author ");
+        try writeAuthor(self.author, self.author_time, self.author_utc_offset, writer);
+        try writer.writeByte(new_line);
 
-        const committer = try fmtAuthor(alloc, self.committer, self.committer_time, self.committer_utc_offset);
-        defer alloc.free(committer);
-        try array.appendSlice("committer ");
-        try array.appendSlice(committer);
-        try array.append(new_line);
+        try writer.writeAll("committer ");
+        try writeAuthor(self.committer, self.committer_time, self.committer_utc_offset, writer);
+        try writer.writeByte(new_line);
 
-        try array.append(new_line);
-        try array.appendSlice(self.message);
-        try array.append(new_line);
-
-        return try alloc.dupeZ(u8, array.items);
+        try writer.writeByte(new_line);
+        try writer.writeAll(self.message);
+        try writer.writeByte(new_line);
     }
 };
 
 test "commit objects" {
     const alloc = std.testing.allocator;
 
-    const expected =
+    const expected: []const u8 =
         \\tree sha3_256|deadbeef
         \\author Some author guy <author@example.com> 1 +1100
         \\committer Some committer guy <committer@example.com> 2 +1052
@@ -492,8 +372,12 @@ test "commit objects" {
 
     // std.debug.print("commit_obj: {}\n", .{commit_obj});
 
-    const hash_bytes = try commit_obj.hashBytes(alloc);
-    defer alloc.free(hash_bytes);
+    var array = std.ArrayList(u8).init(alloc);
+    defer array.deinit();
+
+    const writer = array.writer();
+    try commit_obj.writeHashBytes(writer);
+    const hash_bytes = array.items;
 
     try std.testing.expectEqualStrings(expected, hash_bytes);
 }
@@ -503,10 +387,20 @@ pub const CommitParent = struct {
     parent_type: ParentType,
 
     pub fn toString(self: CommitParent, alloc: std.mem.Allocator) ![:0]u8 {
-        return try self.commit.prePostToString(
-            alloc,
-            .{ "parent", @tagName(self.parent_type) },
-            .{},
+        var array_list = std.ArrayList(u8).init(alloc);
+        defer array_list.deinit();
+
+        const writer = array_list.writer();
+        try self.writeSelf(writer);
+
+        return try array_list.toOwnedSliceSentinel(0);
+    }
+
+    pub fn writeSelf(self: CommitParent, writer: anytype) !void {
+        try self.commit.prePostWriter(
+            &.{ "parent", @tagName(self.parent_type) },
+            null,
+            writer,
         );
     }
 

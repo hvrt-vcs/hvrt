@@ -16,6 +16,9 @@ const assert = std.debug.assert;
 
 const testing = std.testing;
 
+const utf8_space: u8 = ' ';
+const utf8_new_line: u8 = '\n';
+
 // TODO: convert all object pointers into HashKey objects. These can then be
 // used to point into HashMaps holding the actual objects.
 pub const CommitHashMap = std.HashMap(HashKey, Commit, HashKey.HashMapContext, 80);
@@ -418,31 +421,82 @@ pub const CommitParent = struct {
 pub const Tree = struct {
     tree_entries: []TreeEntry,
 
-    pub fn toString(self: Tree, alloc: std.mem.Allocator) ![:0]u8 {
-        _ = self;
-
-        const final_value = try alloc.dupeZ(u8, "");
-        return final_value;
+    pub fn writeSelf(self: Tree, writer: anytype) !void {
+        // Assume entries are already sorted
+        for (self.tree_entries) |entry| {
+            try entry.writeSelf(writer);
+            try writer.writeByte(utf8_new_line);
+        }
     }
 };
 
+test "Tree.writeSelf" {
+    const expected =
+        \\040000 tree sha3_256|deadbeef1 filename1
+        \\100644 blob sha3_256|deadbeef2 filename2
+        \\100644 blob sha3_256|deadbeef3 filename3
+        \\
+    ;
+    const alloc = std.testing.allocator;
+
+    var array = std.ArrayList(u8).init(alloc);
+    defer array.deinit();
+
+    const writer = array.writer();
+
+    const hash1: HashKey = .{ .hash = "deadbeef1" };
+    const hash2: HashKey = .{ .hash = "deadbeef2" };
+    const hash3: HashKey = .{ .hash = "deadbeef3" };
+    var entry1: TreeEntry = .{ .hash = hash1, .mode = undefined, .name = "filename1" };
+    var entry2: TreeEntry = .{ .hash = hash2, .mode = undefined, .name = "filename2" };
+    var entry3: TreeEntry = .{ .hash = hash3, .mode = undefined, .name = "filename3" };
+
+    @memcpy(&entry1.mode, "040000");
+    @memcpy(&entry2.mode, "100644");
+    @memcpy(&entry3.mode, "100644");
+
+    var tree_entries = [_]TreeEntry{
+        entry1,
+        entry2,
+        entry3,
+    };
+    const test_tree: Tree = Tree{ .tree_entries = &tree_entries };
+
+    try test_tree.writeSelf(writer);
+
+    try std.testing.expectEqualStrings(expected, array.items);
+}
+
+/// https://stackoverflow.com/a/8347325/1733321
+pub const EntryMode = enum([:0]const u8) {
+    directory = "040000",
+    regular_file = "100644",
+    group_writable_file = "100664",
+    executable_file = "100755",
+    symbolic_link = "120000",
+    gitlink = "160000",
+};
+
 pub const TreeEntry = struct {
-    pub const type_name = "tree_entry";
+    // All trees (i.e. directories) start with "04" as their mode.
+    const tree_mode_prefix: [:0]const u8 = "04";
 
-    file_id: FileId,
-    blob: HashKey,
+    mode: [6:0]u8,
+    hash: HashKey,
+    name: [:0]const u8,
 
-    pub fn toString(self: *const TreeEntry, alloc: std.mem.Allocator) ![:0]u8 {
-        const sep: [:0]const u8 = " ";
-
-        const fid_hash = try self.file_id.toString(alloc);
-        defer alloc.free(fid_hash);
-
-        const blob_hash = try self.blob.toString(alloc);
-        defer alloc.free(blob_hash);
-
-        const all_parts = [_][]const u8{ TreeEntry.type_name, fid_hash, blob_hash };
-        return try std.mem.joinZ(alloc, sep, &all_parts);
+    pub fn writeSelf(self: TreeEntry, writer: anytype) !void {
+        try writer.writeAll(&self.mode);
+        try writer.writeByte(utf8_space);
+        if (std.mem.startsWith(u8, &self.mode, tree_mode_prefix)) {
+            try writer.writeAll("tree");
+        } else {
+            try writer.writeAll("blob");
+        }
+        try writer.writeByte(utf8_space);
+        try self.hash.writeSelf(writer);
+        try writer.writeByte(utf8_space);
+        try writer.writeAll(self.name);
     }
 };
 

@@ -19,12 +19,17 @@ const testing = std.testing;
 const utf8_space: u8 = ' ';
 const utf8_new_line: u8 = '\n';
 
+/// Like git, a hash in Havarti can theoretically point to anything. Use a
+/// tagged union type to represent this.
+pub const Object = union(enum) {
+    blob: Blob,
+    commit: Commit,
+    tree: Tree,
+};
+
 // TODO: convert all object pointers into HashKey objects. These can then be
 // used to point into HashMaps holding the actual objects.
-pub const CommitHashMap = std.HashMap(HashKey, Commit, HashKey.HashMapContext, 80);
-pub const TreeHashMap = std.HashMap(HashKey, Tree, HashKey.HashMapContext, 80);
-pub const FileIdHashMap = std.HashMap(HashKey, FileId, HashKey.HashMapContext, 80);
-pub const BlobHashMap = std.HashMap(HashKey, Blob, HashKey.HashMapContext, 80);
+pub const ObjectHashMap = std.HashMap(HashKey, Object, HashKey.HashMapContext, 80);
 
 pub const CompressionAlgo = enum {
     // TODO: store no compression algo as string "none" in database, instead of a SQL `NULL` value.
@@ -53,7 +58,7 @@ pub const HashAlgo = enum {
         };
     }
 
-    fn fromReaderComptime(comptime hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) ![:0]u8 {
+    fn toWriterComptime(comptime hash_algo: HashAlgo, reader: anytype, writer: anytype) !void {
         const hasher_type = hash_algo.HasherType();
         var hasher = hasher_type.init(.{});
 
@@ -61,17 +66,27 @@ pub const HashAlgo = enum {
 
         var digest_buf: [hasher_type.digest_length]u8 = undefined;
         hasher.final(&digest_buf);
-        var file_digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
-        return try alloc.dupeZ(u8, &file_digest_hex);
+        const file_digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
+        try writer.writeAll(&file_digest_hex);
+    }
+
+    pub fn toWriter(hash_algo: HashAlgo, reader: anytype, writer: anytype) !void {
+        return switch (hash_algo) {
+            .sha1 => try HashAlgo.toWriterComptime(.sha1, reader, writer),
+            .sha3_256 => try HashAlgo.toWriterComptime(.sha3_256, reader, writer),
+        };
     }
 
     /// Allocator is used to allocate the hash string. Caller is responsible
     /// for releasing the memory on the returned string.
     pub fn fromReader(hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) ![:0]u8 {
-        return switch (hash_algo) {
-            .sha1 => try HashAlgo.fromReaderComptime(.sha1, alloc, reader),
-            .sha3_256 => try HashAlgo.fromReaderComptime(.sha3_256, alloc, reader),
-        };
+        var array = std.ArrayList(u8).init(alloc);
+        defer array.deinit();
+        const writer = array.writer();
+
+        try hash_algo.toWriter(reader, writer);
+
+        return try array.toOwnedSliceSentinel(0);
     }
 
     /// Convenience method to wrap in memory buffer in a
@@ -437,65 +452,86 @@ test "Tree.writeSelf" {
         \\100644 blob sha3_256|deadbeef3 filename3
         \\
     ;
-    const alloc = std.testing.allocator;
 
+    const alloc = std.testing.allocator;
     var array = std.ArrayList(u8).init(alloc);
     defer array.deinit();
-
     const writer = array.writer();
 
-    const hash1: HashKey = .{ .hash = "deadbeef1" };
-    const hash2: HashKey = .{ .hash = "deadbeef2" };
-    const hash3: HashKey = .{ .hash = "deadbeef3" };
-    var entry1: TreeEntry = .{ .hash = hash1, .mode = undefined, .name = "filename1" };
-    var entry2: TreeEntry = .{ .hash = hash2, .mode = undefined, .name = "filename2" };
-    var entry3: TreeEntry = .{ .hash = hash3, .mode = undefined, .name = "filename3" };
-
-    @memcpy(&entry1.mode, "040000");
-    @memcpy(&entry2.mode, "100644");
-    @memcpy(&entry3.mode, "100644");
-
     var tree_entries = [_]TreeEntry{
-        entry1,
-        entry2,
-        entry3,
+        .{ .hash = .{ .hash = "deadbeef1" }, .mode = .directory, .name = "filename1" },
+        .{ .hash = .{ .hash = "deadbeef2" }, .mode = .regular_file, .name = "filename2" },
+        .{ .hash = .{ .hash = "deadbeef3" }, .mode = .regular_file, .name = "filename3" },
     };
     const test_tree: Tree = Tree{ .tree_entries = &tree_entries };
-
     try test_tree.writeSelf(writer);
 
     try std.testing.expectEqualStrings(expected, array.items);
 }
 
-/// https://stackoverflow.com/a/8347325/1733321
-pub const EntryMode = enum([:0]const u8) {
-    directory = "040000",
-    regular_file = "100644",
-    group_writable_file = "100664",
-    executable_file = "100755",
-    symbolic_link = "120000",
-    gitlink = "160000",
+/// For the sake of imitating prior art, and perhaps easing compatability,
+/// we're just using the same filemode bits that git does for now. See link
+/// here: https://stackoverflow.com/a/8347325/1733321
+pub const TreeEntryMode = enum(u32) {
+    directory = 0o040000,
+    regular_file = 0o100644,
+    group_writable_file = 0o100664,
+    executable_file = 0o100755,
+    symbolic_link = 0o120000,
+    gitlink = 0o160000,
+
+    const gitlinks_panic_text: [:0]const u8 = "gitlinks not supported in Havarti";
+
+    pub fn toString(self: TreeEntryMode) [:0]const u8 {
+        // Zig stdlib is still in flux, and formatting tools may change.
+        // Instead of dynamically formatting the int values, we just hardcode
+        // the strings since there are only a few anyway. Also, this way
+        // doesn't require allocating any strings at runtime.
+        return switch (self) {
+            .directory => "040000",
+            .regular_file => "100644",
+            .group_writable_file => "100664",
+            .executable_file => "100755",
+            .symbolic_link => "120000",
+            .gitlink => @panic(gitlinks_panic_text),
+        };
+    }
+
+    pub fn treeOrBlob(self: TreeEntryMode) [:0]const u8 {
+        return switch (self) {
+            TreeEntryMode.directory => "tree",
+
+            // gitlinks are for git submodules, or something, and make no sense
+            // here. We should panic and fail miserably at this point.
+            TreeEntryMode.gitlink => @panic(gitlinks_panic_text),
+
+            else => "blob",
+        };
+    }
 };
 
 pub const TreeEntry = struct {
     // All trees (i.e. directories) start with "04" as their mode.
     const tree_mode_prefix: [:0]const u8 = "04";
 
-    mode: [6:0]u8,
+    mode: TreeEntryMode,
     hash: HashKey,
     name: [:0]const u8,
 
+    pub fn deinit(self: TreeEntry) void {
+        self.hash.deinit();
+    }
+
     pub fn writeSelf(self: TreeEntry, writer: anytype) !void {
-        try writer.writeAll(&self.mode);
+        try writer.writeAll(self.mode.toString());
         try writer.writeByte(utf8_space);
-        if (std.mem.startsWith(u8, &self.mode, tree_mode_prefix)) {
-            try writer.writeAll("tree");
-        } else {
-            try writer.writeAll("blob");
-        }
+
+        try writer.writeAll(self.mode.treeOrBlob());
         try writer.writeByte(utf8_space);
+
         try self.hash.writeSelf(writer);
         try writer.writeByte(utf8_space);
+
         try writer.writeAll(self.name);
     }
 };

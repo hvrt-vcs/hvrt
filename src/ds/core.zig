@@ -135,7 +135,7 @@ pub const HashKey = struct {
         }
     };
 
-    pub fn deinit(self: *const HashKey) void {
+    pub fn deinit(self: HashKey) void {
         if (self.alloc_opt) |alloc| {
             alloc.free(self.hash);
         }
@@ -158,7 +158,7 @@ pub const HashKey = struct {
         };
     }
 
-    pub fn equal(self: *const HashKey, other: *const HashKey) bool {
+    pub fn equal(self: HashKey, other: HashKey) bool {
         return self.hash_algo == other.hash_algo and std.mem.eql(u8, self.hash, other.hash);
     }
 
@@ -180,12 +180,12 @@ pub const HashKey = struct {
         }
     }
 
-    pub fn fmtToString(self: *const HashKey, alloc: std.mem.Allocator, parts: anytype) ![:0]u8 {
+    pub fn fmtToString(self: HashKey, alloc: std.mem.Allocator, parts: anytype) ![:0]u8 {
         const all_parts = parts ++ [_][]const u8{ @tagName(self.hash_algo), self.hash };
         return try std.mem.joinZ(alloc, hash_key_sep, &all_parts);
     }
 
-    pub fn prePostToString(self: *const HashKey, alloc: std.mem.Allocator, prefix_parts: anytype, postfix_parts: anytype) ![:0]u8 {
+    pub fn prePostToString(self: HashKey, alloc: std.mem.Allocator, prefix_parts: anytype, postfix_parts: anytype) ![:0]u8 {
         const hash_str = try self.toString(alloc);
         defer alloc.free(hash_str);
 
@@ -193,7 +193,7 @@ pub const HashKey = struct {
         return try std.mem.joinZ(alloc, " ", &all_parts);
     }
 
-    pub fn prePostWriter(self: *const HashKey, prefix_parts_opt: ?[]const []const u8, postfix_parts_opt: ?[]const []const u8, writer: anytype) !void {
+    pub fn prePostWriter(self: HashKey, prefix_parts_opt: ?[]const []const u8, postfix_parts_opt: ?[]const []const u8, writer: anytype) !void {
         const prefix_parts = prefix_parts_opt orelse &.{};
         const postfix_parts = postfix_parts_opt orelse &.{};
 
@@ -511,9 +511,6 @@ pub const TreeEntryMode = enum(u32) {
 };
 
 pub const TreeEntry = struct {
-    // All trees (i.e. directories) start with "04" as their mode.
-    const tree_mode_prefix: [:0]const u8 = "04";
-
     mode: TreeEntryMode,
     hash: HashKey,
     name: [:0]const u8,
@@ -536,133 +533,13 @@ pub const TreeEntry = struct {
     }
 };
 
-// test "TreeEntry.toString" {
-//     const expected_string: []const u8 = "tree_entry file_id|path/to/file|sha3_256|2dce61c76e93ee7da2fe615cf5140b54ed0f5346e285b5c90a661f1850c17e41";
-
-//     const path_to_file: []const u8 = "path/to/file";
-
-//     var file_id = try FileId.initAndHash(testing.allocator, path_to_file, null, null, null);
-//     defer file_id.deinit();
-
-//     const file_id_string = try file_id.toString(testing.allocator);
-//     defer testing.allocator.free(file_id_string);
-
-//     try testing.expectEqualSlices(u8, expected_string, file_id_string);
-// }
-
-pub const FileId = struct {
-    pub const type_name = "file_id";
-
-    /// The commit pointers are only truly needed for hashing. This points to
-    /// the parent commits where this file id came into being. This would be
-    /// the merge parents of the commit when this FileId came into existence.
-    /// Order of commits must match parent merging order of commit this came
-    /// into existence, or hashing will not match properly.
-    commits: []HashKey,
-    hash_key: HashKey,
-    parents: []HashKey,
-    path: []const u8,
-
-    /// Asserts that `len` of `path` is greater than 0.
-    pub fn init(path: []const u8, hash_key: HashKey, parents_opt: ?[]HashKey, commits_opt: ?[]HashKey) FileId {
-        assert(path.len > 0);
-
-        const commits: []HashKey = commits_opt orelse &[_]HashKey{};
-        const parents: []HashKey = parents_opt orelse &[_]HashKey{};
-        return FileId{
-            .commits = commits,
-            .hash_key = hash_key,
-            .parents = parents,
-            .path = path,
-        };
-    }
-
-    /// The allocator is used to allocate the internal hash string inside the hash key.
-    pub fn initAndHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]HashKey, commits_opt: ?[]HashKey) !FileId {
-        const final_algo = hash_algo orelse HashAlgo.default;
-        var temp = FileId.init(path, undefined, parents_opt, commits_opt);
-
-        const hash_key = try FileId.hash(&temp, alloc, final_algo);
-
-        return FileId.init(path, hash_key, parents_opt, commits_opt);
-    }
-
-    pub fn deinit(self: *FileId) void {
-        self.hash_key.deinit();
-    }
-
-    pub fn toString(self: *const FileId, alloc: std.mem.Allocator) ![:0]u8 {
-        return try self.hash_key.fmtToString(alloc, .{ FileId.type_name, self.path });
-    }
-
-    pub fn createHash(alloc: std.mem.Allocator, path: []const u8, hash_algo: ?HashAlgo, parents_opt: ?[]HashKey, commits_opt: ?[]HashKey) !HashKey {
-        const temp = try FileId.initAndHash(alloc, path, hash_algo, parents_opt, commits_opt);
-
-        return temp.hash_key;
-    }
-
-    pub fn hash(self: *FileId, alloc: std.mem.Allocator, hash_algo: HashAlgo) !HashKey {
-        var arena = std.heap.ArenaAllocator.init(alloc);
-        defer arena.deinit();
-        const arena_alloc = arena.allocator();
-
-        var buf_array = std.ArrayList(u8).init(alloc);
-        defer buf_array.deinit();
-
-        for (self.commits) |commit| {
-            const commit_string = try commit.toString(arena_alloc);
-            try buf_array.appendSlice(commit_string);
-            try buf_array.append('\n');
-        }
-
-        for (self.parents) |parent| {
-            const parent_string = try parent.toString(arena_alloc);
-            try buf_array.appendSlice(parent_string);
-            try buf_array.append('\n');
-        }
-
-        try buf_array.appendSlice(self.path);
-        try buf_array.append('\n');
-
-        var buf_stream = std.io.fixedBufferStream(buf_array.items);
-        const buf_reader = buf_stream.reader();
-
-        return try HashKey.init(hash_algo, alloc, buf_reader);
-    }
-};
-
-test "FileId.nakedHash" {
-    const expected_hash: []const u8 = "2dce61c76e93ee7da2fe615cf5140b54ed0f5346e285b5c90a661f1850c17e41";
-
-    const path_to_file: []const u8 = "path/to/file";
-
-    var hash_key = try FileId.createHash(testing.allocator, path_to_file, null, null, null);
-    defer hash_key.deinit();
-
-    try testing.expectEqualSlices(u8, expected_hash, hash_key.hash);
-}
-
-test "FileId.toString" {
-    const expected_string: []const u8 = "file_id|path/to/file|sha3_256|2dce61c76e93ee7da2fe615cf5140b54ed0f5346e285b5c90a661f1850c17e41";
-
-    const path_to_file: []const u8 = "path/to/file";
-
-    var file_id = try FileId.initAndHash(testing.allocator, path_to_file, null, null, null);
-    defer file_id.deinit();
-
-    const file_id_string = try file_id.toString(testing.allocator);
-    defer testing.allocator.free(file_id_string);
-
-    try testing.expectEqualSlices(u8, expected_string, file_id_string);
-}
-
 pub const Blob = struct {
     pub const type_name = "blob";
 
     hash_key: HashKey,
     num_bytes: u64,
 
-    pub fn toString(self: *const Blob, alloc: std.mem.Allocator) ![:0]u8 {
+    pub fn toString(self: Blob, alloc: std.mem.Allocator) ![:0]u8 {
         var numbuf: [32]u8 = undefined;
         const pos = std.fmt.formatIntBuf(&numbuf, self.num_bytes, 10, .lower, .{});
         return try self.hash_key.fmtToString(alloc, .{ Blob.type_name, numbuf[0..pos] });

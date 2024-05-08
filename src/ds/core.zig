@@ -16,8 +16,9 @@ const assert = std.debug.assert;
 
 const testing = std.testing;
 
-const utf8_space: u8 = ' ';
 const utf8_new_line: u8 = '\n';
+const utf8_solidus: u8 = '/';
+const utf8_space: u8 = ' ';
 
 /// Like git, a hash in Havarti can theoretically point to anything. Use a
 /// tagged union type to represent this.
@@ -82,20 +83,10 @@ pub const HashAlgo = enum {
     pub fn fromReader(hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) ![:0]u8 {
         var array = std.ArrayList(u8).init(alloc);
         defer array.deinit();
-        const writer = array.writer();
 
-        try hash_algo.toWriter(reader, writer);
+        try hash_algo.toWriter(reader, array.writer());
 
         return try array.toOwnedSliceSentinel(0);
-    }
-
-    /// Convenience method to wrap in memory buffer in a
-    /// `std.io.FixedBufferStream`, then call `fromReader`.
-    pub fn fromBuffer(hash_algo: HashAlgo, alloc: std.mem.Allocator, buffer: anytype) ![:0]u8 {
-        var buf_stream = std.io.fixedBufferStream(buffer);
-        const reader = buf_stream.reader();
-
-        return try hash_algo.fromReader(alloc, reader);
     }
 };
 
@@ -147,7 +138,7 @@ pub const HashKey = struct {
     ///
     /// If you do not want to initialize from a reader-like object and/or call
     /// `deinit`, then create a HashKey directly with struct literal syntax and
-    /// be certain to release hash string memory elsewhere.
+    /// manage the life time of hash string memory elsewhere.
     pub fn init(hash_algo: HashAlgo, alloc: std.mem.Allocator, reader: anytype) !HashKey {
         const file_digest_hexz = try hash_algo.fromReader(alloc, reader);
 
@@ -162,16 +153,6 @@ pub const HashKey = struct {
         return self.hash_algo == other.hash_algo and std.mem.eql(u8, self.hash, other.hash);
     }
 
-    pub fn toString(self: HashKey, alloc: std.mem.Allocator) ![:0]u8 {
-        var array_list = std.ArrayList(u8).init(alloc);
-        defer array_list.deinit();
-
-        const writer = array_list.writer();
-        try self.writeSelf(writer);
-
-        return try array_list.toOwnedSliceSentinel(0);
-    }
-
     pub fn writeSelf(self: HashKey, writer: anytype) !void {
         const parts = [_][]const u8{ @tagName(self.hash_algo), self.hash };
         for (parts, 0..) |part, i| {
@@ -180,62 +161,38 @@ pub const HashKey = struct {
         }
     }
 
-    pub fn fmtToString(self: HashKey, alloc: std.mem.Allocator, parts: anytype) ![:0]u8 {
-        const all_parts = parts ++ [_][]const u8{ @tagName(self.hash_algo), self.hash };
-        return try std.mem.joinZ(alloc, hash_key_sep, &all_parts);
-    }
-
-    pub fn prePostToString(self: HashKey, alloc: std.mem.Allocator, prefix_parts: anytype, postfix_parts: anytype) ![:0]u8 {
-        const hash_str = try self.toString(alloc);
-        defer alloc.free(hash_str);
-
-        const all_parts = prefix_parts ++ [_][]const u8{hash_str} ++ postfix_parts;
-        return try std.mem.joinZ(alloc, " ", &all_parts);
-    }
-
     pub fn prePostWriter(self: HashKey, prefix_parts_opt: ?[]const []const u8, postfix_parts_opt: ?[]const []const u8, writer: anytype) !void {
         const prefix_parts = prefix_parts_opt orelse &.{};
         const postfix_parts = postfix_parts_opt orelse &.{};
 
         for (prefix_parts, 0..) |part, i| {
-            if (i != 0) try writer.writeByte(' ');
+            if (i != 0) try writer.writeByte(utf8_space);
             try writer.writeAll(part);
         }
 
-        if (prefix_parts.len != 0) try writer.writeByte(' ');
+        if (prefix_parts.len != 0) try writer.writeByte(utf8_space);
         try self.writeSelf(writer);
 
         for (postfix_parts) |part| {
-            try writer.writeByte(' ');
+            try writer.writeByte(utf8_space);
             try writer.writeAll(part);
         }
     }
 };
 
-test "HashKey.fmtToString" {
-    const hk = HashKey{
-        .hash = "4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e",
-        .hash_algo = .sha3_256,
-    };
-    const expected = "typename|sha3_256|4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e";
-
-    const hks = try hk.fmtToString(testing.allocator, .{"typename"});
-    defer testing.allocator.free(hks);
-
-    try testing.expect(std.mem.eql(u8, expected, hks));
-}
-
-test "HashKey.toString" {
+test "HashKey.writeSelf" {
     const hk = HashKey{
         .hash = "4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e",
         .hash_algo = .sha3_256,
     };
     const expected = "sha3_256|4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e";
 
-    const hks = try hk.toString(testing.allocator);
-    defer testing.allocator.free(hks);
+    var array = std.ArrayList(u8).init(testing.allocator);
+    defer array.deinit();
 
-    try testing.expect(std.mem.eql(u8, expected, hks));
+    try hk.writeSelf(array.writer());
+
+    try testing.expectEqualStrings(expected, array.items);
 }
 
 test "HashKey.fromReader" {
@@ -253,7 +210,7 @@ test "HashKey.fromReader" {
     defer actual.deinit();
 
     try testing.expectEqual(HashAlgo.sha3_256, actual.hash_algo);
-    try testing.expect(std.mem.eql(u8, expected_hash, actual.hash));
+    try testing.expectEqualStrings(expected_hash, actual.hash);
 }
 
 // SHA1 should not ever actually be used in practice, but this is good as an
@@ -273,7 +230,7 @@ test "HashKey.fromReader SHA1" {
     defer actual.deinit();
 
     try testing.expectEqual(HashAlgo.sha1, actual.hash_algo);
-    try testing.expect(std.mem.eql(u8, expected_hash, actual.hash));
+    try testing.expectEqualStrings(expected_hash, actual.hash);
 }
 
 const Commit = struct {
@@ -434,10 +391,21 @@ pub const CommitParent = struct {
 };
 
 pub const Tree = struct {
-    tree_entries: []TreeEntry,
+    // Entries are `const` because we assume entries are already sorted and do
+    // not need to be modified after Tree object is created.
+    tree_entries: []const TreeEntry,
+
+    /// Sorts `tree_entries` in place before wrapping and returning in `Tree`
+    /// struct.
+    ///
+    /// If sorting is not desired, just use `struct` literal syntax to create
+    /// `Tree` object.
+    pub fn init(tree_entries: []TreeEntry) Tree {
+        std.sort.heap(TreeEntry, tree_entries, void{}, TreeEntry.lessThan);
+        return .{ .tree_entries = tree_entries };
+    }
 
     pub fn writeSelf(self: Tree, writer: anytype) !void {
-        // Assume entries are already sorted
         for (self.tree_entries) |entry| {
             try entry.writeSelf(writer);
             try writer.writeByte(utf8_new_line);
@@ -459,11 +427,11 @@ test "Tree.writeSelf" {
     const writer = array.writer();
 
     var tree_entries = [_]TreeEntry{
-        .{ .hash = .{ .hash = "deadbeef1" }, .mode = .directory, .name = "filename1" },
         .{ .hash = .{ .hash = "deadbeef2" }, .mode = .regular_file, .name = "filename2" },
+        .{ .hash = .{ .hash = "deadbeef1" }, .mode = .directory, .name = "filename1" },
         .{ .hash = .{ .hash = "deadbeef3" }, .mode = .regular_file, .name = "filename3" },
     };
-    const test_tree: Tree = Tree{ .tree_entries = &tree_entries };
+    const test_tree: Tree = Tree.init(&tree_entries);
     try test_tree.writeSelf(writer);
 
     try std.testing.expectEqualStrings(expected, array.items);
@@ -478,12 +446,8 @@ pub const TreeEntryMode = enum(u32) {
     group_writable_file = 0o100664,
     executable_file = 0o100755,
     symbolic_link = 0o120000,
-    gitlink = 0o160000,
-
-    const gitlinks_panic_text: [:0]const u8 = "gitlinks not supported in Havarti";
 
     pub fn toString(self: TreeEntryMode) [:0]const u8 {
-        // Zig stdlib is still in flux, and formatting tools may change.
         // Instead of dynamically formatting the int values, we just hardcode
         // the strings since there are only a few anyway. Also, this way
         // doesn't require allocating any strings at runtime.
@@ -493,18 +457,12 @@ pub const TreeEntryMode = enum(u32) {
             .group_writable_file => "100664",
             .executable_file => "100755",
             .symbolic_link => "120000",
-            .gitlink => @panic(gitlinks_panic_text),
         };
     }
 
     pub fn treeOrBlob(self: TreeEntryMode) [:0]const u8 {
         return switch (self) {
-            TreeEntryMode.directory => "tree",
-
-            // gitlinks are for git submodules, or something, and make no sense
-            // here. We should panic and fail miserably at this point.
-            TreeEntryMode.gitlink => @panic(gitlinks_panic_text),
-
+            .directory => "tree",
             else => "blob",
         };
     }
@@ -517,6 +475,32 @@ pub const TreeEntry = struct {
 
     pub fn deinit(self: TreeEntry) void {
         self.hash.deinit();
+    }
+
+    pub fn lessThan(_: void, lhs: TreeEntry, rhs: TreeEntry) bool {
+        // XXX: Is it worth going through all this trouble to sort like git?
+
+        // Few file systems support names bigger than this:
+        // https://en.wikipedia.org/wiki/Comparison_of_file_systems#Limits
+        var lhs_buf: [256]u8 = undefined;
+        var rhs_buf: [256]u8 = undefined;
+
+        var lhs_key: []const u8 = lhs.name;
+        var rhs_key: []const u8 = rhs.name;
+
+        if (lhs.mode == .directory) {
+            std.mem.copyForwards(u8, &lhs_buf, lhs.name);
+            lhs_buf[lhs.name.len] = utf8_solidus;
+            lhs_key = lhs_buf[0..(lhs.name.len + 1)];
+        }
+
+        if (rhs.mode == .directory) {
+            std.mem.copyForwards(u8, &rhs_buf, rhs.name);
+            rhs_buf[rhs.name.len] = utf8_solidus;
+            rhs_key = rhs_buf[0..(rhs.name.len + 1)];
+        }
+
+        return std.mem.lessThan(u8, lhs_key, rhs_key);
     }
 
     pub fn writeSelf(self: TreeEntry, writer: anytype) !void {
@@ -534,32 +518,6 @@ pub const TreeEntry = struct {
 };
 
 pub const Blob = struct {
-    pub const type_name = "blob";
-
     hash_key: HashKey,
     num_bytes: u64,
-
-    pub fn toString(self: Blob, alloc: std.mem.Allocator) ![:0]u8 {
-        var numbuf: [32]u8 = undefined;
-        const pos = std.fmt.formatIntBuf(&numbuf, self.num_bytes, 10, .lower, .{});
-        return try self.hash_key.fmtToString(alloc, .{ Blob.type_name, numbuf[0..pos] });
-    }
 };
-
-test "Blob.toString" {
-    const expected_string: []const u8 = "blob|5|sha3_256|deadbeef";
-    const fake_hash = "deadbeef";
-
-    var blob: Blob = .{
-        .hash_key = .{
-            .hash = fake_hash,
-            .hash_algo = .sha3_256,
-        },
-        .num_bytes = 5,
-    };
-
-    const blob_string = try blob.toString(testing.allocator);
-    defer testing.allocator.free(blob_string);
-
-    try testing.expectEqualSlices(u8, expected_string, blob_string);
-}

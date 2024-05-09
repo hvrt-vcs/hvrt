@@ -91,8 +91,106 @@ pub const HashAlgo = enum {
 };
 
 test "HashAlgo.toType" {
+    const sha1_type = HashAlgo.HasherType(.sha1);
+    try testing.expectEqual(std.crypto.hash.Sha1, sha1_type);
+
     const sha3_type = HashAlgo.HasherType(.sha3_256);
     try testing.expectEqual(std.crypto.hash.sha3.Sha3_256, sha3_type);
+}
+
+pub const Hasher = union(HashAlgo) {
+    sha1: HashAlgo.HasherType(.sha1), // for interop with git, maybe?
+    sha3_256: HashAlgo.HasherType(.sha3_256),
+
+    const max_digest_length = std.mem.max(
+        comptime_int,
+        &.{ std.crypto.hash.Sha1.digest_length, std.crypto.hash.sha3.Sha3_256.digest_length },
+    );
+
+    pub fn init(hash_algo: ?HashAlgo) Hasher {
+        return switch (hash_algo orelse HashAlgo.default) {
+            .sha1 => .{ .sha1 = HashAlgo.HasherType(.sha1).init(.{}) },
+            .sha3_256 => .{ .sha3_256 = HashAlgo.HasherType(.sha3_256).init(.{}) },
+        };
+    }
+
+    // Hasher writers cannot throw errors
+    pub const Error = error{};
+    pub const Writer = std.io.Writer(*Hasher, Error, write);
+
+    pub fn write(self: *Hasher, bytes: []const u8) Error!usize {
+        return switch (self.*) {
+            .sha1 => try self.sha1.writer().write(bytes),
+            .sha3_256 => try self.sha3_256.writer().write(bytes),
+        };
+    }
+
+    pub fn writer(self: *Hasher) Writer {
+        return .{ .context = self };
+    }
+
+    pub fn getDigestLength(self: Hasher) usize {
+        return switch (self) {
+            .sha1 => HashAlgo.HasherType(.sha1).digest_length,
+            .sha3_256 => HashAlgo.HasherType(.sha3_256).digest_length,
+        };
+    }
+
+    /// Return a slice of the `out` array argument containing the hash digest.
+    pub fn final(self: *Hasher, out: *[max_digest_length]u8) []u8 {
+        return switch (self.*) {
+            .sha1 => Hasher.comptimeFinal(.sha1, &self.sha1, out),
+            .sha3_256 => Hasher.comptimeFinal(.sha3_256, &self.sha3_256, out),
+        };
+    }
+
+    /// Return a slice of the `out` array argument containing the hash digest
+    /// as a hex string.
+    pub fn hexFinal(self: *Hasher, out: *[max_digest_length * 2:0]u8) [:0]u8 {
+        return switch (self.*) {
+            .sha1 => Hasher.comptimeHexFinal(.sha1, &self.sha1, out),
+            .sha3_256 => Hasher.comptimeHexFinal(.sha3_256, &self.sha3_256, out),
+        };
+    }
+
+    /// This is a little easier than explicitly declaring a sized array
+    /// manually like `var buf: [Hasher.max_digest_length * 2:0]u8 = undefined`.
+    pub fn getEmptyHexArray() [max_digest_length * 2:0]u8 {
+        return undefined;
+    }
+
+    fn comptimeFinal(comptime hash_algo: HashAlgo, hasher: anytype, out: *[max_digest_length]u8) []u8 {
+        const digest_length = HashAlgo.HasherType(hash_algo).digest_length;
+        var digest_buf: [digest_length]u8 = undefined;
+        hasher.final(&digest_buf);
+        std.mem.copyForwards(u8, out, &digest_buf);
+        return out[0..digest_length];
+    }
+
+    fn comptimeHexFinal(comptime hash_algo: HashAlgo, hasher: anytype, out: *[max_digest_length * 2:0]u8) [:0]u8 {
+        const digest_length = HashAlgo.HasherType(hash_algo).digest_length;
+        var digest_buf: [digest_length]u8 = undefined;
+        hasher.final(&digest_buf);
+
+        const hex_buf = std.fmt.bytesToHex(digest_buf, .lower);
+        std.mem.copyForwards(u8, out, &hex_buf);
+        out[hex_buf.len] = 0;
+        return out[0..hex_buf.len :0];
+    }
+};
+
+test "Hasher.hexFinal" {
+    const to_hash = "deadbeef";
+    const expected_hash: [:0]const u8 = "4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e";
+
+    var hasher = Hasher.init(.sha3_256);
+
+    try hasher.writer().writeAll(to_hash);
+
+    var buf = Hasher.getEmptyHexArray();
+    const actual_hash = hasher.hexFinal(&buf);
+
+    try std.testing.expectEqualStrings(expected_hash, actual_hash);
 }
 
 pub const ParentType = enum {

@@ -4,6 +4,7 @@ const Dir = std.fs.Dir;
 
 const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
+const Hasher = @import("ds/core.zig").Hasher;
 
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
@@ -53,9 +54,6 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             tx.rollback() catch unreachable;
         }
 
-        const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;
-        var digest_buf: [digest_length]u8 = undefined;
-
         const chunk_buffer = try alloc.alloc(u8, chunk_size);
         defer alloc.free(chunk_buffer);
         var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
@@ -93,17 +91,14 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             // const file_size: i64 = @intCast(f_stat.size);
             // const file_size: i64 = f_stat.size;
 
-            var hash = std.crypto.hash.sha3.Sha3_256.init(.{});
-            const hash_algo: [:0]const u8 = "sha3_256";
+            var hasher = Hasher.init(null);
+            const hash_algo = @tagName(hasher);
 
-            try fifo.pump(f_in.reader(), hash.writer());
+            try fifo.pump(f_in.reader(), hasher.writer());
 
-            hash.final(&digest_buf);
-            var file_digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
-            const file_digest_hexz = try alloc.dupeZ(u8, &file_digest_hex);
-            defer alloc.free(file_digest_hexz);
+            var hexz_buf = Hasher.getEmptyHexArray();
+            const file_digest_hexz = hasher.hexFinal(&hexz_buf);
 
-            // _, err = tx.Exec(blob_script, file_hex_digest, "sha3_256", file_size)
             std.log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_algo, file_size });
             try blob_stmt.bind(1, false, file_digest_hexz);
             try blob_stmt.bind(2, false, hash_algo);
@@ -131,8 +126,10 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
                 // const compression_algo: [:0]const u8 = "zstd";
                 const compression_algo: [:0]const u8 = "none";
 
-                var chunk_hash = std.crypto.hash.sha3.Sha3_256.init(.{});
-                var mwriter = std.io.multiWriter(.{ chunk_hash.writer(), chunk_buf_stream.writer() });
+                var chunk_hasher = Hasher.init(null);
+                const chunk_hash_algo = @tagName(chunk_hasher);
+
+                var mwriter = std.io.multiWriter(.{ chunk_hasher.writer(), chunk_buf_stream.writer() });
 
                 var lr = std.io.limitedReader(f_in.reader(), chunk_size);
 
@@ -140,22 +137,20 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
                 const end_pos = try f_in.getPos();
 
-                chunk_hash.final(&digest_buf);
-                var chunk_digest_hex = std.fmt.bytesToHex(digest_buf, .lower);
-                const chunk_digest_hexz = try alloc.dupeZ(u8, &chunk_digest_hex);
-                defer alloc.free(chunk_digest_hexz);
+                var chunk_hexz_buf = Hasher.getEmptyHexArray();
+                const chunk_digest_hexz = chunk_hasher.hexFinal(&chunk_hexz_buf);
 
                 const data: []const u8 = chunk_buf_stream.getWritten();
 
                 std.log.debug("What is the contents of {s}? '{s}'\n", .{ file, chunk_buf_stream.getWritten() });
-                std.log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hex });
+                std.log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hexz });
 
-                std.log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hex, hash_algo, cur_pos, end_pos, compression_algo });
-                // std.debug.print("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hex, hash_algo, cur_pos, end_pos, compression_algo });
+                std.log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hexz, hash_algo, cur_pos, end_pos, compression_algo });
+                // std.debug.print("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hexz, hash_algo, cur_pos, end_pos, compression_algo });
 
                 // INSERT INTO "chunks"
                 try chunk_stmt.bind(1, false, chunk_digest_hexz); // chunk_hash
-                try chunk_stmt.bind(2, false, hash_algo); // chunk_hash_algo
+                try chunk_stmt.bind(2, false, chunk_hash_algo); // chunk_hash_algo
                 try chunk_stmt.bind(3, false, compression_algo); // compression_algo
                 try chunk_stmt.bind(4, false, data); // data
                 try chunk_stmt.auto_step();
@@ -166,7 +161,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
                 try blob_chunk_stmt.bind(1, false, file_digest_hexz); // blob_hash
                 try blob_chunk_stmt.bind(2, false, hash_algo); // blob_hash_algo
                 try blob_chunk_stmt.bind(3, false, chunk_digest_hexz); // chunk_hash
-                try blob_chunk_stmt.bind(4, false, hash_algo); // chunk_hash_algo
+                try blob_chunk_stmt.bind(4, false, chunk_hash_algo); // chunk_hash_algo
                 try blob_chunk_stmt.bind(5, false, @as(i64, @intCast(cur_pos))); // start_byte
                 try blob_chunk_stmt.bind(6, false, @as(i64, @intCast(end_pos))); // end_byte
                 try blob_chunk_stmt.auto_step();

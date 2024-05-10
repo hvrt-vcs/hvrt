@@ -142,7 +142,6 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
                 const end_pos = true_end_pos - 1;
 
-                // var chunk_hexz_buf = Hasher.getEmptyHexArray();
                 var chunk_hexz_buf: Hasher.Buffer = undefined;
                 const chunk_digest_hexz = chunk_hasher.hexFinal(&chunk_hexz_buf);
 

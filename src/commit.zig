@@ -203,9 +203,16 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             const start_byte = read_blob_chunks_stmt.column_i64(4);
             const end_byte = read_blob_chunks_stmt.column_i64(5);
 
-            // FIXME: Seems like blob chunk start/end indices are being
-            // calculated with an off by one error in the initial `add` to work
-            // tree DB implementation.
+            try blob_chunk_stmt.bind(1, false, blob_hash);
+            try blob_chunk_stmt.bind(2, false, blob_hash_algo);
+            try blob_chunk_stmt.bind(3, false, chunk_hash);
+            try blob_chunk_stmt.bind(4, false, chunk_hash_algo);
+            try blob_chunk_stmt.bind(5, false, start_byte);
+            try blob_chunk_stmt.bind(6, false, end_byte);
+            try blob_chunk_stmt.auto_step();
+            try blob_chunk_stmt.reset();
+            try blob_chunk_stmt.clear_bindings();
+
             std.debug.print(
                 \\blob_chunk_entry: {}
                 \\    blob_hash_algo: {s}

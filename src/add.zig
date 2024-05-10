@@ -4,7 +4,9 @@ const Dir = std.fs.Dir;
 
 const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
-const Hasher = @import("ds/core.zig").Hasher;
+const core_ds = @import("ds/core.zig");
+
+const Hasher = core_ds.Hasher;
 
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
@@ -96,7 +98,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
             try fifo.pump(f_in.reader(), hasher.writer());
 
-            var hexz_buf = Hasher.getEmptyHexArray();
+            var hexz_buf: Hasher.Buffer = undefined;
             const file_digest_hexz = hasher.hexFinal(&hexz_buf);
 
             std.log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_algo, file_size });
@@ -135,9 +137,13 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
                 try fifo.pump(lr.reader(), mwriter.writer());
 
-                const end_pos = try f_in.getPos();
+                const true_end_pos = try f_in.getPos();
+                std.debug.assert(true_end_pos > cur_pos);
 
-                var chunk_hexz_buf = Hasher.getEmptyHexArray();
+                const end_pos = true_end_pos - 1;
+
+                // var chunk_hexz_buf = Hasher.getEmptyHexArray();
+                var chunk_hexz_buf: Hasher.Buffer = undefined;
                 const chunk_digest_hexz = chunk_hasher.hexFinal(&chunk_hexz_buf);
 
                 const data: []const u8 = chunk_buf_stream.getWritten();

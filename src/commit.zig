@@ -7,6 +7,7 @@ const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
 
 const core_ds = @import("ds/core.zig");
+const Hasher = core_ds.Hasher;
 const HashKey = core_ds.HashKey;
 const CommitParent = core_ds.CommitParent;
 const ParentType = core_ds.ParentType;

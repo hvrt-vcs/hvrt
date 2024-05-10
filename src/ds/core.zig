@@ -107,6 +107,8 @@ pub const Hasher = union(HashAlgo) {
         &.{ std.crypto.hash.Sha1.digest_length, std.crypto.hash.sha3.Sha3_256.digest_length },
     );
 
+    pub const Buffer = [max_digest_length * 2:0]u8;
+
     pub fn init(hash_algo: ?HashAlgo) Hasher {
         return switch (hash_algo orelse HashAlgo.default) {
             .sha1 => .{ .sha1 = HashAlgo.HasherType(.sha1).init(.{}) },
@@ -137,7 +139,7 @@ pub const Hasher = union(HashAlgo) {
     }
 
     /// Return a slice of the `out` array argument containing the hash digest.
-    pub fn final(self: *Hasher, out: *[max_digest_length]u8) []u8 {
+    pub fn final(self: *Hasher, out: *Buffer) []u8 {
         return switch (self.*) {
             .sha1 => Hasher.comptimeFinal(.sha1, &self.sha1, out),
             .sha3_256 => Hasher.comptimeFinal(.sha3_256, &self.sha3_256, out),
@@ -146,34 +148,28 @@ pub const Hasher = union(HashAlgo) {
 
     /// Return a slice of the `out` array argument containing the hash digest
     /// as a hex string.
-    pub fn hexFinal(self: *Hasher, out: *[max_digest_length * 2:0]u8) [:0]u8 {
+    pub fn hexFinal(self: *Hasher, out: *Buffer) [:0]u8 {
         return switch (self.*) {
             .sha1 => Hasher.comptimeHexFinal(.sha1, &self.sha1, out),
             .sha3_256 => Hasher.comptimeHexFinal(.sha3_256, &self.sha3_256, out),
         };
     }
 
-    /// This is a little easier than explicitly declaring a sized array
-    /// manually like `var buf: [Hasher.max_digest_length * 2:0]u8 = undefined`.
-    pub fn getEmptyHexArray() [max_digest_length * 2:0]u8 {
-        return undefined;
-    }
-
-    fn comptimeFinal(comptime hash_algo: HashAlgo, hasher: anytype, out: *[max_digest_length]u8) []u8 {
+    fn comptimeFinal(comptime hash_algo: HashAlgo, hasher: anytype, out: *Buffer) []u8 {
         const digest_length = HashAlgo.HasherType(hash_algo).digest_length;
         var digest_buf: [digest_length]u8 = undefined;
         hasher.final(&digest_buf);
-        std.mem.copyForwards(u8, out, &digest_buf);
-        return out[0..digest_length];
+        @memcpy(out[0..digest_buf.len], &digest_buf);
+        return out[0..digest_buf.len];
     }
 
-    fn comptimeHexFinal(comptime hash_algo: HashAlgo, hasher: anytype, out: *[max_digest_length * 2:0]u8) [:0]u8 {
+    fn comptimeHexFinal(comptime hash_algo: HashAlgo, hasher: anytype, out: *Buffer) [:0]u8 {
         const digest_length = HashAlgo.HasherType(hash_algo).digest_length;
         var digest_buf: [digest_length]u8 = undefined;
         hasher.final(&digest_buf);
 
         const hex_buf = std.fmt.bytesToHex(digest_buf, .lower);
-        std.mem.copyForwards(u8, out, &hex_buf);
+        @memcpy(out[0..hex_buf.len], &hex_buf);
         out[hex_buf.len] = 0;
         return out[0..hex_buf.len :0];
     }
@@ -187,7 +183,7 @@ test "Hasher.hexFinal" {
 
     try hasher.writer().writeAll(to_hash);
 
-    var buf = Hasher.getEmptyHexArray();
+    var buf: Hasher.Buffer = undefined;
     const actual_hash = hasher.hexFinal(&buf);
 
     try std.testing.expectEqualStrings(expected_hash, actual_hash);

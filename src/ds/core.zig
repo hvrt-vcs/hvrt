@@ -102,11 +102,19 @@ pub const Hasher = union(HashAlgo) {
     sha1: HashAlgo.HasherType(.sha1), // for interop with git, maybe?
     sha3_256: HashAlgo.HasherType(.sha3_256),
 
+    // TODO: calculate `max_digest_length` using `@typeInfo().fields.type` so
+    // that it dynamically deals with adding/removing union fields/types.
     const max_digest_length = std.mem.max(
         comptime_int,
         &.{ std.crypto.hash.Sha1.digest_length, std.crypto.hash.sha3.Sha3_256.digest_length },
     );
 
+    /// An Array type big enough to hold the largest largest possible hexified
+    /// digest, plus a trailing 0 sentinel. Non-hexified digests, or digests
+    /// from hash algorithms with smaller bit widths will fit within this.
+    ///
+    /// The functions that use this take it as a pointer and return a slice of
+    /// it after filling it with the requested digest type.
     pub const Buffer = [max_digest_length * 2:0]u8;
 
     pub fn init(hash_algo: ?HashAlgo) Hasher {
@@ -138,33 +146,36 @@ pub const Hasher = union(HashAlgo) {
         };
     }
 
-    /// Return a slice of the `out` array argument containing the hash digest.
+    /// Return a slice of the `out` array argument containing the hash digest
+    /// as raw binary bytes.
     pub fn final(self: *Hasher, out: *Buffer) []u8 {
         return switch (self.*) {
-            .sha1 => Hasher.comptimeFinal(.sha1, &self.sha1, out),
-            .sha3_256 => Hasher.comptimeFinal(.sha3_256, &self.sha3_256, out),
+            .sha1 => Hasher.genericFinal(&self.sha1, out),
+            .sha3_256 => Hasher.genericFinal(&self.sha3_256, out),
         };
     }
 
     /// Return a slice of the `out` array argument containing the hash digest
-    /// as a hex string.
+    /// as a hex string. This is twice as long as the digest produced by
+    /// `final`, but it has the benefit that it can be treated like a plain old
+    /// ASCII string.
     pub fn hexFinal(self: *Hasher, out: *Buffer) [:0]u8 {
         return switch (self.*) {
-            .sha1 => Hasher.comptimeHexFinal(.sha1, &self.sha1, out),
-            .sha3_256 => Hasher.comptimeHexFinal(.sha3_256, &self.sha3_256, out),
+            .sha1 => Hasher.genericHexFinal(&self.sha1, out),
+            .sha3_256 => Hasher.genericHexFinal(&self.sha3_256, out),
         };
     }
 
-    fn comptimeFinal(comptime hash_algo: HashAlgo, hasher: anytype, out: *Buffer) []u8 {
-        const digest_length = HashAlgo.HasherType(hash_algo).digest_length;
+    fn genericFinal(hasher: anytype, out: *Buffer) []u8 {
+        const digest_length = @TypeOf(hasher.*).digest_length;
         var digest_buf: [digest_length]u8 = undefined;
         hasher.final(&digest_buf);
         @memcpy(out[0..digest_buf.len], &digest_buf);
         return out[0..digest_buf.len];
     }
 
-    fn comptimeHexFinal(comptime hash_algo: HashAlgo, hasher: anytype, out: *Buffer) [:0]u8 {
-        const digest_length = HashAlgo.HasherType(hash_algo).digest_length;
+    fn genericHexFinal(hasher: anytype, out: *Buffer) [:0]u8 {
+        const digest_length = @TypeOf(hasher.*).digest_length;
         var digest_buf: [digest_length]u8 = undefined;
         hasher.final(&digest_buf);
 

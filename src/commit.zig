@@ -112,8 +112,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
 
         std.debug.print("\nIterating over blob entries in work tree.\n", .{});
         var i: u64 = 0;
-        while (read_blobs_stmt.step()) |rc| : (i += 1) {
-            try rc.check(read_blobs_stmt.db);
+        while (try read_blobs_stmt.step()) |rc| : (i += 1) {
             if (rc != sqlite.ResultCode.SQLITE_ROW) {
                 std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;
@@ -140,8 +139,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
         }
 
         i = 0;
-        while (read_chunks_stmt.step()) |rc| : (i += 1) {
-            try rc.check(read_chunks_stmt.db);
+        while (try read_chunks_stmt.step()) |rc| : (i += 1) {
             if (rc != sqlite.ResultCode.SQLITE_ROW) {
                 std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;
@@ -175,8 +173,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
         }
 
         i = 0;
-        while (read_blob_chunks_stmt.step()) |rc| : (i += 1) {
-            try rc.check(read_blob_chunks_stmt.db);
+        while (try read_blob_chunks_stmt.step()) |rc| : (i += 1) {
             if (rc != sqlite.ResultCode.SQLITE_ROW) {
                 std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;

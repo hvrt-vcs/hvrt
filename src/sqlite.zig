@@ -89,8 +89,9 @@ pub const Statement = struct {
     /// unless the return code is checked and the while loop broken, it is
     /// possible to get into an infinite loop. See `auto_step` for a simple
     /// example of how to check for errors in the return code.
-    pub fn step(stmt: Statement) ?ResultCode {
+    pub fn step(stmt: Statement) Error!?ResultCode {
         const code = ResultCode.fromInt(c.sqlite3_step(stmt.stmt));
+        try code.check(stmt.db);
         return if (code == ResultCode.SQLITE_DONE) null else code;
     }
 
@@ -100,9 +101,7 @@ pub const Statement = struct {
     /// objects can only execute one statement, instead of several, and also
     /// parameters can be bound before stepping through results, unlike `exec`.
     pub fn auto_step(stmt: Statement) !void {
-        while (stmt.step()) |rc| {
-            try rc.check(stmt.db);
-        }
+        while (try stmt.step()) |_| {}
     }
 
     /// Bind `null` to a parameter index

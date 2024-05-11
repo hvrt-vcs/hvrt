@@ -22,6 +22,23 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
     const abs_repo_path = try std.fs.realpathAlloc(alloc, repo_path);
     defer alloc.free(abs_repo_path);
 
+    var repo_dir = try std.fs.openDirAbsolute(
+        abs_repo_path,
+        .{ .access_sub_paths = true, .iterate = true, .no_follow = true },
+    );
+    defer repo_dir.close();
+
+    var repo_walker = try repo_dir.walk(alloc);
+    defer repo_walker.deinit();
+
+    // TODO: can we use a .hvrtignore file with a stdlib walker? I don't think
+    // so. We will probably need to implement our own walker based on or
+    // similar to the stdlib code.
+    while (try repo_walker.next()) |entry| {
+        std.debug.print("\n\n@typeName(@TypeOf(entry)): {s}\n\n", .{@typeName(@TypeOf(entry))});
+        std.debug.print("\n\nkind: {s}, name: {s}\n\n", .{ @tagName(entry.kind), entry.path });
+    }
+
     const db_path_parts = [_][]const u8{ abs_repo_path, hvrt_dirname, work_tree_db_name };
     const db_path = try fspath.joinZ(alloc, &db_path_parts);
     defer alloc.free(db_path);

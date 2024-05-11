@@ -133,7 +133,7 @@ fn prngReadHex(prng: std.rand.Random, buffer: []u8) !usize {
     return buffer.len;
 }
 
-fn setup_test_files(tmp: *std.testing.TmpDir, files: []const [:0]const u8) !void {
+fn setup_test_files(dir: *std.fs.Dir, files: []const [:0]const u8) !void {
     const target_sz = 1024 * 8;
     const fifo_buffer_size = 1024 * 4;
 
@@ -150,7 +150,7 @@ fn setup_test_files(tmp: *std.testing.TmpDir, files: []const [:0]const u8) !void
     for (files) |file| {
         // std.debug.print("\nWhat is filename? {s}\n", .{file});
 
-        var fp = try tmp.dir.createFile(file, .{ .exclusive = true });
+        var fp = try dir.createFile(file, .{ .exclusive = true });
         defer fp.close();
         var fp_wrtr = fp.writer();
 
@@ -177,8 +177,15 @@ fn setup_add_test(tmp: *std.testing.TmpDir) !void {
     defer test_alloc.free(tmp_pathz);
 
     const files = [_][:0]const u8{ "foo.txt", "bar.txt" };
+    try setup_test_files(&tmp.dir, &files);
 
-    try setup_test_files(tmp, &files);
+    var sub_dir = try tmp.dir.makeOpenPath(
+        "child_subdir",
+        .{ .access_sub_paths = true, .iterate = true, .no_follow = true },
+    );
+    defer sub_dir.close();
+    const files2 = [_][:0]const u8{ "baz.txt", "buz.txt" };
+    try setup_test_files(&sub_dir, &files2);
 
     const basic_args = [_][:0]const u8{ "hvrt", "add", tmp_pathz, files[0], files[1] };
     try cmd.internalMain(test_alloc, &basic_args);

@@ -3,6 +3,10 @@ const std = @import("std");
 const sqlite = @import("sqlite.zig");
 const cmd = @import("cmd.zig");
 
+// Good references for git internals:
+// * https://wyag.thb.lt/
+// * https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
+
 /// All that `main` does is retrieve args and a main allocator for the system,
 /// and pass those to `internalMain`. Afterwards, it catches any errors, deals
 /// with the error types it explicitly knows how to deal with, and if a

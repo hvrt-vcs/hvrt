@@ -6,150 +6,119 @@ const fspath = std.fs.path;
 // * https://swtch.com/~rsc/regexp/regexp2.html
 // * https://swtch.com/~rsc/regexp/regexp3.html
 
-pub const FnMatchState = union(enum) {
-    /// Sorted set of all characters that can match for the class
-    char_class: []const u21,
-    exact: u21,
-    match: void,
-    start: void,
-    wild_many: void,
-    wild_single: void,
+/// Copied and modified from stdlib
+pub const Utf8Iterator = struct {
+    bytes: []const u8,
+    i: usize,
+
+    pub fn init(s: std.unicode.Utf8View) Utf8Iterator {
+        return Utf8Iterator{
+            .bytes = s.bytes,
+            .i = 0,
+        };
+    }
+    pub fn nextCodepointSlice(it: *Utf8Iterator) ?[]const u8 {
+        if (it.i >= it.bytes.len) {
+            return null;
+        }
+
+        const cp_len = std.unicode.utf8ByteSequenceLength(it.bytes[it.i]) catch unreachable;
+        it.i += cp_len;
+        return it.bytes[it.i - cp_len .. it.i];
+    }
+
+    pub fn nextCodepoint(it: *Utf8Iterator) ?u21 {
+        const slice = it.nextCodepointSlice() orelse return null;
+        return std.unicode.utf8Decode(slice) catch unreachable;
+    }
+
+    /// Look ahead at the next n codepoints without advancing the iterator.
+    /// If fewer than n codepoints are available, then return the remainder of the string.
+    pub fn peek(it: *Utf8Iterator, n: usize) []const u8 {
+        const original_i = it.i;
+        defer it.i = original_i;
+
+        var end_ix = original_i;
+        var found: usize = 0;
+        while (found < n) : (found += 1) {
+            const next_codepoint = it.nextCodepointSlice() orelse return it.bytes[original_i..];
+            end_ix += next_codepoint.len;
+        }
+
+        return it.bytes[original_i..end_ix];
+    }
+
+    /// Look ahead at one codepoint without advancing the iterator.
+    pub fn peekCodepoint(it: *Utf8Iterator) ?21 {
+        const original_i = it.i;
+        defer it.i = original_i;
+
+        return it.nextCodepoint();
+    }
 };
 
-pub const StateNode = struct {
-    state: FnMatchState,
-    next_states: std.ArrayList(*StateNode),
-};
+// Just do this the old fashioned way: with a couple of iterators. No need to
+// get fancy with state machines or anything like that.
+//
+// Take inspiration from the following implementations:
+// * https://github.com/gcc-mirror/gcc/blob/master/libiberty/fnmatch.c
+// * https://opensource.apple.com/source/Libc/Libc-167/gen.subproj/fnmatch.c.auto.html
+pub fn fnmatch(pattern: []const u8, string: []const u8, flags: u32) bool {
+    _ = flags; // autofix
 
-const FnMatchParser = struct {
-    const ParseState = enum(u21) {
-        char_class_open = '[',
-        escape = '\\',
-        literal = 0,
-        range = '-',
-        wild_many = '*',
-        wild_single = '?',
-    };
+    const string_view = try std.unicode.Utf8View.init(string);
+    var string_iter = Utf8Iterator.init(string_view);
 
-    pub fn parse(gpa: std.mem.Allocator, arena: std.mem.Allocator, pattern: []const u8) !*StateNode {
+    const pattern_view = try std.unicode.Utf8View.init(pattern);
+    var pattern_iter = Utf8Iterator.init(pattern_view);
 
-        // Create a local arena for the parsing process. On success, all data
-        // is copied to the arena passed into the function.
-        var larena_state = std.heap.ArenaAllocator.init(gpa);
-        defer larena_state.deinit();
-        const larena = larena_state.allocator();
+    while (pattern_iter.nextCodepoint()) |pattern_rune| {
+        switch (pattern_rune) {
+            '\\' => {
+                // if no next rune exists to escape, then return false
+                const escaped_rune = pattern_iter.nextCodepoint() or return false;
+                // if end of string before end of pattern, return false
+                const string_rune = string_iter.nextCodepoint() orelse return false;
 
-        var initial_state = try arena.create(StateNode);
-        initial_state.* = .{ .state = .{ .start = void{} }, .next_states = std.ArrayList(*StateNode).init(larena) };
-        _ = &initial_state;
-        var current_state = initial_state;
-        _ = &current_state;
+                if (string_rune != escaped_rune) return false;
+            },
+            '?' => {
+                // discard a rune.
+                // if end of string before end of pattern, return false
+                _ = string_iter.nextCodepoint() orelse return false;
+            },
+            '*' => {
+                // collapse multiple stars
+                while (pattern_iter.peekCodepoint()) |maybe_star| {
+                    if (maybe_star == '*') {
+                        _ = pattern_iter.nextCodepoint();
+                    } else {
+                        break;
+                    }
+                }
 
-        // If the rune doesn't parse to a possible state, it must
-        // be a unicode code point, meaning it is a rune literal.
-        var utf8_view = try std.unicode.Utf8View.init(pattern);
-        var utf8_iter = utf8_view.iterator();
+                // star can match against nothing
+                if (string_iter.peekCodepoint() == null) return true;
 
-        var current_rune = utf8_iter.nextCodepoint() orelse return error.ParseError;
-        var parse_state = std.meta.intToEnum(ParseState, current_rune) catch ParseState.literal;
-        while (utf8_iter.nextCodepoint()) |next_rune| {
-            switch (parse_state) {
-                .char_class_open => {
-                    const state_ptr = try arena.create(StateNode);
-                    state_ptr.* = try parseCharclass(larena, current_state, current_rune);
-                    current_state = state_ptr;
-                },
-                .escape => {
-                    // Force the next iteration to treat the `prior_rune` as a
-                    // literal, no matter what the rune it actually is.
-                    parse_state = ParseState.literal;
-                    current_rune = next_rune;
-                    continue;
-                },
-                .literal => {
-                    const state_ptr = try arena.create(StateNode);
-                    state_ptr.* = try parseLiteral(larena, current_state, current_rune);
-                    current_state = state_ptr;
-                },
-                .wild_many => {
-                    const state_ptr = try arena.create(StateNode);
-                    state_ptr.* = try parseWildMany(larena, current_state, current_rune);
-                    current_state = state_ptr;
-                },
-                .wild_single => {
-                    const state_ptr = try arena.create(StateNode);
-                    state_ptr.* = try parseWildSingle(larena, current_state, current_rune);
-                    current_state = state_ptr;
-                },
-                // Ranges should only be possible within char classes
-                .range => return error.ParseError,
-            }
-
-            // If the rune doesn't parse to a possible state, it must be a
-            // unicode code point, meaning it is a rune literal.
-            parse_state = std.meta.intToEnum(ParseState, next_rune) catch ParseState.literal;
-            current_rune = next_rune;
+                // // Use recursion to solve this, somehow.
+                // return fnmatch(
+                //     pattern_iter.bytes[pattern_iter.i..],
+                //     string_iter.bytes[string_iter.i..],
+                //     flags,
+                // );
+            },
+            '[' => {},
+            else => {
+                if (string_iter.nextCodepoint()) |string_rune| {
+                    if (string_rune != pattern_rune) return false;
+                } else {
+                    // Length of input string does not match pattern string
+                    return false;
+                }
+            },
         }
     }
 
-    pub fn parseLiteral(larena: std.mem.Allocator, from_state: *StateNode, rune: u21) !StateNode {
-        _ = rune; // autofix
-        _ = from_state; // autofix
-        _ = larena; // autofix
-    }
-
-    pub fn parseCharclass(larena: std.mem.Allocator, from_state: *StateNode, rune: u21) !StateNode {
-        _ = rune; // autofix
-        _ = from_state; // autofix
-        _ = larena; // autofix
-    }
-
-    pub fn parseRange(larena: std.mem.Allocator, from_state: *StateNode, rune: u21) !StateNode {
-        _ = rune; // autofix
-        _ = from_state; // autofix
-        _ = larena; // autofix
-    }
-
-    pub fn parseWildMany(larena: std.mem.Allocator, from_state: *StateNode, rune: u21) !StateNode {
-        _ = rune; // autofix
-        _ = from_state; // autofix
-        _ = larena; // autofix
-    }
-
-    pub fn parseWildSingle(larena: std.mem.Allocator, from_state: *StateNode, rune: u21) !StateNode {
-        _ = rune; // autofix
-        _ = from_state; // autofix
-        _ = larena; // autofix
-    }
-};
-
-pub const FnMatcher = struct {
-    initial_state: *StateNode,
-    alloc: std.mem.Allocator,
-    arena: std.heap.ArenaAllocator,
-
-    pub fn init(gpa: std.mem.Allocator, pattern: []const u8) !FnMatcher {
-        var arena_state = std.heap.ArenaAllocator.init(gpa);
-        errdefer arena_state.deinit();
-        const arena = arena_state.allocator();
-
-        const initial_state = try FnMatchParser.parse(gpa, arena, pattern);
-        return .{ .initial_state = initial_state, .arena = arena_state };
-    }
-
-    pub fn deinit(self: *FnMatcher) void {
-        self.arena.deinit();
-    }
-
-    pub fn match(self: FnMatcher, string: []const u8) bool {
-        var current_state = self.initial_state;
-        _ = &current_state;
-
-        // If a string isn't valid utf, then it doesn't match. Just return false on error.
-        var utf_view = std.unicode.Utf8View.init(string) catch return false;
-        var utf8_iter = utf_view.iterator();
-        while (utf8_iter.nextCodepoint()) |rune| {
-            _ = rune;
-        }
-    }
-};
+    // string should be exhausted when pattern is exhausted.
+    return string_iter.peekCodepoint() == null;
+}

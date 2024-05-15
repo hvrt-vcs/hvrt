@@ -18,10 +18,16 @@ pub fn build(b: *std.Build) void {
     const third_party_path = "third_party";
     const sqlite_include_path = third_party_path ++ "/sqlite3";
 
+    // Since Zig uses utf8 strings, we'll use pcre with 8bit support.
+    const pcre_code_unit_width = "8";
+    const pcre_prefix = "pcre2";
+    const pcre_include_path = third_party_path ++ "/" ++ pcre_prefix;
+
     const sqlite = b.addStaticLibrary(.{
         .name = "sqlite",
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
     sqlite.addCSourceFile(.{
         .file = .{ .path = sqlite_include_path ++ "/sqlite3.c" },
@@ -30,7 +36,66 @@ pub fn build(b: *std.Build) void {
         },
     });
     sqlite.addIncludePath(.{ .path = sqlite_include_path });
-    sqlite.linkLibC();
+
+    const pcreCopyFiles = b.addWriteFiles();
+    _ = pcreCopyFiles.addCopyFile(.{ .path = pcre_include_path ++ "/src/config.h.generic" }, "config.h");
+    _ = pcreCopyFiles.addCopyFile(.{ .path = pcre_include_path ++ "/src/pcre2.h.generic" }, "pcre2.h");
+
+    const pcre = b.addStaticLibrary(.{
+        .name = b.fmt("pcre2-{s}", .{pcre_code_unit_width}),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    pcre.root_module.addCMacro("PCRE2_CODE_UNIT_WIDTH", pcre_code_unit_width);
+
+    pcre.addCSourceFile(.{
+        .file = pcreCopyFiles.addCopyFile(.{ .path = pcre_include_path ++ "/src/pcre2_chartables.c.dist" }, "pcre2_chartables.c"),
+        .flags = &.{
+            "-DHAVE_CONFIG_H",
+        },
+    });
+
+    pcre.addIncludePath(.{ .path = b.pathFromRoot(pcre_include_path ++ "/src") });
+    pcre.addIncludePath(pcreCopyFiles.getDirectory());
+
+    pcre.addCSourceFiles(.{
+        .files = &.{
+            pcre_include_path ++ "/src/pcre2_auto_possess.c",
+            pcre_include_path ++ "/src/pcre2_chkdint.c",
+            pcre_include_path ++ "/src/pcre2_compile.c",
+            pcre_include_path ++ "/src/pcre2_config.c",
+            pcre_include_path ++ "/src/pcre2_context.c",
+            pcre_include_path ++ "/src/pcre2_convert.c",
+            pcre_include_path ++ "/src/pcre2_dfa_match.c",
+            pcre_include_path ++ "/src/pcre2_error.c",
+            pcre_include_path ++ "/src/pcre2_extuni.c",
+            pcre_include_path ++ "/src/pcre2_find_bracket.c",
+            pcre_include_path ++ "/src/pcre2_maketables.c",
+            pcre_include_path ++ "/src/pcre2_match.c",
+            pcre_include_path ++ "/src/pcre2_match_data.c",
+            pcre_include_path ++ "/src/pcre2_newline.c",
+            pcre_include_path ++ "/src/pcre2_ord2utf.c",
+            pcre_include_path ++ "/src/pcre2_pattern_info.c",
+            pcre_include_path ++ "/src/pcre2_script_run.c",
+            pcre_include_path ++ "/src/pcre2_serialize.c",
+            pcre_include_path ++ "/src/pcre2_string_utils.c",
+            pcre_include_path ++ "/src/pcre2_study.c",
+            pcre_include_path ++ "/src/pcre2_substitute.c",
+            pcre_include_path ++ "/src/pcre2_substring.c",
+            pcre_include_path ++ "/src/pcre2_tables.c",
+            pcre_include_path ++ "/src/pcre2_ucd.c",
+            pcre_include_path ++ "/src/pcre2_valid_utf.c",
+            pcre_include_path ++ "/src/pcre2_xclass.c",
+        },
+        .flags = &.{
+            "-DHAVE_CONFIG_H",
+            "-DPCRE2_STATIC",
+        },
+    });
+
+    pcre.installHeader(.{ .path = pcre_include_path ++ "/src/pcre2.h.generic" }, "pcre2.h");
 
     const exe = b.addExecutable(.{
         .name = "hvrt",
@@ -42,6 +107,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.linkLibrary(sqlite);
+    exe.linkLibrary(pcre);
     exe.addIncludePath(.{ .path = sqlite_include_path });
 
     // We use c_allocator from libc for allocator implementation, since it is
@@ -85,6 +151,7 @@ pub fn build(b: *std.Build) void {
     });
 
     unit_tests.linkLibrary(sqlite);
+    unit_tests.linkLibrary(pcre);
     unit_tests.addIncludePath(.{ .path = sqlite_include_path });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);

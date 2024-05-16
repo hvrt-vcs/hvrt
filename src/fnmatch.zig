@@ -1,6 +1,8 @@
 const std = @import("std");
 const fspath = std.fs.path;
 
+const c = @import("c.zig");
+
 // This is not a regex, but we can use similar concepts here. To start, we'll make a state machine:
 // * https://swtch.com/~rsc/regexp/regexp1.html
 // * https://swtch.com/~rsc/regexp/regexp2.html
@@ -66,6 +68,9 @@ pub const Utf8Iterator = struct {
 pub fn fnmatch(pattern: []const u8, string: []const u8, flags: u32) bool {
     _ = flags; // autofix
 
+    const temp_buffer: [std.fs.MAX_PATH_BYTES * 3]u8 = undefined;
+    _ = temp_buffer; // autofix
+
     const string_view = try std.unicode.Utf8View.init(string);
     var string_iter = Utf8Iterator.init(string_view);
 
@@ -122,3 +127,17 @@ pub fn fnmatch(pattern: []const u8, string: []const u8, flags: u32) bool {
     // string should be exhausted when pattern is exhausted.
     return string_iter.peekCodepoint() == null;
 }
+
+pub fn translate(gpa: std.mem.Allocator) !void {
+    _ = gpa; // autofix
+}
+
+test fnmatch {
+    const alloc = std.testing.allocator;
+    _ = alloc; // autofix
+
+    const match = fnmatch("*bar.baz", "foobar.baz", 0);
+    try std.testing.expect(match);
+}
+
+test translate {}

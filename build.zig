@@ -19,7 +19,8 @@ pub fn build(b: *std.Build) void {
     const sqlite_include_path = third_party_path ++ "/sqlite3";
 
     // Since Zig uses utf8 strings, we'll use pcre with 8bit support.
-    const pcre_code_unit_width = "8";
+    const pcre_code_unit_width_name = "PCRE2_CODE_UNIT_WIDTH";
+    const pcre_code_unit_width_value = "8";
     const pcre_prefix = "pcre2";
     const pcre_include_path = third_party_path ++ "/" ++ pcre_prefix;
 
@@ -42,13 +43,13 @@ pub fn build(b: *std.Build) void {
     _ = pcreCopyFiles.addCopyFile(.{ .path = pcre_include_path ++ "/src/pcre2.h.generic" }, "pcre2.h");
 
     const pcre = b.addStaticLibrary(.{
-        .name = b.fmt("pcre2-{s}", .{pcre_code_unit_width}),
+        .name = b.fmt("pcre2-{s}", .{pcre_code_unit_width_value}),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
 
-    pcre.root_module.addCMacro("PCRE2_CODE_UNIT_WIDTH", pcre_code_unit_width);
+    pcre.root_module.addCMacro(pcre_code_unit_width_name, pcre_code_unit_width_value);
 
     pcre.addCSourceFile(.{
         .file = pcreCopyFiles.addCopyFile(.{ .path = pcre_include_path ++ "/src/pcre2_chartables.c.dist" }, "pcre2_chartables.c"),

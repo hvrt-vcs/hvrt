@@ -1,12 +1,19 @@
 const std = @import("std");
 const c = @import("c.zig");
+const utf = std.unicode;
+
+const Pcre2Code = union(enum) {
+    utf8: *c.pcre2_code_8,
+    utf16: *c.pcre2_code_16,
+    utf32: *c.pcre2_code_32,
+};
 
 /// A basic wrapper around raw pcre2 API. See docs here:
 /// https://www.pcre.org/current/doc/html/pcre2api.html
 pub const Matcher = struct {
     // Eventually wrap allocator in a pcre2 context.
     alloc: std.mem.Allocator,
-    matcher: *c.pcre2_code_8,
+    matcher: Pcre2Code,
 
     /// Must call `free` on returned object, or memory will be leaked.
     pub fn compile(alloc: std.mem.Allocator, regex: []const u8) !Matcher {
@@ -14,21 +21,59 @@ pub const Matcher = struct {
         var errorcode: c_int = 0;
         var erroroffset: usize = 0;
         const context: ?*c.pcre2_compile_context_8 = null;
+        var error_msg_buf: [1024 * 4]u8 = undefined;
 
-        const matcher_opt = c.pcre2_compile_8(regex.ptr, regex.len, options, &errorcode, &erroroffset, context);
+        const utf8view = try utf.Utf8View.init(regex);
+        var utf8_iter = utf8view.iterator();
 
-        if (matcher_opt) |matcher| {
-            return .{ .matcher = matcher, .alloc = alloc };
-        } else {
-            var error_msg_buf: [1024 * 4]u8 = undefined;
-            const error_msg_size = c.pcre2_get_error_message_8(errorcode.*, &error_msg_buf, error_msg_buf.len);
-            const error_msg_final = error_msg_buf[0..error_msg_size];
-            std.debug.print(
-                "Regex '{s}' failed to compile with errorcode {} at offset {} with message '{s}'",
-                .{ regex, errorcode.*, erroroffset.*, error_msg_final },
-            );
-            return error.Pcre2Error;
+        var max_bytes: u3 = 0;
+        while (utf8_iter.nextCodepointSlice()) |slc| {
+            const nbytes = utf.utf8ByteSequenceLength(slc[0]) catch unreachable;
+            max_bytes = @max(max_bytes, nbytes);
         }
+
+        return switch (max_bytes) {
+            0 => {
+                return error.EmptyRegex;
+            },
+            1 => {
+                // use pcre2_compile_8
+                const matcher_opt = c.pcre2_compile_8(regex.ptr, regex.len, options, &errorcode, &erroroffset, context);
+
+                if (matcher_opt) |matcher| {
+                    return .{ .matcher = .{ .utf8 = matcher }, .alloc = alloc };
+                } else {
+                    const error_msg_size = c.pcre2_get_error_message_8(errorcode.*, &error_msg_buf, error_msg_buf.len);
+                    const error_msg_final = error_msg_buf[0..error_msg_size];
+                    std.debug.print(
+                        "Regex '{s}' failed to compile with errorcode {} at offset {} with message '{s}'",
+                        .{ regex, errorcode.*, erroroffset.*, error_msg_final },
+                    );
+                    return error.Pcre2Error;
+                }
+            },
+            2 => {
+                // use pcre2_compile_16
+                unreachable;
+            },
+            3, 4 => {
+                // use pcre2_compile_32
+                var array32 = std.ArrayList(u32).init(alloc);
+                defer array32.deinit();
+
+                var utf8_iter2 = utf8view.iterator();
+
+                const cp_count = utf.utf8CountCodepoints(regex) catch unreachable;
+
+                try array32.ensureTotalCapacityPrecise(cp_count);
+
+                while (utf8_iter2.nextCodepoint()) |codepoint| {
+                    array32.appendAssumeCapacity(codepoint);
+                }
+
+                unreachable;
+            },
+        };
     }
 
     pub fn free(self: Matcher) void {

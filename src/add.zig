@@ -5,6 +5,7 @@ const Dir = std.fs.Dir;
 const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
 const core_ds = @import("ds/core.zig");
+const dir_walk = @import("dir_walk.zig");
 
 const Hasher = core_ds.Hasher;
 

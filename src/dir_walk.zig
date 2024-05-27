@@ -4,8 +4,9 @@ const std = @import("std");
 /// fallback when a key is not present in the current map. This chain of maps
 /// will attempt to check a parent for the value to the requested key until
 /// there are no more parents to check (i.e. a `null` parent is encountered).
-/// This type does not check for circcular references, so do not make circular
-/// references unless you want to get caught in an infinite loop.
+///
+/// This type does not check for circular references, so do not make circular
+/// references with parents unless you want to get caught in an infinite loop.
 pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S: type) type {
     return struct {
         pub const Self = @This();
@@ -19,6 +20,9 @@ pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S
         /// the value type, and has an `init` method that takes only an
         /// allocator for a parameter.
         pub const KeySet = S;
+
+        /// Type of Slice returned from `keys` function.
+        pub const Slice = std.ArrayList(K).Slice;
 
         inner_map: InnerMap,
         parent: ?*Self = null,
@@ -51,9 +55,18 @@ pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S
             return try self.inner_map.getOrPut(k, v);
         }
 
+        /// FIXME: don't require an allocator to count keys. Maybe use the one
+        /// from `init` or something.
+        pub fn count(self: *Self, alloc: std.mem.Allocator) !usize {
+            var key_set = try self.keySet(alloc);
+            defer key_set.deinit();
+
+            return key_set.count();
+        }
+
         /// So long as none of the backing maps in the map chain are modified,
         /// the keys in the returned KeySet should remain valid.
-        pub fn keys(self: *Self, alloc: std.mem.Allocator) !KeySet {
+        pub fn keySet(self: *Self, alloc: std.mem.Allocator) !KeySet {
             var return_set = KeySet.init(alloc);
             errdefer return_set.deinit();
 
@@ -61,10 +74,43 @@ pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S
             while (current) |c| : (current = c.parent) {
                 var iterator = c.inner_map.iterator();
                 while (iterator.next()) |entry| {
-                    try return_set.put(entry.key_ptr.*, void{});
+                    _ = try return_set.getOrPut(entry.key_ptr.*);
                 }
             }
             return return_set;
+        }
+
+        /// So long as none of the backing maps in the map chain are modified,
+        /// the keys in the returned Slice should remain valid.
+        ///
+        /// Keys are ordered by encounter order. In essence, the keys from the
+        /// current map are returned, then any keys in the parent map not
+        /// previously encountered in the current map are returned, and so on
+        /// and so forth until all keys from all maps in the chain have been
+        /// encountered. This can be thought of as a union of all keys in all
+        /// maps in the chain, in encounter order.
+        ///
+        /// Because of the pseudo-random nature of hash maps, no other ordering
+        /// of keys other than map encounter order can be guaranteed.
+        pub fn keys(self: *Self, alloc: std.mem.Allocator) !Slice {
+            var array = std.ArrayList(K).init(alloc);
+            defer array.deinit();
+
+            var return_set = KeySet.init(alloc);
+            defer return_set.deinit();
+
+            var current: ?*Self = self;
+            while (current) |c| : (current = c.parent) {
+                var iterator = c.inner_map.iterator();
+                while (iterator.next()) |entry| {
+                    const put_result = try return_set.getOrPut(entry.key_ptr.*);
+                    if (!put_result.found_existing) {
+                        try array.append(entry.key_ptr.*);
+                    }
+                }
+            }
+
+            return try array.toOwnedSlice();
         }
     };
 }
@@ -73,7 +119,7 @@ test ChainMap {
     const alloc = std.testing.allocator;
 
     // Although BufMap works as an InnerMap type here, the extra copying isn't
-    // needed, since we only work with constant strings in this test.
+    // needed, since we only work with constant string literals in this test.
     // const InnerMap = std.BufMap;
 
     const InnerMap = std.StringHashMap([]const u8);
@@ -108,15 +154,16 @@ test ChainMap {
     const actual3 = cm2.get("key4");
     try std.testing.expectEqual(null, actual3);
 
-    var key_set = try cm2.keys(alloc);
-    defer key_set.deinit();
+    try std.testing.expectEqual(3, try cm2.count(alloc));
 
-    try std.testing.expectEqual(3, key_set.count());
+    const key_slice = try cm2.keys(alloc);
+    defer alloc.free(key_slice);
 
-    var iterator = key_set.keyIterator();
-    while (iterator.next()) |k| {
-        if (!(std.mem.eql(u8, "key1", k.*) or std.mem.eql(u8, "key2", k.*) or std.mem.eql(u8, "key3", k.*))) {
-            std.debug.print("\nkey '{s}' did not match one of the expected keys\n", .{k.*});
+    try std.testing.expectEqual(3, key_slice.len);
+
+    for (key_slice) |k| {
+        if (!(std.mem.eql(u8, "key1", k) or std.mem.eql(u8, "key2", k) or std.mem.eql(u8, "key3", k))) {
+            std.debug.print("\nkey '{s}' did not match one of the expected keys\n", .{k});
             try std.testing.expect(false);
         }
     }

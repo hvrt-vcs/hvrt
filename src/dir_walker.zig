@@ -1,5 +1,63 @@
 const std = @import("std");
 
+// cur_pat := IgnorePattern{
+// 	IgnoreRoot:      ignore_root,
+// 	OriginalPattern: original_text,
+// 	Pattern:         trimmed,
+// 	AsDir:           false,
+// 	Rooted:          false,
+// 	Negated:         false,
+// }
+
+// type IgnorePattern struct {
+// 	IgnoreRoot      string
+// 	OriginalPattern string
+// 	Pattern         string
+// 	AsDir           bool
+// 	Rooted          bool
+// 	Negated         bool
+// }
+
+pub const IgnorePattern = struct {
+    allocator: std.mem.Allocator,
+    ignore_root: []const u8,
+    original_pattern: []const u8,
+    pattern: []const u8,
+    as_dir: bool,
+    rooted: bool,
+    negated: bool,
+
+    pub fn deinit(self: IgnorePattern) void {
+        self.allocator.free(self.ignore_root);
+        self.allocator.free(self.original_pattern);
+        self.allocator.free(self.pattern);
+    }
+
+    pub fn parseIgnoreFile(gpa: std.mem.Allocator, worktree_root: std.fs.Dir, ignore_file_path: []const u8) ![]IgnorePattern {
+        std.debug.assert(!std.fs.path.isAbsolute(ignore_file_path));
+
+        var array = std.ArrayList(IgnorePattern).init(gpa);
+        defer array.deinit();
+
+        var ignore_file = try worktree_root.openFile(ignore_file_path, .{});
+        defer ignore_file.close();
+
+        const istat = try ignore_file.stat();
+
+        if (istat.kind == .directory) {
+            return error.IgnoreFileIsDirectory;
+        }
+
+        // is `null` if there is no parent directory.
+        const ignore_root = std.fs.path.dirname(ignore_file_path) orelse ".";
+        _ = ignore_root; // autofix
+
+        return try array.toOwnedSlice();
+    }
+};
+
+pub const DirWalker = struct {};
+
 pub fn walkDir(repo_root: std.fs.Dir) !void {
     var fba_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
     const repo_root_string = try repo_root.realpath(".", &fba_buf);

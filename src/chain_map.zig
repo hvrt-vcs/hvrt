@@ -13,8 +13,7 @@ pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S
         pub const Self = @This();
 
         /// A managed map type that takes type `K` for keys and type `V` for
-        /// values, and has an `init` method that takes only an allocator for a
-        /// parameter.
+        /// values.
         pub const InnerMap = M;
 
         /// A managed map type that takes type `K` for keys and uses `void` as
@@ -25,15 +24,9 @@ pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S
         /// Type of Slice returned from `keys` function.
         pub const Slice = std.ArrayList(K).Slice;
 
+        allocator: std.mem.Allocator,
         inner_map: InnerMap,
         parent: ?*Self = null,
-
-        pub fn init(allocator: std.mem.Allocator, parent: ?*Self) Self {
-            return .{
-                .inner_map = InnerMap.init(allocator),
-                .parent = parent,
-            };
-        }
 
         pub fn deinit(self: *Self) void {
             self.inner_map.deinit();
@@ -52,14 +45,31 @@ pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S
             try self.inner_map.put(k, v);
         }
 
-        pub fn getOrPut(self: *Self, k: K, v: V) !InnerMap.GetOrPutResult {
-            return try self.inner_map.getOrPut(k, v);
+        /// Does up to `n-1` map lookups to determine if key exists in any
+        /// parent maps. Failing that, an entry is inserted in this map, never
+        /// its parents.
+        ///
+        /// Thus, this does `n` map lookups in the worst case (the entry is not
+        /// found in any ancestor maps and then must be found/inserted into
+        /// this map), and 1 map lookup in the best case (the entry exists and
+        /// is found in the first ancestor map checked).
+        pub fn getOrPut(self: *Self, k: K) !InnerMap.GetOrPutResult {
+            var current: ?*Self = self.parent;
+            while (current) |c| : (current = c.parent) {
+                if (c.inner_map.getEntry(k)) |entry| {
+                    return .{
+                        .key_ptr = entry.key_ptr,
+                        .value_ptr = entry.value_ptr,
+                        .found_existing = true,
+                    };
+                }
+            } else {
+                return try self.inner_map.getOrPut(k);
+            }
         }
 
-        /// FIXME: don't require an allocator to count keys. Maybe use the one
-        /// from `init` or something.
-        pub fn count(self: *Self, alloc: std.mem.Allocator) !usize {
-            var key_set = try self.keySet(alloc);
+        pub fn count(self: *Self) !usize {
+            var key_set = try self.keySet(self.allocator);
             defer key_set.deinit();
 
             return key_set.count();
@@ -73,9 +83,12 @@ pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S
 
             var current: ?*Self = self;
             while (current) |c| : (current = c.parent) {
-                var iterator = c.inner_map.iterator();
-                while (iterator.next()) |entry| {
-                    _ = try return_set.getOrPut(entry.key_ptr.*);
+                const cnt = c.inner_map.count();
+                try return_set.ensureUnusedCapacity(@intCast(cnt));
+
+                var key_iterator = c.inner_map.keyIterator();
+                while (key_iterator.next()) |key| {
+                    _ = return_set.getOrPutAssumeCapacity(key.*);
                 }
             }
             return return_set;
@@ -92,7 +105,10 @@ pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S
         /// maps in the chain, in encounter order.
         ///
         /// Because of the pseudo-random nature of hash maps, no other ordering
-        /// of keys other than map encounter order can be guaranteed.
+        /// of keys other than map encounter order can be guaranteed unless the
+        /// type passed in to define `KeySet` has some guaranteed ordering.
+        ///
+        /// Caller owns the returned slice.
         pub fn keys(self: *Self, alloc: std.mem.Allocator) !Slice {
             var array = std.ArrayList(K).init(alloc);
             defer array.deinit();
@@ -102,11 +118,14 @@ pub fn ChainMap(comptime K: type, comptime V: type, comptime M: type, comptime S
 
             var current: ?*Self = self;
             while (current) |c| : (current = c.parent) {
-                var iterator = c.inner_map.iterator();
-                while (iterator.next()) |entry| {
-                    const put_result = try return_set.getOrPut(entry.key_ptr.*);
+                const cnt = c.inner_map.count();
+                try array.ensureUnusedCapacity(@intCast(cnt));
+
+                var key_iterator = c.inner_map.keyIterator();
+                while (key_iterator.next()) |key| {
+                    const put_result = try return_set.getOrPut(key.*);
                     if (!put_result.found_existing) {
-                        try array.append(entry.key_ptr.*);
+                        array.appendAssumeCapacity(key.*);
                     }
                 }
             }
@@ -127,13 +146,23 @@ test ChainMap {
     const InnerKeySet = std.StringHashMap(void);
     const cm_type = ChainMap([]const u8, []const u8, InnerMap, InnerKeySet);
 
-    var cm1 = cm_type.init(alloc, null);
+    // InnerKeySet.ensureUnusedCapacity(self: *Self, additional_count: Size)
+    // InnerKeySet.getOrPutAssumeCapacity(self: *Self, key: K)
+
+    var cm1 = cm_type{
+        .allocator = alloc,
+        .inner_map = InnerMap.init(alloc),
+    };
     defer cm1.deinit();
 
     try cm1.put("key1", "value1_map1");
     try cm1.put("key2", "value2_map1");
 
-    var cm2 = cm_type.init(alloc, &cm1);
+    var cm2 = cm_type{
+        .allocator = alloc,
+        .inner_map = InnerMap.init(alloc),
+        .parent = &cm1,
+    };
     defer cm2.deinit();
 
     try cm2.put("key2", "value2_map2");
@@ -155,7 +184,7 @@ test ChainMap {
     const actual3 = cm2.get("key4");
     try std.testing.expectEqual(null, actual3);
 
-    try std.testing.expectEqual(3, try cm2.count(alloc));
+    try std.testing.expectEqual(3, try cm2.count());
 
     const key_slice = try cm2.keys(alloc);
     defer alloc.free(key_slice);

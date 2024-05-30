@@ -33,11 +33,8 @@ pub const IgnorePattern = struct {
         self.allocator.free(self.pattern);
     }
 
-    pub fn parseIgnoreFile(gpa: std.mem.Allocator, worktree_root: std.fs.Dir, ignore_file_path: []const u8) ![]IgnorePattern {
+    pub fn parseIgnoreFile(arena: std.mem.Allocator, worktree_root: std.fs.Dir, ignore_file_path: []const u8) ![]IgnorePattern {
         std.debug.assert(!std.fs.path.isAbsolute(ignore_file_path));
-
-        var array = std.ArrayList(IgnorePattern).init(gpa);
-        defer array.deinit();
 
         var ignore_file = try worktree_root.openFile(ignore_file_path, .{});
         defer ignore_file.close();
@@ -48,9 +45,29 @@ pub const IgnorePattern = struct {
             return error.IgnoreFileIsDirectory;
         }
 
+        const whole_file = try ignore_file.readToEndAllocOptions(arena, istat.size + 1, istat.size, @alignOf(u8), null);
+        var tokenizer = std.mem.tokenizeAny(u8, whole_file, "\r\n");
+
+        var line_cnt: usize = 0;
+        while (tokenizer.next()) |_| {
+            line_cnt += 1;
+        }
+        tokenizer.reset();
+
         // is `null` if there is no parent directory.
         const ignore_root = std.fs.path.dirname(ignore_file_path) orelse ".";
         _ = ignore_root; // autofix
+
+        var array = std.ArrayList(IgnorePattern).init(arena);
+        defer array.deinit();
+
+        array.ensureTotalCapacity(line_cnt);
+
+        while (tokenizer.next()) |line| {
+            const trimmed = std.mem.trim(u8, line, "");
+            _ = trimmed; // autofix
+            if (std.mem.tr) {}
+        }
 
         return try array.toOwnedSlice();
     }

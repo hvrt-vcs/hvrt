@@ -19,7 +19,6 @@ const std = @import("std");
 // }
 
 pub const IgnorePattern = struct {
-    allocator: std.mem.Allocator,
     ignore_root: []const u8,
     original_pattern: []const u8,
     pattern: []const u8,
@@ -28,11 +27,10 @@ pub const IgnorePattern = struct {
     negated: bool,
 
     pub fn deinit(self: IgnorePattern) void {
-        self.allocator.free(self.ignore_root);
-        self.allocator.free(self.original_pattern);
-        self.allocator.free(self.pattern);
+        _ = self; // autofix
     }
 
+    /// For gitignore matching rules see URL: https://git-scm.com/docs/gitignore
     pub fn parseIgnoreFile(arena: std.mem.Allocator, worktree_root: std.fs.Dir, ignore_file_path: []const u8) ![]IgnorePattern {
         std.debug.assert(!std.fs.path.isAbsolute(ignore_file_path));
 
@@ -40,12 +38,11 @@ pub const IgnorePattern = struct {
         defer ignore_file.close();
 
         const istat = try ignore_file.stat();
-
         if (istat.kind == .directory) {
             return error.IgnoreFileIsDirectory;
         }
 
-        const whole_file = try ignore_file.readToEndAllocOptions(arena, istat.size + 1, istat.size, @alignOf(u8), null);
+        const whole_file = try ignore_file.readToEndAllocOptions(arena, istat.size, istat.size, @alignOf(u8), null);
         var tokenizer = std.mem.tokenizeAny(u8, whole_file, "\r\n");
 
         var line_cnt: usize = 0;
@@ -58,15 +55,12 @@ pub const IgnorePattern = struct {
         const ignore_root = std.fs.path.dirname(ignore_file_path) orelse ".";
 
         var array = std.ArrayList(IgnorePattern).init(arena);
-        defer array.deinit();
 
         array.ensureTotalCapacity(line_cnt);
 
         while (tokenizer.next()) |original_text| {
-            const cur_pat: IgnorePattern = .{
-                .allocator = arena,
+            var cur_pat: IgnorePattern = .{
                 .ignore_root = ignore_root,
-
                 .original_pattern = original_text,
                 .pattern = std.mem.trimRight(u8, original_text, " \t\n\r"),
                 .as_dir = false,
@@ -100,10 +94,48 @@ pub const IgnorePattern = struct {
                 cur_pat.pattern = std.mem.trimLeft(u8, cur_pat.pattern, "!");
             }
 
-            try array.append(cur_pat);
+            array.appendAssumeCapacity(cur_pat);
         }
 
         return try array.toOwnedSlice();
+    }
+
+    test parseIgnoreFile {
+        const alloc = std.testing.allocator;
+        var arena = std.heap.ArenaAllocator.init(alloc);
+        defer arena.deinit();
+
+        var tmp_dir = std.testing.tmpDir(.{
+            .access_sub_paths = true,
+            .iterate = true,
+            .no_follow = true,
+        });
+        defer tmp_dir.cleanup();
+
+        const child_dirs = [_][:0]const u8{ "child1/subchild1", "child2/subchild2", "child3/subchild3", "child3/subchild4" };
+
+        for (child_dirs) |dir_name| {
+            try tmp_dir.dir.makePath(dir_name);
+            std.debug.print("What is the child dir? {s}\n", .{dir_name});
+            // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
+        }
+
+        {
+            var file = try tmp_dir.dir.createFile(".hvrtignore", .{});
+            defer file.close();
+
+            file.writeAll(
+                \\# a comment line
+                \\# a blank line below
+                \\
+                \\pattern1
+            );
+        }
+
+        const patterns = try IgnorePattern.parseIgnoreFile(arena.allocator(), tmp_dir.dir, ".hvrtignore");
+        _ = patterns; // autofix
+
+        try walkDir(tmp_dir.dir);
     }
 };
 

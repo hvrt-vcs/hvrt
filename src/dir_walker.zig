@@ -56,17 +56,51 @@ pub const IgnorePattern = struct {
 
         // is `null` if there is no parent directory.
         const ignore_root = std.fs.path.dirname(ignore_file_path) orelse ".";
-        _ = ignore_root; // autofix
 
         var array = std.ArrayList(IgnorePattern).init(arena);
         defer array.deinit();
 
         array.ensureTotalCapacity(line_cnt);
 
-        while (tokenizer.next()) |line| {
-            const trimmed = std.mem.trim(u8, line, "");
-            _ = trimmed; // autofix
-            if (std.mem.tr) {}
+        while (tokenizer.next()) |original_text| {
+            const cur_pat: IgnorePattern = .{
+                .allocator = arena,
+                .ignore_root = ignore_root,
+
+                .original_pattern = original_text,
+                .pattern = std.mem.trimRight(u8, original_text, " \t\n\r"),
+                .as_dir = false,
+                .rooted = false,
+                .negated = false,
+            };
+
+            // Ignore empty or commented lines
+            if (cur_pat.pattern.len == 0 or std.mem.startsWith(u8, cur_pat.pattern, "#")) {
+                continue;
+            }
+
+            // If there is an escape character at the end, the whitespace needs to be preserved
+            if (std.mem.endsWith(u8, cur_pat.pattern, "\\") and cur_pat.pattern.len < original_text.len) {
+                cur_pat.pattern = original_text[0 .. cur_pat.pattern.len + 1];
+            }
+
+            // There is a slash in the path somewhere other than the end
+            if (std.mem.indexOfScalar(u8, std.mem.trimRight(u8, cur_pat.pattern, "/"), '/') != null) {
+                cur_pat.rooted = true;
+                cur_pat.pattern = std.mem.trimLeft(u8, cur_pat.pattern, "/");
+            }
+
+            if (std.mem.endsWith(u8, cur_pat.pattern, "/")) {
+                cur_pat.as_dir = true;
+                cur_pat.pattern = std.mem.trimRight(u8, cur_pat.pattern, "/");
+            }
+
+            if (std.mem.startsWith(u8, cur_pat.pattern, "!")) {
+                cur_pat.negated = true;
+                cur_pat.pattern = std.mem.trimLeft(u8, cur_pat.pattern, "!");
+            }
+
+            try array.append(cur_pat);
         }
 
         return try array.toOwnedSlice();

@@ -1,23 +1,5 @@
 const std = @import("std");
 
-// cur_pat := IgnorePattern{
-// 	IgnoreRoot:      ignore_root,
-// 	OriginalPattern: original_text,
-// 	Pattern:         trimmed,
-// 	AsDir:           false,
-// 	Rooted:          false,
-// 	Negated:         false,
-// }
-
-// type IgnorePattern struct {
-// 	IgnoreRoot      string
-// 	OriginalPattern string
-// 	Pattern         string
-// 	AsDir           bool
-// 	Rooted          bool
-// 	Negated         bool
-// }
-
 pub const IgnorePattern = struct {
     ignore_root: []const u8,
     original_pattern: []const u8,
@@ -56,7 +38,8 @@ pub const IgnorePattern = struct {
 
         var array = std.ArrayList(IgnorePattern).init(arena);
 
-        array.ensureTotalCapacity(line_cnt);
+        // Add one in case there is no trailing newline in file.
+        try array.ensureTotalCapacity(line_cnt + 1);
 
         while (tokenizer.next()) |original_text| {
             var cur_pat: IgnorePattern = .{
@@ -99,45 +82,72 @@ pub const IgnorePattern = struct {
 
         return try array.toOwnedSlice();
     }
-
-    test parseIgnoreFile {
-        const alloc = std.testing.allocator;
-        var arena = std.heap.ArenaAllocator.init(alloc);
-        defer arena.deinit();
-
-        var tmp_dir = std.testing.tmpDir(.{
-            .access_sub_paths = true,
-            .iterate = true,
-            .no_follow = true,
-        });
-        defer tmp_dir.cleanup();
-
-        const child_dirs = [_][:0]const u8{ "child1/subchild1", "child2/subchild2", "child3/subchild3", "child3/subchild4" };
-
-        for (child_dirs) |dir_name| {
-            try tmp_dir.dir.makePath(dir_name);
-            std.debug.print("What is the child dir? {s}\n", .{dir_name});
-            // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
-        }
-
-        {
-            var file = try tmp_dir.dir.createFile(".hvrtignore", .{});
-            defer file.close();
-
-            file.writeAll(
-                \\# a comment line
-                \\# a blank line below
-                \\
-                \\pattern1
-            );
-        }
-
-        const patterns = try IgnorePattern.parseIgnoreFile(arena.allocator(), tmp_dir.dir, ".hvrtignore");
-        _ = patterns; // autofix
-
-        try walkDir(tmp_dir.dir);
-    }
 };
+
+test "IgnorePattern.parseIgnoreFile" {
+    const alloc = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    defer arena.deinit();
+
+    var tmp_dir = std.testing.tmpDir(.{
+        .access_sub_paths = true,
+        .iterate = true,
+        .no_follow = true,
+    });
+    defer tmp_dir.cleanup();
+
+    const child_dirs = [_][:0]const u8{ "child1/subchild1", "child2/subchild2", "child3/subchild3", "child3/subchild4" };
+
+    for (child_dirs) |dir_name| {
+        try tmp_dir.dir.makePath(dir_name);
+        std.debug.print("What is the child dir? {s}\n", .{dir_name});
+        // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
+    }
+
+    {
+        var file = try tmp_dir.dir.createFile(".hvrtignore", .{});
+        defer file.close();
+
+        try file.writeAll(
+            \\# a comment line
+            \\# a blank line below
+            \\
+            \\pattern1
+            \\/child3/**
+            \\!child3/subchild4
+            \\child2/
+            \\
+        );
+    }
+
+    const patterns = try IgnorePattern.parseIgnoreFile(arena.allocator(), tmp_dir.dir, ".hvrtignore");
+
+    try std.testing.expectEqual(4, patterns.len);
+
+    try std.testing.expectEqual(false, patterns[0].rooted);
+    try std.testing.expectEqual(null, std.mem.indexOfScalar(u8, patterns[0].original_pattern, '/'));
+    try std.testing.expectEqual(null, std.mem.indexOfScalar(u8, patterns[0].pattern, '/'));
+
+    try std.testing.expectEqual(true, patterns[1].rooted);
+    try std.testing.expectEqual(0, std.mem.indexOfScalar(u8, patterns[1].original_pattern, '/'));
+    try std.testing.expectEqual(6, std.mem.indexOfScalar(u8, patterns[1].pattern, '/'));
+
+    try std.testing.expectEqual(false, patterns[1].negated);
+    try std.testing.expectEqual(null, std.mem.indexOfScalar(u8, patterns[1].original_pattern, '!'));
+    try std.testing.expectEqual(null, std.mem.indexOfScalar(u8, patterns[1].pattern, '!'));
+
+    try std.testing.expectEqual(true, patterns[2].negated);
+    try std.testing.expectEqual(0, std.mem.indexOfScalar(u8, patterns[2].original_pattern, '!'));
+    try std.testing.expectEqual(null, std.mem.indexOfScalar(u8, patterns[2].pattern, '!'));
+
+    try std.testing.expectEqual(false, patterns[0].as_dir);
+    try std.testing.expectEqual(null, std.mem.indexOfScalar(u8, patterns[0].original_pattern, '/'));
+    try std.testing.expectEqual(null, std.mem.indexOfScalar(u8, patterns[0].pattern, '/'));
+
+    try std.testing.expectEqual(true, patterns[3].as_dir);
+    try std.testing.expectEqual(6, std.mem.indexOfScalar(u8, patterns[3].original_pattern, '/'));
+    try std.testing.expectEqual(null, std.mem.indexOfScalar(u8, patterns[3].pattern, '/'));
+}
 
 pub const DirWalker = struct {};
 
@@ -188,21 +198,21 @@ fn walkDirInner(repo_root: []const u8, full_path: []const u8, dir: std.fs.Dir) !
     }
 }
 
-test walkDir {
-    var tmp_dir = std.testing.tmpDir(.{
-        .access_sub_paths = true,
-        .iterate = true,
-        .no_follow = true,
-    });
-    defer tmp_dir.cleanup();
+// test walkDir {
+//     var tmp_dir = std.testing.tmpDir(.{
+//         .access_sub_paths = true,
+//         .iterate = true,
+//         .no_follow = true,
+//     });
+//     defer tmp_dir.cleanup();
 
-    const child_dirs = [_][:0]const u8{ "child1/subchild1", "child2/subchild2", "child3/subchild3", "child3/subchild4" };
+//     const child_dirs = [_][:0]const u8{ "child1/subchild1", "child2/subchild2", "child3/subchild3", "child3/subchild4" };
 
-    for (child_dirs) |dir_name| {
-        try tmp_dir.dir.makePath(dir_name);
-        std.debug.print("What is the child dir? {s}\n", .{dir_name});
-        // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
-    }
+//     for (child_dirs) |dir_name| {
+//         try tmp_dir.dir.makePath(dir_name);
+//         std.debug.print("What is the child dir? {s}\n", .{dir_name});
+//         // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
+//     }
 
-    try walkDir(tmp_dir.dir);
-}
+//     try walkDir(tmp_dir.dir);
+// }

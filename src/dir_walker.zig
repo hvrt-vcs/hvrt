@@ -13,18 +13,14 @@ pub const IgnorePattern = struct {
     }
 
     /// For gitignore matching rules see URL: https://git-scm.com/docs/gitignore
-    pub fn parseIgnoreFile(arena: std.mem.Allocator, worktree_root: std.fs.Dir, ignore_file_path: []const u8) ![]IgnorePattern {
-        std.debug.assert(!std.fs.path.isAbsolute(ignore_file_path));
+    ///
+    /// `ignore_file_path` is assumed to be relative from the root of the
+    /// worktree. If it isn't, pattern matching relative to the "current
+    /// directory" will not work correctly.
+    pub fn parseIgnoreFile(arena: std.mem.Allocator, ignore_file_path: []const u8, ignore_file_reader: anytype, max_read_size: usize) ![]IgnorePattern {
+        if (std.fs.path.isAbsolute(ignore_file_path)) return error.IgnoreFileIsAbsolute;
 
-        var ignore_file = try worktree_root.openFile(ignore_file_path, .{});
-        defer ignore_file.close();
-
-        const istat = try ignore_file.stat();
-        if (istat.kind == .directory) {
-            return error.IgnoreFileIsDirectory;
-        }
-
-        const whole_file = try ignore_file.readToEndAllocOptions(arena, istat.size, istat.size, @alignOf(u8), null);
+        const whole_file = try ignore_file_reader.readAllAlloc(arena, max_read_size);
         var tokenizer = std.mem.tokenizeAny(u8, whole_file, "\r\n");
 
         var line_cnt: usize = 0;
@@ -38,7 +34,7 @@ pub const IgnorePattern = struct {
 
         var array = std.ArrayList(IgnorePattern).init(arena);
 
-        // Add one in case there is no trailing newline in file.
+        // Add one to line_cnt in case there is no trailing newline in file.
         try array.ensureTotalCapacity(line_cnt + 1);
 
         while (tokenizer.next()) |original_text| {
@@ -89,38 +85,20 @@ test "IgnorePattern.parseIgnoreFile" {
     var arena = std.heap.ArenaAllocator.init(alloc);
     defer arena.deinit();
 
-    var tmp_dir = std.testing.tmpDir(.{
-        .access_sub_paths = true,
-        .iterate = true,
-        .no_follow = true,
-    });
-    defer tmp_dir.cleanup();
+    const contents =
+        \\# a comment line
+        \\# a blank line below
+        \\
+        \\pattern1
+        \\/child3/**
+        \\!child3/subchild4
+        \\child2/
+        \\
+    ;
 
-    const child_dirs = [_][:0]const u8{ "child1/subchild1", "child2/subchild2", "child3/subchild3", "child3/subchild4" };
+    var fbs = std.io.fixedBufferStream(contents);
 
-    for (child_dirs) |dir_name| {
-        try tmp_dir.dir.makePath(dir_name);
-        std.debug.print("What is the child dir? {s}\n", .{dir_name});
-        // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
-    }
-
-    {
-        var file = try tmp_dir.dir.createFile(".hvrtignore", .{});
-        defer file.close();
-
-        try file.writeAll(
-            \\# a comment line
-            \\# a blank line below
-            \\
-            \\pattern1
-            \\/child3/**
-            \\!child3/subchild4
-            \\child2/
-            \\
-        );
-    }
-
-    const patterns = try IgnorePattern.parseIgnoreFile(arena.allocator(), tmp_dir.dir, ".hvrtignore");
+    const patterns = try IgnorePattern.parseIgnoreFile(arena.allocator(), ".hvrtignore", fbs.reader(), contents.len);
 
     try std.testing.expectEqual(4, patterns.len);
 
@@ -197,22 +175,3 @@ fn walkDirInner(repo_root: []const u8, full_path: []const u8, dir: std.fs.Dir) !
         }
     }
 }
-
-// test walkDir {
-//     var tmp_dir = std.testing.tmpDir(.{
-//         .access_sub_paths = true,
-//         .iterate = true,
-//         .no_follow = true,
-//     });
-//     defer tmp_dir.cleanup();
-
-//     const child_dirs = [_][:0]const u8{ "child1/subchild1", "child2/subchild2", "child3/subchild3", "child3/subchild4" };
-
-//     for (child_dirs) |dir_name| {
-//         try tmp_dir.dir.makePath(dir_name);
-//         std.debug.print("What is the child dir? {s}\n", .{dir_name});
-//         // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
-//     }
-
-//     try walkDir(tmp_dir.dir);
-// }

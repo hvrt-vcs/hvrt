@@ -17,25 +17,24 @@ pub const IgnorePattern = struct {
     /// `ignore_file_path` is assumed to be relative from the root of the
     /// worktree. If it isn't, pattern matching relative to the "current
     /// directory" will not work correctly.
-    pub fn parseIgnoreFile(arena: std.mem.Allocator, ignore_file_path: []const u8, ignore_file_reader: anytype, max_read_size: usize) ![]IgnorePattern {
+    pub fn parseIgnoreFile(arena: std.mem.Allocator, ignore_file_path: []const u8, ignore_file_contents: []const u8) ![]IgnorePattern {
         if (std.fs.path.isAbsolute(ignore_file_path)) return error.IgnoreFileIsAbsolute;
-
-        const whole_file = try ignore_file_reader.readAllAlloc(arena, max_read_size);
-        var tokenizer = std.mem.tokenizeAny(u8, whole_file, "\r\n");
-
-        var line_cnt: usize = 0;
-        while (tokenizer.next()) |_| {
-            line_cnt += 1;
-        }
-        tokenizer.reset();
 
         // is `null` if there is no parent directory.
         const ignore_root = std.fs.path.dirname(ignore_file_path) orelse ".";
 
         var array = std.ArrayList(IgnorePattern).init(arena);
+        defer array.deinit();
 
-        // Add one to line_cnt in case there is no trailing newline in file.
-        try array.ensureTotalCapacity(line_cnt + 1);
+        var tokenizer = std.mem.tokenizeAny(u8, ignore_file_contents, "\r\n");
+
+        // Add one to line_cnt in case there is no trailing newline on last
+        // line of file.
+        var line_cnt: usize = 1;
+        while (tokenizer.next()) |_| : (line_cnt += 1) {}
+        tokenizer.reset();
+
+        try array.ensureTotalCapacity(line_cnt);
 
         while (tokenizer.next()) |original_text| {
             var cur_pat: IgnorePattern = .{
@@ -96,9 +95,7 @@ test "IgnorePattern.parseIgnoreFile" {
         \\
     ;
 
-    var fbs = std.io.fixedBufferStream(contents);
-
-    const patterns = try IgnorePattern.parseIgnoreFile(arena.allocator(), ".hvrtignore", fbs.reader(), contents.len);
+    const patterns = try IgnorePattern.parseIgnoreFile(arena.allocator(), ".hvrtignore", contents);
 
     try std.testing.expectEqual(4, patterns.len);
 
@@ -175,13 +172,16 @@ pub fn DirWalker(
             var arena = std.heap.ArenaAllocator.init(gpa);
             defer arena.deinit();
 
+            var contents: []const u8 = &.{};
             const ignore_patterns = blk: {
                 const fallback: []IgnorePattern = &.{};
 
                 var file = dir.openFile(".hvrtignore", .{}) catch break :blk fallback;
                 defer file.close();
                 const fstat = file.stat() catch break :blk fallback;
-                break :blk IgnorePattern.parseIgnoreFile(arena.allocator(), ignore_file_path, file.reader(), fstat.size) catch fallback;
+
+                contents = try file.readToEndAllocOptions(arena.allocator(), fstat.size, fstat.size, @alignOf(u8), null);
+                break :blk IgnorePattern.parseIgnoreFile(arena.allocator(), ignore_file_path, contents) catch fallback;
             };
             _ = ignore_patterns; // autofix
 

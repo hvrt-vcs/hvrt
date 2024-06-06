@@ -127,7 +127,8 @@ test "IgnorePattern.parseIgnoreFile" {
 pub fn DirWalker(
     comptime Ctx: type,
     comptime visit: fn (context: *Ctx, repo_root: std.fs.Dir, relpath: []const u8) void,
-    comptime ignore: fn (context: *Ctx, repo_root: std.fs.Dir, relpath: []const u8) void,
+    comptime visit_ignored: fn (context: *Ctx, repo_root: std.fs.Dir, relpath: []const u8) void,
+    comptime is_ignored: fn (context: *Ctx, repo_root: std.fs.Dir, relpath: []const u8) bool,
 ) type {
     return struct {
         pub const Self = @This();
@@ -135,7 +136,8 @@ pub fn DirWalker(
         repo_root: std.fs.Dir,
 
         const visit_fn = visit;
-        const ignore_fn = ignore;
+        const ignore_fn = visit_ignored;
+        const is_ignored_fn = is_ignored;
 
         pub fn init(repo_root: std.fs.Dir, context: *Ctx) Self {
             return .{ .repo_root = repo_root, .context = context };
@@ -212,6 +214,13 @@ fn dummy(context: *anyopaque, repo_root: std.fs.Dir, relpath: []const u8) void {
     _ = relpath; // autofix
 }
 
+fn dummy_is_ignored(context: *anyopaque, repo_root: std.fs.Dir, relpath: []const u8) bool {
+    _ = context; // autofix
+    _ = repo_root; // autofix
+    _ = relpath; // autofix
+    return false;
+}
+
 test "DirWalker.walkDir" {
     const alloc = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{
@@ -229,7 +238,7 @@ test "DirWalker.walkDir" {
         // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
     }
 
-    const ctype = DirWalker(anyopaque, dummy, dummy);
+    const ctype = DirWalker(anyopaque, dummy, dummy, dummy_is_ignored);
 
     var dw = ctype.init(tmp_dir.dir, undefined);
     _ = &dw; // autofix

@@ -125,21 +125,23 @@ test "IgnorePattern.parseIgnoreFile" {
 }
 
 pub fn DirWalker(
-    comptime Ctx: type,
-    comptime visit: fn (context: *Ctx, repo_root: std.fs.Dir, relpath: []const u8) void,
-    comptime visit_ignored: fn (context: *Ctx, repo_root: std.fs.Dir, relpath: []const u8) void,
-    comptime is_ignored: fn (context: *Ctx, repo_root: std.fs.Dir, relpath: []const u8) bool,
+    comptime Context: type,
+    comptime visit: fn (context: Context, repo_root: std.fs.Dir, relpath: []const u8) void,
+    comptime visit_ignored: fn (context: Context, repo_root: std.fs.Dir, relpath: []const u8) void,
+    comptime is_ignored: fn (context: Context, repo_root: std.fs.Dir, relpath: []const u8) bool,
 ) type {
     return struct {
         pub const Self = @This();
-        context: *Ctx,
+        context: Context,
         repo_root: std.fs.Dir,
 
         const visit_fn = visit;
         const ignore_fn = visit_ignored;
         const is_ignored_fn = is_ignored;
 
-        pub fn init(repo_root: std.fs.Dir, context: *Ctx) Self {
+        pub const IgnoreCache = std.StringHashMap([]IgnorePattern);
+
+        pub fn init(repo_root: std.fs.Dir, context: Context) Self {
             return .{ .repo_root = repo_root, .context = context };
         }
 
@@ -148,10 +150,13 @@ pub fn DirWalker(
             const repo_root_string = try repo_root.realpath(".", &fba_buf);
             std.debug.print("What is the repo root? {s}\n", .{repo_root_string});
 
-            try self.walkDirInner(gpa, repo_root_string, repo_root_string, repo_root);
+            var ignore_cache = IgnoreCache.init(gpa);
+            defer ignore_cache.deinit();
+
+            try self.walkDirInner(gpa, &ignore_cache, repo_root_string, repo_root_string, repo_root);
         }
 
-        fn walkDirInner(self: *Self, gpa: std.mem.Allocator, repo_root: []const u8, full_path: []const u8, dir: std.fs.Dir) !void {
+        fn walkDirInner(self: *Self, gpa: std.mem.Allocator, ignore_cache: *IgnoreCache, repo_root: []const u8, full_path: []const u8, dir: std.fs.Dir) !void {
             std.debug.print("What is current path? {s}\n", .{full_path});
             const basename = std.fs.path.basename(full_path);
             std.debug.print("What is current path basename? {s}\n", .{basename});
@@ -180,12 +185,14 @@ pub fn DirWalker(
 
                 var file = dir.openFile(".hvrtignore", .{}) catch break :blk fallback;
                 defer file.close();
+
                 const fstat = file.stat() catch break :blk fallback;
 
-                contents = try file.readToEndAllocOptions(arena.allocator(), fstat.size, fstat.size, @alignOf(u8), null);
+                contents = file.readToEndAllocOptions(arena.allocator(), fstat.size, fstat.size, @alignOf(u8), null) catch break :blk fallback;
                 break :blk IgnorePattern.parseIgnoreFile(arena.allocator(), ignore_file_path, contents) catch fallback;
             };
-            _ = ignore_patterns; // autofix
+            try ignore_cache.put(relative, ignore_patterns);
+            defer _ = ignore_cache.remove(relative);
 
             var iter = dir.iterate();
             while (try iter.next()) |entry| {
@@ -198,7 +205,7 @@ pub fn DirWalker(
                     .directory => {
                         var child_dir = try dir.openDir(entry.name, .{ .iterate = true, .no_follow = true, .access_sub_paths = true });
                         defer child_dir.close();
-                        try self.walkDirInner(gpa, repo_root, child_path, child_dir);
+                        try self.walkDirInner(gpa, ignore_cache, repo_root, child_path, child_dir);
                     },
                     // Ignore all other types for now
                     else => {},
@@ -238,7 +245,7 @@ test "DirWalker.walkDir" {
         // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
     }
 
-    const ctype = DirWalker(anyopaque, dummy, dummy, dummy_is_ignored);
+    const ctype = DirWalker(*anyopaque, dummy, dummy, dummy_is_ignored);
 
     var dw = ctype.init(tmp_dir.dir, undefined);
     _ = &dw; // autofix

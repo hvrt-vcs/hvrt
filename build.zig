@@ -31,16 +31,16 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     sqlite.addCSourceFile(.{
-        .file = .{ .path = sqlite_include_path ++ "/sqlite3.c" },
+        .file = b.path(sqlite_include_path ++ "/sqlite3.c"),
         .flags = &[_][]const u8{
             "-std=c99",
         },
     });
-    sqlite.addIncludePath(.{ .path = sqlite_include_path });
+    sqlite.addIncludePath(b.path(sqlite_include_path));
 
     const pcreCopyFiles = b.addWriteFiles();
-    _ = pcreCopyFiles.addCopyFile(.{ .path = pcre_include_path ++ "/src/config.h.generic" }, "config.h");
-    _ = pcreCopyFiles.addCopyFile(.{ .path = pcre_include_path ++ "/src/pcre2.h.generic" }, "pcre2.h");
+    _ = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/config.h.generic"), "config.h");
+    _ = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/pcre2.h.generic"), "pcre2.h");
 
     const pcre = b.addStaticLibrary(.{
         .name = b.fmt("pcre2-{s}", .{pcre_code_unit_width_value}),
@@ -52,13 +52,13 @@ pub fn build(b: *std.Build) void {
     pcre.root_module.addCMacro(pcre_code_unit_width_name, pcre_code_unit_width_value);
 
     pcre.addCSourceFile(.{
-        .file = pcreCopyFiles.addCopyFile(.{ .path = pcre_include_path ++ "/src/pcre2_chartables.c.dist" }, "pcre2_chartables.c"),
+        .file = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/pcre2_chartables.c.dist"), "pcre2_chartables.c"),
         .flags = &.{
             "-DHAVE_CONFIG_H",
         },
     });
 
-    pcre.addIncludePath(.{ .path = b.pathFromRoot(pcre_include_path ++ "/src") });
+    pcre.addIncludePath(b.path(pcre_include_path ++ "/src"));
     pcre.addIncludePath(pcreCopyFiles.getDirectory());
 
     pcre.addCSourceFiles(.{
@@ -96,20 +96,20 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    pcre.installHeader(.{ .path = pcre_include_path ++ "/src/pcre2.h.generic" }, "pcre2.h");
+    pcre.installHeader(b.path(pcre_include_path ++ "/src/pcre2.h.generic"), "pcre2.h");
 
     const exe = b.addExecutable(.{
         .name = "hvrt",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     exe.linkLibrary(sqlite);
     exe.linkLibrary(pcre);
-    exe.addIncludePath(.{ .path = sqlite_include_path });
+    exe.addIncludePath(b.path(sqlite_include_path));
 
     // We use c_allocator from libc for allocator implementation, since it is
     // the fastest builtin allocator currently offered by zig.
@@ -146,14 +146,14 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     unit_tests.linkLibrary(sqlite);
     unit_tests.linkLibrary(pcre);
-    unit_tests.addIncludePath(.{ .path = sqlite_include_path });
+    unit_tests.addIncludePath(b.path(sqlite_include_path));
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 

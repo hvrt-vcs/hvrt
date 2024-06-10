@@ -124,25 +124,78 @@ test "IgnorePattern.parseIgnoreFile" {
     try std.testing.expectEqual(null, std.mem.indexOfScalar(u8, patterns[3].pattern, '/'));
 }
 
+pub const FileIgnorer = struct {
+    context: *anyopaque,
+    vtable: VTable,
+
+    pub const VTable = struct {
+        put_patterns: *const fn (context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) anyerror!void,
+        remove_patterns: *const fn (context: *anyopaque, relpath: []const u8) void,
+        is_ignored: *const fn (context: *anyopaque, relpath: []const u8) bool,
+    };
+
+    pub inline fn put_patterns(self: FileIgnorer, relpath: []const u8, patterns: []IgnorePattern) !void {
+        return self.vtable.put_patterns(self.context, relpath, patterns);
+    }
+
+    pub inline fn remove_patterns(self: FileIgnorer, relpath: []const u8) void {
+        self.vtable.remove_patterns(self.context, relpath);
+    }
+
+    pub inline fn is_ignored(self: FileIgnorer, relpath: []const u8) bool {
+        return self.vtable.is_ignored(self.context, relpath);
+    }
+};
+
+fn dummy_put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) !void {
+    _ = context; // autofix
+    _ = relpath; // autofix
+    _ = patterns; // autofix
+}
+
+fn dummy_remove_patterns(context: *anyopaque, relpath: []const u8) void {
+    _ = context; // autofix
+    _ = relpath; // autofix
+}
+
+fn dummy_is_ignored(context: *anyopaque, relpath: []const u8) bool {
+    _ = context; // autofix
+    _ = relpath; // autofix
+    return false;
+}
+
+pub const dummy_ignorer: FileIgnorer = .{
+    .context = undefined,
+    .vtable = .{
+        .put_patterns = dummy_put_patterns,
+        .remove_patterns = dummy_remove_patterns,
+        .is_ignored = dummy_is_ignored,
+    },
+};
+
 pub fn DirWalker(
     comptime Context: type,
     comptime visit: fn (context: Context, repo_root: std.fs.Dir, relpath: []const u8) void,
     comptime visit_ignored: fn (context: Context, repo_root: std.fs.Dir, relpath: []const u8) void,
-    comptime is_ignored: fn (context: Context, repo_root: std.fs.Dir, relpath: []const u8) bool,
 ) type {
     return struct {
         pub const Self = @This();
+
         context: Context,
+        file_ignorer: FileIgnorer,
         repo_root: std.fs.Dir,
 
         const visit_fn = visit;
         const ignore_fn = visit_ignored;
-        const is_ignored_fn = is_ignored;
 
         pub const IgnoreCache = std.StringHashMap([]IgnorePattern);
 
-        pub fn init(repo_root: std.fs.Dir, context: Context) Self {
-            return .{ .repo_root = repo_root, .context = context };
+        pub fn init(repo_root: std.fs.Dir, context: Context, file_ignorer: FileIgnorer) Self {
+            return .{
+                .context = context,
+                .file_ignorer = file_ignorer,
+                .repo_root = repo_root,
+            };
         }
 
         pub fn walkDir(self: *Self, gpa: std.mem.Allocator, repo_root: std.fs.Dir) !void {
@@ -194,12 +247,20 @@ pub fn DirWalker(
             try ignore_cache.put(relative, ignore_patterns);
             defer _ = ignore_cache.remove(relative);
 
+            try self.file_ignorer.put_patterns(relative, ignore_patterns);
+            defer self.file_ignorer.remove_patterns(relative);
+
             var iter = dir.iterate();
             while (try iter.next()) |entry| {
                 std.debug.print("Entry info: name: {s}, kind: {}\n", .{ entry.name, entry.kind });
 
                 const child_path = try std.fs.path.join(gpa, &[_][]const u8{ full_path, entry.name });
                 defer gpa.free(child_path);
+
+                const relative_child_path = try std.fs.path.relative(gpa, repo_root, child_path);
+                defer gpa.free(relative_child_path);
+
+                if (self.file_ignorer.is_ignored(relative_child_path)) continue;
 
                 switch (entry.kind) {
                     .directory => {
@@ -221,13 +282,6 @@ fn dummy(context: *anyopaque, repo_root: std.fs.Dir, relpath: []const u8) void {
     _ = relpath; // autofix
 }
 
-fn dummy_is_ignored(context: *anyopaque, repo_root: std.fs.Dir, relpath: []const u8) bool {
-    _ = context; // autofix
-    _ = repo_root; // autofix
-    _ = relpath; // autofix
-    return false;
-}
-
 test "DirWalker.walkDir" {
     const alloc = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{
@@ -245,9 +299,9 @@ test "DirWalker.walkDir" {
         // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
     }
 
-    const ctype = DirWalker(*anyopaque, dummy, dummy, dummy_is_ignored);
+    const ctype = DirWalker(*anyopaque, dummy, dummy);
 
-    var dw = ctype.init(tmp_dir.dir, undefined);
+    var dw = ctype.init(tmp_dir.dir, undefined, dummy_ignorer);
     _ = &dw; // autofix
 
     try dw.walkDir(alloc, tmp_dir.dir);

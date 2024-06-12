@@ -2,10 +2,11 @@ const std = @import("std");
 const fspath = std.fs.path;
 const Dir = std.fs.Dir;
 
-const sqlite = @import("sqlite.zig");
-const sql = @import("sql.zig");
 const core_ds = @import("ds/core.zig");
 const dir_walker = @import("dir_walker.zig");
+const pcre = @import("pcre.zig");
+const sql = @import("sql.zig");
+const sqlite = @import("sqlite.zig");
 
 const Hasher = core_ds.Hasher;
 
@@ -195,4 +196,12 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             }
         }
     }
+}
+
+test {
+    _ = core_ds;
+    _ = dir_walker;
+    _ = pcre;
+    _ = sql;
+    _ = sqlite;
 }

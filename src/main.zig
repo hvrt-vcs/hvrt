@@ -242,7 +242,7 @@ test "invoke with commit sub-command" {
     try setup_commit_test(&tmp);
     const after_stat = try tmp.dir.statFile(".hvrt/repo.hvrt");
 
-    std.debug.print("\nbefore_stat.size: {}\nafter_stat.size: {}\n\n", .{ before_stat.size, after_stat.size });
+    std.log.debug("\nbefore_stat.size: {}\nafter_stat.size: {}\n\n", .{ before_stat.size, after_stat.size });
     try std.testing.expect(before_stat.size < after_stat.size);
 }
 

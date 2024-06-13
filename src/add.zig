@@ -10,6 +10,8 @@ const sqlite = @import("sqlite.zig");
 
 const Hasher = core_ds.Hasher;
 
+const log = std.log.scoped(.add);
+
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
 
@@ -37,14 +39,14 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
     // so. We will probably need to implement our own walker based on or
     // similar to the stdlib code.
     while (try repo_walker.next()) |entry| {
-        std.debug.print("\n\n@typeName(@TypeOf(entry)): {s}\n\n", .{@typeName(@TypeOf(entry))});
-        std.debug.print("\n\nkind: {s}, name: {s}\n\n", .{ @tagName(entry.kind), entry.path });
+        log.debug("\n\n@typeName(@TypeOf(entry)): {s}\n\n", .{@typeName(@TypeOf(entry))});
+        log.debug("\n\nkind: {s}, name: {s}\n\n", .{ @tagName(entry.kind), entry.path });
     }
 
     const db_path_parts = [_][]const u8{ abs_repo_path, hvrt_dirname, work_tree_db_name };
     const db_path = try fspath.joinZ(alloc, &db_path_parts);
     defer alloc.free(db_path);
-    std.log.debug("what is db_path: {s}\n", .{db_path});
+    log.debug("what is db_path: {s}\n", .{db_path});
 
     // Should fail if either the directory or db files do not exist
     const db = try sqlite.DataBase.open(db_path);
@@ -89,7 +91,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             }
 
             if (std.fs.path.isAbsolute(file)) {
-                std.log.err("File to add to stage must be relative path: {s}", .{file});
+                log.err("File to add to stage must be relative path: {s}", .{file});
                 return error.AbsoluteFilePath;
             }
 
@@ -101,8 +103,8 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             const abs_path = try std.fs.path.joinZ(alloc, &file_path_parts);
             defer alloc.free(abs_path);
 
-            std.log.debug("What is the file name? {s}\n", .{file});
-            std.log.debug("What is the absolute path? {s}\n", .{abs_path});
+            log.debug("What is the file name? {s}\n", .{file});
+            log.debug("What is the absolute path? {s}\n", .{abs_path});
 
             var f_in = try std.fs.openFileAbsolute(abs_path, .{ .lock = .shared });
             defer f_in.close();
@@ -120,7 +122,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             var hexz_buf: Hasher.Buffer = undefined;
             const file_digest_hexz = hasher.hexFinal(&hexz_buf);
 
-            std.log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_algo, file_size });
+            log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_algo, file_size });
             try blob_stmt.bind(1, false, file_digest_hexz);
             try blob_stmt.bind(2, false, hash_algo);
             try blob_stmt.bind(3, false, @as(i64, @intCast(file_size)));
@@ -128,7 +130,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
             try blob_stmt.reset();
             try blob_stmt.clear_bindings();
 
-            std.log.debug("file_path: {s}\nfile_hash: {s}\nfile_hash_alg: {s}\nfile_size: {any}\n", .{ slashed_file, file_digest_hexz, hash_algo, file_size });
+            log.debug("file_path: {s}\nfile_hash: {s}\nfile_hash_alg: {s}\nfile_size: {any}\n", .{ slashed_file, file_digest_hexz, hash_algo, file_size });
             try file_stmt.bind(1, false, slashed_file);
             try file_stmt.bind(2, false, file_digest_hexz);
             try file_stmt.bind(3, false, hash_algo);
@@ -166,11 +168,10 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
 
                 const data: []const u8 = chunk_buf_stream.getWritten();
 
-                std.log.debug("What is the contents of {s}? '{s}'\n", .{ file, chunk_buf_stream.getWritten() });
-                std.log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hexz });
+                log.debug("What is the contents of {s}? '{s}'\n", .{ file, chunk_buf_stream.getWritten() });
+                log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hexz });
 
-                std.log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hexz, hash_algo, cur_pos, end_pos, compression_algo });
-                // std.debug.print("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hexz, hash_algo, cur_pos, end_pos, compression_algo });
+                log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hexz, hash_algo, cur_pos, end_pos, compression_algo });
 
                 // INSERT INTO "chunks"
                 try chunk_stmt.bind(1, false, chunk_digest_hexz); // chunk_hash

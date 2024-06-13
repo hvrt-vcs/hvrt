@@ -12,6 +12,8 @@ const HashKey = core_ds.HashKey;
 const CommitParent = core_ds.CommitParent;
 const ParentType = core_ds.ParentType;
 
+const log = std.log.scoped(.commit);
+
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
@@ -31,7 +33,7 @@ const fba_size = 1024 * 64;
 /// It is the responsibility of the caller of `commit` to deallocate and
 /// deinit alloc, repo_path, and files, if necessary.
 pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]const u8) !void {
-    std.log.debug("what is the message: {s}\n", .{message});
+    log.debug("what is the message: {s}\n", .{message});
 
     // We allocate lots of short lived memory for copying between databases.
     // Instead of using manually manipulated stack allocated fixed size
@@ -49,7 +51,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     const wt_db_path_parts = [_][]const u8{ abs_repo_path, hvrt_dirname, work_tree_db_name };
     const wt_db_path = try fspath.joinZ(alloc, &wt_db_path_parts);
     defer alloc.free(wt_db_path);
-    std.log.debug("what is wt_db_path: {s}\n", .{wt_db_path});
+    log.debug("what is wt_db_path: {s}\n", .{wt_db_path});
 
     // Should fail if either the directory or db files do not exist
     const wt_db = try sqlite.DataBase.open(wt_db_path);
@@ -58,7 +60,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     const repo_db_path_parts = [_][]const u8{ abs_repo_path, hvrt_dirname, repo_db_name };
     const repo_db_path = try fspath.joinZ(alloc, &repo_db_path_parts);
     defer alloc.free(repo_db_path);
-    std.log.debug("what is repo_db_path: {s}\n", .{repo_db_path});
+    log.debug("what is repo_db_path: {s}\n", .{repo_db_path});
 
     // Should fail if either the directory or db files do not exist
     const repo_db = try sqlite.DataBase.open(repo_db_path);
@@ -110,11 +112,11 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             wt_tx.rollback() catch unreachable;
         }
 
-        std.debug.print("\nIterating over blob entries in work tree.\n", .{});
+        log.debug("\nIterating over blob entries in work tree.\n", .{});
         var i: u64 = 0;
         while (try read_blobs_stmt.step()) |rc| : (i += 1) {
             if (rc != sqlite.ResultCode.SQLITE_ROW) {
-                std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
+                log.debug("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;
             }
 
@@ -128,7 +130,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
 
             const byte_length = read_blobs_stmt.column_i64(2);
 
-            std.debug.print("blob_entry: {}, hash: {s}, hash_algo: {s}, byte_length: {}\n", .{ i, hash_algo, hash, byte_length });
+            log.debug("blob_entry: {}, hash: {s}, hash_algo: {s}, byte_length: {}\n", .{ i, hash_algo, hash, byte_length });
 
             try blob_stmt.bind(1, false, hash);
             try blob_stmt.bind(2, false, hash_algo);
@@ -141,7 +143,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
         i = 0;
         while (try read_chunks_stmt.step()) |rc| : (i += 1) {
             if (rc != sqlite.ResultCode.SQLITE_ROW) {
-                std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
+                log.debug("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;
             }
 
@@ -161,7 +163,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             const data_blob = try buf_alloc.dupe(u8, data_blob_tmp);
             defer buf_alloc.free(data_blob);
 
-            std.debug.print("chunk_entry: {}, hash_algo: {s}, hash: {s}, compression_algo: {s}, data_blob.len: {}\n", .{ i, hash_algo, hash, compression_algo, data_blob.len });
+            log.debug("chunk_entry: {}, hash_algo: {s}, hash: {s}, compression_algo: {s}, data_blob.len: {}\n", .{ i, hash_algo, hash, compression_algo, data_blob.len });
 
             try chunk_stmt.bind(1, false, hash);
             try chunk_stmt.bind(2, false, hash_algo);
@@ -175,7 +177,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
         i = 0;
         while (try read_blob_chunks_stmt.step()) |rc| : (i += 1) {
             if (rc != sqlite.ResultCode.SQLITE_ROW) {
-                std.debug.print("What is the result code? {s}\n", .{@tagName(rc)});
+                log.debug("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;
             }
 
@@ -210,7 +212,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             try blob_chunk_stmt.reset();
             try blob_chunk_stmt.clear_bindings();
 
-            std.debug.print(
+            log.debug(
                 \\blob_chunk_entry: {}
                 \\    blob_hash_algo: {s}
                 \\    blob_hash: {s}

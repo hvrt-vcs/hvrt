@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const log = std.log.scoped(.dir_walker);
+
 pub const IgnorePattern = struct {
     ignore_root: []const u8,
     original_pattern: []const u8,
@@ -201,7 +203,7 @@ pub fn DirWalker(
         pub fn walkDir(self: *Self, gpa: std.mem.Allocator, repo_root: std.fs.Dir) !void {
             var fba_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
             const repo_root_string = try repo_root.realpath(".", &fba_buf);
-            std.debug.print("What is the repo root? {s}\n", .{repo_root_string});
+            log.debug("What is the repo root? {s}\n", .{repo_root_string});
 
             var ignore_cache = IgnoreCache.init(gpa);
             defer ignore_cache.deinit();
@@ -210,16 +212,16 @@ pub fn DirWalker(
         }
 
         fn walkDirInner(self: *Self, gpa: std.mem.Allocator, ignore_cache: *IgnoreCache, repo_root: []const u8, full_path: []const u8, dir: std.fs.Dir) !void {
-            std.debug.print("What is current path? {s}\n", .{full_path});
+            log.debug("What is current path? {s}\n", .{full_path});
             const basename = std.fs.path.basename(full_path);
-            std.debug.print("What is current path basename? {s}\n", .{basename});
+            log.debug("What is current path basename? {s}\n", .{basename});
 
             const relative = try std.fs.path.relative(gpa, repo_root, full_path);
             defer gpa.free(relative);
             if (relative.len == 0) {
-                std.debug.print("Current path is the same as repo root.\n", .{});
+                log.debug("Current path is the same as repo root.\n", .{});
             } else {
-                std.debug.print("What is current path relative to repo root? {s}\n", .{relative});
+                log.debug("What is current path relative to repo root? {s}\n", .{relative});
             }
 
             // TODO: add code to parse and utilize .hvrtignore file patterns and skip
@@ -252,7 +254,7 @@ pub fn DirWalker(
 
             var iter = dir.iterate();
             while (try iter.next()) |entry| {
-                std.debug.print("Entry info: name: {s}, kind: {}\n", .{ entry.name, entry.kind });
+                log.debug("Entry info: name: {s}, kind: {}\n", .{ entry.name, entry.kind });
 
                 const child_path = try std.fs.path.join(gpa, &[_][]const u8{ full_path, entry.name });
                 defer gpa.free(child_path);
@@ -295,8 +297,8 @@ test "DirWalker.walkDir" {
 
     for (child_dirs) |dir_name| {
         try tmp_dir.dir.makePath(dir_name);
-        std.debug.print("What is the child dir? {s}\n", .{dir_name});
-        // std.debug.print("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
+        log.debug("What is the child dir? {s}\n", .{dir_name});
+        log.debug("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
     }
 
     const ctype = DirWalker(*anyopaque, dummy, dummy);

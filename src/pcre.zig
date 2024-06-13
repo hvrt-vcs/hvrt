@@ -2,6 +2,8 @@ const std = @import("std");
 const c = @import("c.zig");
 const unicode = std.unicode;
 
+const log = std.log.scoped(.pcre);
+
 /// A basic wrapper around raw pcre2 API. See docs here:
 /// https://www.pcre.org/current/doc/html/pcre2api.html
 pub const Matcher = struct {
@@ -32,7 +34,7 @@ pub const Matcher = struct {
         } else {
             var error_msg_buf: [1024 * 4]u8 = undefined;
             const error_msg_final = getErrorMessage(errorcode, &error_msg_buf);
-            std.debug.print(
+            log.debug(
                 "Regex '{s}' failed to compile with errorcode {} at offset {} with message '{s}'\n",
                 .{ regex, errorcode, erroroffset, error_msg_final },
             );
@@ -52,27 +54,30 @@ pub const Matcher = struct {
     }
 
     pub fn convertGlob(alloc: std.mem.Allocator, glob: []const u8) ![:0]u8 {
-        const options: u32 = c.PCRE2_CONVERT_GLOB;
+        const options: u32 = 0 | c.PCRE2_CONVERT_GLOB;
+        var output_opt: ?[*:0]u8 = null;
+        var output_size: usize = 0;
         const context: ?*c.pcre2_convert_context_8 = null;
-        var output_opt: ?[*:0]u8 = undefined;
-        var output_size_in_code_points: usize = 0;
 
-        const result = c.pcre2_pattern_convert_8(glob.ptr, glob.len, options, &output_opt, &output_size_in_code_points, context);
+        const rc = c.pcre2_pattern_convert_8(
+            glob.ptr,
+            glob.len,
+            options,
+            &output_opt,
+            &output_size,
+            context,
+        );
         defer c.pcre2_converted_pattern_free_8(output_opt);
 
-        if (result != 0) {
-            std.debug.print("Something went wrong with glob conversion", .{});
+        if (rc != 0) {
+            var error_msg_buf: [1024 * 4]u8 = undefined;
+            const error_msg_final = getErrorMessage(rc, &error_msg_buf);
+            log.debug("Something went wrong with glob conversion: {s}\n", .{error_msg_final});
+            return error.Pcre2Error;
         }
 
         if (output_opt) |output| {
-            // Because the output size is in codepoints, and we're using utf8,
-            // it is simpler to just looking for the terminating `0` sentinel
-            // and copy from there.
-            const size = std.mem.len(output);
-
-            // Once we create a context with the passed in allocator, we can
-            // just directly return a slice of this returned cstring.
-            const output_slice = output[0..size];
+            const output_slice = output[0..output_size];
             return try alloc.dupeZ(u8, output_slice);
         } else {
             return error.Pcre2Error;
@@ -80,7 +85,7 @@ pub const Matcher = struct {
     }
 
     /// Docs: https://www.pcre.org/current/doc/html/pcre2api.html#SEC39
-    pub fn dfaMatch(self: Matcher, string: []const u8, start_offset: ?usize) bool {
+    pub fn dfaMatchBool(self: Matcher, string: []const u8, start_offset: ?usize) bool {
         const options: u32 = 0 | c.PCRE2_DFA_SHORTEST;
         const context: ?*c.pcre2_real_match_context_8 = null;
 
@@ -105,7 +110,7 @@ pub const Matcher = struct {
             var buffer: [1024 * 4]u8 = undefined;
             const err_msg = getErrorMessage(rc, &buffer);
 
-            std.debug.print(
+            log.debug(
                 "failed to match {s} with errorcode {} and message '{s}'\n",
                 .{ string, rc, err_msg },
             );
@@ -115,15 +120,42 @@ pub const Matcher = struct {
     }
 };
 
-test "Matcher" {
+test "Matcher.dfaMatch" {
     _ = Matcher;
 
     const matcher = try Matcher.compile(".*some literal\\w.*");
     defer matcher.free();
 
-    const matches1 = matcher.dfaMatch("blah blah", null);
+    const matches1 = matcher.dfaMatchBool("blah blah", null);
     try std.testing.expect(!matches1);
 
-    const matches2 = matcher.dfaMatch("some text then some literals, man", null);
+    const matches2 = matcher.dfaMatchBool("some text then some literals, man", null);
     try std.testing.expect(matches2);
+}
+
+test "Matcher.convertGlob" {
+    _ = Matcher;
+
+    const alloc = std.testing.allocator;
+
+    const glob = "*.zig";
+    const converted = try Matcher.convertGlob(alloc, glob);
+    defer alloc.free(converted);
+
+    log.debug(
+        "\n\nWhat is the converted pattern? \"{s}\" -> \"{s}\"\n\n",
+        .{ glob, converted },
+    );
+
+    const matcher = try Matcher.compile(converted);
+    defer matcher.free();
+
+    const matches1 = matcher.dfaMatchBool("blah blah", null);
+    try std.testing.expect(!matches1);
+
+    const matches2 = matcher.dfaMatchBool("src/add.zig", null);
+    try std.testing.expect(!matches2);
+
+    const matches3 = matcher.dfaMatchBool("add.zig", null);
+    try std.testing.expect(matches3);
 }

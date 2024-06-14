@@ -4,6 +4,11 @@ const unicode = std.unicode;
 
 const log = std.log.scoped(.pcre);
 
+pub const Error = error{
+    InvalidUtf8,
+    Pcre2Error,
+};
+
 /// A basic wrapper around raw pcre2 API. See docs here:
 /// https://www.pcre.org/current/doc/html/pcre2api.html
 pub const Matcher = struct {
@@ -12,7 +17,7 @@ pub const Matcher = struct {
     matcher: *c.pcre2_code_8,
 
     /// Must call `free` on returned object, or memory will be leaked.
-    pub fn compile(regex: []const u8) !Matcher {
+    pub fn compile(regex: []const u8) Error!Matcher {
         if (!unicode.utf8ValidateSlice(regex)) return error.InvalidUtf8;
 
         const options: u32 = 0;
@@ -32,7 +37,7 @@ pub const Matcher = struct {
         if (matcher_opt) |matcher| {
             return .{ .matcher = matcher };
         } else {
-            var error_msg_buf: [1024 * 4]u8 = undefined;
+            var error_msg_buf: [128]u8 = undefined;
             const error_msg_final = getErrorMessage(errorcode, &error_msg_buf);
             log.debug(
                 "Regex '{s}' failed to compile with errorcode {} at offset {} with message '{s}'\n",
@@ -48,9 +53,14 @@ pub const Matcher = struct {
 
     fn getErrorMessage(error_code: c_int, buffer: []u8) []u8 {
         const error_msg_size = c.pcre2_get_error_message_8(error_code, buffer.ptr, buffer.len);
-        const msg_size_cast = @as(usize, @intCast(error_msg_size));
-        const error_msg_final = buffer[0..msg_size_cast];
-        return error_msg_final;
+        if (error_msg_size < 0) {
+            // Either the given code is not an error, or the given buffer is too small
+            return &.{};
+        } else {
+            const msg_size_cast = @as(usize, @intCast(error_msg_size));
+            const error_msg_final = buffer[0..msg_size_cast :0];
+            return error_msg_final;
+        }
     }
 
     pub fn convertGlob(alloc: std.mem.Allocator, glob: []const u8) ![:0]u8 {
@@ -70,7 +80,7 @@ pub const Matcher = struct {
         defer c.pcre2_converted_pattern_free_8(output_opt);
 
         if (rc != 0) {
-            var error_msg_buf: [1024 * 4]u8 = undefined;
+            var error_msg_buf: [128]u8 = undefined;
             const error_msg_final = getErrorMessage(rc, &error_msg_buf);
             log.debug("Something went wrong with glob conversion: {s}\n", .{error_msg_final});
             return error.Pcre2Error;
@@ -107,7 +117,7 @@ pub const Matcher = struct {
         );
 
         if (rc < 0) {
-            var buffer: [1024 * 4]u8 = undefined;
+            var buffer: [128]u8 = undefined;
             const err_msg = getErrorMessage(rc, &buffer);
 
             log.debug(

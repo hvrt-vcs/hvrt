@@ -199,7 +199,70 @@ pub fn add(alloc: std.mem.Allocator, repo_path: [:0]const u8, files: []const [:0
     }
 }
 
+pub const FileAdder = struct {
+    repo_root: std.fs.Dir,
+    wt_db: sqlite.DataBase,
+    file_stmt: sqlite.Statement,
+    blob_stmt: sqlite.Statement,
+    blob_chunk_stmt: sqlite.Statement,
+    chunk_stmt: sqlite.Statement,
+
+    pub fn deinit(self: *FileAdder) void {
+        self.chunk_stmt.finalize() catch unreachable;
+        self.blob_chunk_stmt.finalize() catch unreachable;
+        self.blob_stmt.finalize() catch unreachable;
+        self.file_stmt.finalize() catch unreachable;
+        self.wt_db.close() catch unreachable;
+        self.repo_root.close();
+    }
+
+    pub fn init(repo_path: [:0]const u8) !FileAdder {
+        var fba_buf: [std.fs.max_path_bytes * 2]u8 = undefined;
+        var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
+        const alloc = fba_state.allocator();
+
+        const abs_repo_path = try std.fs.realpathAlloc(alloc, repo_path);
+        defer alloc.free(abs_repo_path);
+
+        var repo_root = try std.fs.openDirAbsolute(
+            abs_repo_path,
+            .{ .access_sub_paths = true, .iterate = true, .no_follow = true },
+        );
+        errdefer repo_root.close();
+
+        const db_path_parts = [_][]const u8{ abs_repo_path, hvrt_dirname, work_tree_db_name };
+        const db_path = try fspath.joinZ(alloc, &db_path_parts);
+        defer alloc.free(db_path);
+        log.debug("what is db_path: {s}\n", .{db_path});
+
+        // Should fail if either the directory or db files do not exist
+        const wt_db = try sqlite.DataBase.open(db_path);
+        errdefer wt_db.close() catch unreachable;
+
+        const wt_sql = sql.sqlite.work_tree orelse unreachable;
+
+        const file_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.add.file);
+        errdefer file_stmt.finalize() catch unreachable;
+        const blob_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.add.blob);
+        errdefer blob_stmt.finalize() catch unreachable;
+        const blob_chunk_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.add.blob_chunk);
+        errdefer blob_chunk_stmt.finalize() catch unreachable;
+        const chunk_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.add.chunk);
+        errdefer chunk_stmt.finalize() catch unreachable;
+
+        return .{
+            .repo_root = repo_root,
+            .wt_db = wt_db,
+            .file_stmt = file_stmt,
+            .blob_stmt = blob_stmt,
+            .blob_chunk_stmt = blob_chunk_stmt,
+            .chunk_stmt = chunk_stmt,
+        };
+    }
+};
+
 test {
+    _ = FileAdder;
     _ = core_ds;
     _ = dir_walker;
     _ = pcre;

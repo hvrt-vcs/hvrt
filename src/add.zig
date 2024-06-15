@@ -322,7 +322,7 @@ pub const FileAdder = struct {
         try self.blob_stmt.clear_bindings();
         try self.blob_stmt.bind_text(1, false, file_digest_hexz);
         try self.blob_stmt.bind_text(2, false, hash_algo);
-        try self.blob_stmt.bind(3, false, @as(i64, @intCast(file_size)));
+        try self.blob_stmt.bind_int(3, @intCast(file_size));
         try self.blob_stmt.auto_step();
         try self.blob_stmt.reset();
         try self.blob_stmt.clear_bindings();
@@ -333,7 +333,7 @@ pub const FileAdder = struct {
         try self.file_stmt.bind_text(1, false, slashed_file);
         try self.file_stmt.bind_text(2, false, file_digest_hexz);
         try self.file_stmt.bind_text(3, false, hash_algo);
-        try self.file_stmt.bind(4, false, @as(i64, @intCast(file_size)));
+        try self.file_stmt.bind_int(4, @intCast(file_size));
         try self.file_stmt.auto_step();
         try self.file_stmt.reset();
         try self.file_stmt.clear_bindings();
@@ -390,8 +390,8 @@ pub const FileAdder = struct {
             try self.blob_chunk_stmt.bind_text(2, false, hash_algo); // blob_hash_algo
             try self.blob_chunk_stmt.bind_text(3, false, chunk_digest_hexz); // chunk_hash
             try self.blob_chunk_stmt.bind_text(4, false, chunk_hash_algo); // chunk_hash_algo
-            try self.blob_chunk_stmt.bind(5, false, @as(i64, @intCast(cur_pos))); // start_byte
-            try self.blob_chunk_stmt.bind(6, false, @as(i64, @intCast(end_pos))); // end_byte
+            try self.blob_chunk_stmt.bind_int(5, @intCast(cur_pos)); // start_byte
+            try self.blob_chunk_stmt.bind_int(6, @intCast(end_pos)); // end_byte
             try self.blob_chunk_stmt.auto_step();
             try self.blob_chunk_stmt.reset();
             try self.blob_chunk_stmt.clear_bindings();

@@ -115,7 +115,7 @@ pub const Statement = struct {
         try ResultCode.fromInt(rc).check(stmt.db);
     }
 
-    pub fn bind_int(stmt: Statement, index: u16, value: anytype) !void {
+    pub fn bind_int(stmt: Statement, index: u16, value: i64) !void {
         const rc = c.sqlite3_bind_int64(stmt.stmt, index, value);
         try ResultCode.fromInt(rc).check(stmt.db);
     }

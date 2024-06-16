@@ -24,6 +24,8 @@ const chunk_size = 1024 * 4;
 /// deinit alloc, repo_path, and files, if necessary.
 pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []const u8) !void {
     var fa = try FileAdder.init(repo_path);
+    defer fa.deinit();
+
     try fa.addFiles(alloc, files);
 }
 
@@ -37,11 +39,11 @@ pub const FileAdder = struct {
     tx_opt: ?sqlite.Transaction = null,
 
     pub fn deinit(self: *FileAdder) void {
-        if (self.tx_opt) |tx| tx.commit() catch unreachable;
         self.chunk_stmt.finalize() catch unreachable;
         self.blob_chunk_stmt.finalize() catch unreachable;
         self.blob_stmt.finalize() catch unreachable;
         self.file_stmt.finalize() catch unreachable;
+        if (self.tx_opt) |tx| tx.commit() catch unreachable;
         self.wt_db.close() catch unreachable;
         self.repo_root.close();
     }

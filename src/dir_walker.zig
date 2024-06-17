@@ -177,8 +177,7 @@ pub const dummy_ignorer: FileIgnorer = .{
 
 pub fn DirWalker(
     comptime Context: type,
-    comptime visit: fn (context: Context, repo_root: std.fs.Dir, relpath: []const u8) void,
-    comptime visit_ignored: fn (context: Context, repo_root: std.fs.Dir, relpath: []const u8) void,
+    comptime visit_fn: fn (context: Context, relpath: []const u8) void,
 ) type {
     return struct {
         pub const Self = @This();
@@ -186,9 +185,6 @@ pub fn DirWalker(
         context: Context,
         file_ignorer: FileIgnorer,
         repo_root: std.fs.Dir,
-
-        const visit_fn = visit;
-        const ignore_fn = visit_ignored;
 
         pub const IgnoreCache = std.StringHashMap([]IgnorePattern);
 
@@ -270,17 +266,15 @@ pub fn DirWalker(
                         defer child_dir.close();
                         try self.walkDirInner(gpa, ignore_cache, repo_root, child_path, child_dir);
                     },
-                    // Ignore all other types for now
-                    else => {},
+                    else => visit_fn(self.context, relative_child_path),
                 }
             }
         }
     };
 }
 
-fn dummy(context: *anyopaque, repo_root: std.fs.Dir, relpath: []const u8) void {
+fn dummy(context: *anyopaque, relpath: []const u8) void {
     _ = context; // autofix
-    _ = repo_root; // autofix
     _ = relpath; // autofix
 }
 
@@ -301,7 +295,7 @@ test "DirWalker.walkDir" {
         log.debug("What is the child dir type? {s}\n", .{@typeName(@TypeOf(dir_name))});
     }
 
-    const ctype = DirWalker(*anyopaque, dummy, dummy);
+    const ctype = DirWalker(*anyopaque, dummy);
 
     var dw = ctype.init(tmp_dir.dir, undefined, dummy_ignorer);
     _ = &dw; // autofix

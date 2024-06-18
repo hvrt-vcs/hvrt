@@ -29,6 +29,11 @@ pub fn RefCounted(comptime T: type) type {
 
         tagged_ref_ptr: ?*TaggedData,
 
+        /// If `initial_value` is `null` , the initial value will just be
+        /// `undefined`. The only place this is an issue is when the type `T`
+        /// is an optional type; in that case, the value will need to be
+        /// explicitly set after init using a weakRef pointer.
+        ///
         /// The `destructor` function is an optional function to be called on
         /// the referenced value immediately before deallocating the memory for
         /// it. If `null` is provided, then no function is called.

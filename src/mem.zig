@@ -1,6 +1,22 @@
 const std = @import("std");
 
-pub fn RefCounted(comptime T: type, comptime destroy: ?fn (referent: T) void) type {
+/// Basic reference counted generic type.
+///
+/// Weak reference support is minimal: it just returns a raw pointer to the
+/// variable stored in the reference. Without care it is easy to shoot oneself
+/// in the foot with a weak reference by deferencing invalid memory. Take care
+/// when using a weak reference.
+///
+/// Currently requires that the instances be mutable for decrementing the
+/// count, since it will turn the internal pointer into `null` on the last
+/// reference object decremented. This makes it safer to deal with a refcount
+/// instance that may stay around after decrementing, since it will just return
+/// null optionals for everything requested. However, it means that this cannot
+/// be used in a context that is constant.
+///
+/// Class is roughly inspired/based on the code found here:
+/// https://github.com/ziglang/zig/issues/453#issuecomment-328309269
+pub fn RefCounted(comptime T: type) type {
     return struct {
         pub const Self = @This();
 
@@ -11,18 +27,12 @@ pub fn RefCounted(comptime T: type, comptime destroy: ?fn (referent: T) void) ty
             ref_count_ptr: *usize,
         };
 
-        fn dummy_destroy(referent: T) void {
-            _ = referent;
-        }
-
-        const destroy_fn = destroy orelse dummy_destroy;
-
         tagged_ref_ptr: ?*TaggedData,
 
         /// The `destructor` function is an optional function to be called on
         /// the referenced value immediately before deallocating the memory for
         /// it. If `null` is provided, then no function is called.
-        pub fn init(alloc: std.mem.Allocator, destructor: ?*const fn (referent: T) void) !Self {
+        pub fn initRef(alloc: std.mem.Allocator, initial_value: ?T, destructor: ?*const fn (referent: T) void) !Self {
             const ref_count_ptr = try alloc.create(usize);
             errdefer alloc.destroy(ref_count_ptr);
 
@@ -33,7 +43,7 @@ pub fn RefCounted(comptime T: type, comptime destroy: ?fn (referent: T) void) ty
 
             tagged_data_ptr.* = .{
                 .allocator = alloc,
-                .data = undefined,
+                .data = initial_value orelse undefined,
                 .destructor_opt = destructor,
                 .ref_count_ptr = ref_count_ptr,
             };
@@ -43,7 +53,11 @@ pub fn RefCounted(comptime T: type, comptime destroy: ?fn (referent: T) void) ty
             };
         }
 
-        pub fn decRef(self: *Self) !void {
+        pub fn refCount(self: Self) usize {
+            return if (self.tagged_ref_ptr) |ref_ptr| ref_ptr.ref_count_ptr.* else 0;
+        }
+
+        pub fn decRef(self: *Self) void {
             if (self.tagged_ref_ptr) |ref_ptr| {
                 ref_ptr.ref_count_ptr.* -= 1;
                 if (ref_ptr.ref_count_ptr.* == 0) {
@@ -76,16 +90,29 @@ pub fn RefCounted(comptime T: type, comptime destroy: ?fn (referent: T) void) ty
         /// dereferencing a pointer to invalid memory if the caller is not
         /// careful with the pointer returned.
         pub fn weakRef(self: Self) ?*T {
-            if (self.tagged_ref_ptr) |ref_ptr| {
-                ref_ptr.ref_count_ptr.* += 1;
-                return &ref_ptr.data;
-            } else {
-                return null;
-            }
+            return if (self.tagged_ref_ptr) |ref_ptr| &ref_ptr.data else null;
         }
     };
 }
 
 test {
-    _ = RefCounted(usize, null);
+    const alloc = std.testing.allocator;
+    var usize_ref = try RefCounted(usize).initRef(alloc, 5, null);
+    defer usize_ref.decRef();
+
+    try std.testing.expectEqual(1, usize_ref.refCount());
+
+    const usize_ptr = usize_ref.weakRef() orelse unreachable;
+    try std.testing.expectEqual(5, usize_ptr.*);
+
+    usize_ptr.* += 1;
+
+    var usize_ref2 = usize_ref.strongRef() orelse unreachable;
+    defer usize_ref2.decRef();
+
+    const usize_ptr2 = usize_ref2.weakRef() orelse unreachable;
+    try std.testing.expectEqual(6, usize_ptr2.*);
+
+    try std.testing.expectEqual(2, usize_ref2.refCount());
+    try std.testing.expectEqual(usize_ref.refCount(), usize_ref2.refCount());
 }

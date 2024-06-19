@@ -21,15 +21,16 @@ const fifo_buffer_size = 1024 * 4;
 const chunk_size = 1024 * 4;
 
 /// It is the responsibility of the caller of `add` to deallocate and
-/// deinit alloc, repo_path, and files, if necessary.
+/// deinit `alloc`, `repo_path`, and `files`, if necessary.
 pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []const u8) !void {
-    var fa = try FileAdder.init(repo_path);
-    defer fa.deinit();
+    var file_adder = try FileAdder.init(alloc, repo_path);
+    defer file_adder.deinit();
 
-    try fa.addFiles(alloc, files);
+    try file_adder.addFiles(files);
 }
 
 pub const FileAdder = struct {
+    alloc: std.mem.Allocator,
     repo_root: std.fs.Dir,
     wt_db: sqlite.DataBase,
     file_stmt: sqlite.Statement,
@@ -48,11 +49,7 @@ pub const FileAdder = struct {
         self.repo_root.close();
     }
 
-    pub fn init(repo_path: []const u8) !FileAdder {
-        var fba_buf: [std.fs.max_path_bytes * 2]u8 = undefined;
-        var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
-        const alloc = fba_state.allocator();
-
+    pub fn init(alloc: std.mem.Allocator, repo_path: []const u8) !FileAdder {
         const abs_repo_path = try std.fs.realpathAlloc(alloc, repo_path);
         defer alloc.free(abs_repo_path);
 
@@ -83,6 +80,7 @@ pub const FileAdder = struct {
         errdefer chunk_stmt.finalize() catch unreachable;
 
         return .{
+            .alloc = alloc,
             .repo_root = repo_root,
             .wt_db = wt_db,
             .file_stmt = file_stmt,
@@ -92,44 +90,46 @@ pub const FileAdder = struct {
         };
     }
 
-    pub fn addFiles(self: *FileAdder, scratch: std.mem.Allocator, files: []const []const u8) !void {
-        const tx = try sqlite.Transaction.init(self.wt_db, "add_cmd");
-        errdefer tx.rollback() catch unreachable;
+    pub fn initTransaction(self: *FileAdder, name: ?[:0]const u8) !void {
+        self.tx_opt = try sqlite.Transaction.init(self.wt_db, name);
+    }
 
-        self.tx_opt = tx;
-        defer self.tx_opt = null;
+    pub fn commitTransaction(self: *FileAdder) !void {
+        if (self.tx_opt) |tx| try tx.commit();
+        self.tx_opt = null;
+    }
 
-        const chunk_buffer = try scratch.alloc(u8, chunk_size);
-        defer scratch.free(chunk_buffer);
+    pub fn rollbackTransaction(self: *FileAdder) !void {
+        if (self.tx_opt) |tx| try tx.rollback();
+        self.tx_opt = null;
+    }
 
-        const fifo_buf = try scratch.alloc(u8, fifo_buffer_size);
-        defer scratch.free(fifo_buf);
+    pub fn addFiles(self: *FileAdder, files: []const []const u8) !void {
+        try self.initTransaction("add_cmd");
+        errdefer self.rollbackTransaction() catch unreachable;
 
         for (files) |file| {
             self.addFile(file) catch |e| {
                 log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
-                log.warn("Ignoring error and moving to next file", .{});
                 continue;
             };
         }
 
-        try tx.commit();
+        try self.commitTransaction();
     }
 
-    pub fn addFile(self: *FileAdder, file: []const u8) !void {
+    pub fn addFile(self: *FileAdder, rel_path: []const u8) !void {
+        const alloc = self.alloc;
+
         const file_sp_opt: ?sqlite.Savepoint = if (self.tx_opt) |tx| tx.createSavepoint("add_single_file") catch null else null;
         errdefer if (file_sp_opt) |file_sp| file_sp.rollback() catch unreachable;
 
-        log.debug("What is the file name? {s}\n", .{file});
+        log.debug("What is the file name? {s}\n", .{rel_path});
 
-        if (std.fs.path.isAbsolute(file)) {
-            log.err("File to add to stage must be relative path: {s}", .{file});
+        if (std.fs.path.isAbsolute(rel_path)) {
+            log.err("File to add to stage must be relative path: {s}", .{rel_path});
             return error.AbsoluteFilePath;
         }
-
-        var fba_buf: [1024 * 64]u8 = undefined;
-        var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
-        const alloc = fba_state.allocator();
 
         const chunk_buffer = try alloc.alloc(u8, chunk_size);
         defer alloc.free(chunk_buffer);
@@ -140,13 +140,13 @@ pub const FileAdder = struct {
         var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
         var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
 
-        var f_in = try self.repo_root.openFile(file, .{ .lock = .shared });
+        var f_in = try self.repo_root.openFile(rel_path, .{ .lock = .shared });
         defer f_in.close();
 
         const f_stat = try f_in.stat();
         const file_size = f_stat.size;
 
-        const slashed_file = try alloc.dupeZ(u8, file);
+        const slashed_file = try alloc.dupeZ(u8, rel_path);
         defer alloc.free(slashed_file);
         std.mem.replaceScalar(u8, slashed_file, std.fs.path.sep_windows, std.fs.path.sep_posix);
 
@@ -208,8 +208,8 @@ pub const FileAdder = struct {
 
             const data: []const u8 = chunk_buf_stream.getWritten();
 
-            log.debug("What is the contents of {s}? '{s}'\n", .{ file, chunk_buf_stream.getWritten() });
-            log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ file, chunk_digest_hexz });
+            log.debug("What is the contents of {s}? '{s}'\n", .{ rel_path, chunk_buf_stream.getWritten() });
+            log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ rel_path, chunk_digest_hexz });
 
             log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hexz, hash_algo, cur_pos, end_pos, compression_algo });
 

@@ -196,15 +196,21 @@ pub fn DirWalker(
             };
         }
 
-        pub fn walkDir(self: *Self, gpa: std.mem.Allocator, repo_root: std.fs.Dir) !void {
+        pub fn walkDir(self: *Self, gpa: std.mem.Allocator, start_path: ?[]const u8) !void {
             var fba_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-            const repo_root_string = try repo_root.realpath(".", &fba_buf);
+            const repo_root_string = try self.repo_root.realpath(".", &fba_buf);
             log.debug("What is the repo root? {s}\n", .{repo_root_string});
 
             var ignore_cache = IgnoreCache.init(gpa);
             defer ignore_cache.deinit();
 
-            try self.walkDirInner(gpa, &ignore_cache, repo_root_string, repo_root_string, repo_root);
+            try self.walkDirInner(
+                gpa,
+                &ignore_cache,
+                repo_root_string,
+                start_path orelse repo_root_string,
+                self.repo_root,
+            );
         }
 
         fn walkDirInner(self: *Self, gpa: std.mem.Allocator, ignore_cache: *IgnoreCache, repo_root: []const u8, full_path: []const u8, dir: std.fs.Dir) !void {
@@ -300,5 +306,5 @@ test "DirWalker.walkDir" {
     var dw = ctype.init(tmp_dir.dir, undefined, dummy_ignorer);
     _ = &dw; // autofix
 
-    try dw.walkDir(alloc, tmp_dir.dir);
+    try dw.walkDir(alloc, null);
 }

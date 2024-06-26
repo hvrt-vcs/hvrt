@@ -149,35 +149,99 @@ pub const FileIgnorer = struct {
     }
 };
 
-fn dummy_put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) !void {
-    _ = context; // autofix
-    _ = relpath; // autofix
-    _ = patterns; // autofix
+/// A file ignorer that takes another file ignorer and inverts its result.
+///
+/// Thus, what was ignored in the child FileIgnorer is not ignored in the
+/// parent, and what was not ignored in the child is now ignored in the parent.
+pub const FileIgnorerInverter = struct {
+    file_ignorer: FileIgnorer,
+
+    pub fn fileIgnorer(self: *FileIgnorerInverter) FileIgnorer {
+        return .{
+            .context = @ptrCast(self),
+            .vtable = .{
+                .put_patterns = put_patterns,
+                .remove_patterns = remove_patterns,
+                .is_ignored = is_ignored,
+            },
+        };
+    }
+
+    pub fn put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) anyerror!void {
+        const self = @as(*FileIgnorerInverter, @ptrCast(context));
+        try self.file_ignorer.put_patterns(relpath, patterns);
+    }
+
+    pub fn remove_patterns(context: *anyopaque, relpath: []const u8) void {
+        const self = @as(*FileIgnorerInverter, @ptrCast(context));
+        self.file_ignorer.remove_patterns(relpath);
+    }
+
+    pub fn is_ignored(context: *anyopaque, relpath: []const u8) bool {
+        const self = @as(*FileIgnorerInverter, @ptrCast(context));
+        return !self.file_ignorer.is_ignored(relpath);
+    }
+};
+
+/// A FileIgnorer that chains multiple ignorers together.
+pub const ChainedFileIgnorer = struct {
+    file_ignorers: []FileIgnorer,
+
+    pub fn fileIgnorer(self: *ChainedFileIgnorer) FileIgnorer {
+        return .{
+            .context = @ptrCast(self),
+            .vtable = .{
+                .put_patterns = noop_put_patterns,
+                .remove_patterns = noop_remove_patterns,
+                .is_ignored = is_ignored,
+            },
+        };
+    }
+
+    pub fn is_ignored(context: *anyopaque, relpath: []const u8) bool {
+        const self = @as(*ChainedFileIgnorer, @ptrCast(context));
+        for (self.file_ignorers) |file_ignorer| {
+            if (file_ignorer.is_ignored(relpath)) return true;
+        } else return false;
+    }
+};
+
+test {
+    _ = FileIgnorerInverter;
+    _ = ChainedFileIgnorer;
 }
 
-fn dummy_remove_patterns(context: *anyopaque, relpath: []const u8) void {
-    _ = context; // autofix
-    _ = relpath; // autofix
+fn noop_put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) !void {
+    _ = context;
+    _ = relpath;
+    _ = patterns;
 }
 
-fn dummy_is_ignored(context: *anyopaque, relpath: []const u8) bool {
-    _ = context; // autofix
-    _ = relpath; // autofix
+fn noop_remove_patterns(context: *anyopaque, relpath: []const u8) void {
+    _ = context;
+    _ = relpath;
+}
+
+fn noop_is_ignored(context: *anyopaque, relpath: []const u8) bool {
+    _ = context;
+    _ = relpath;
     return false;
 }
 
-pub const dummy_ignorer: FileIgnorer = .{
+/// An ignorer instance that ignores putting and removing patterns and that
+/// never ignores any file paths.
+pub const noop_ignorer: FileIgnorer = .{
     .context = undefined,
     .vtable = .{
-        .put_patterns = dummy_put_patterns,
-        .remove_patterns = dummy_remove_patterns,
-        .is_ignored = dummy_is_ignored,
+        .put_patterns = noop_put_patterns,
+        .remove_patterns = noop_remove_patterns,
+        .is_ignored = noop_is_ignored,
     },
 };
 
 pub fn DirWalker(
     comptime Context: type,
-    comptime visit_fn: fn (context: Context, relpath: []const u8) void,
+    comptime visit: fn (context: Context, relpath: []const u8) void,
 ) type {
     return struct {
         pub const Self = @This();
@@ -185,6 +249,8 @@ pub fn DirWalker(
         context: Context,
         file_ignorer: FileIgnorer,
         repo_root: std.fs.Dir,
+
+        pub const visit_fn = visit;
 
         pub const IgnoreCache = std.StringHashMap([]IgnorePattern);
 
@@ -303,7 +369,7 @@ test "DirWalker.walkDir" {
 
     const ctype = DirWalker(*anyopaque, dummy);
 
-    var dw = ctype.init(tmp_dir.dir, undefined, dummy_ignorer);
+    var dw = ctype.init(tmp_dir.dir, undefined, noop_ignorer);
     _ = &dw; // autofix
 
     try dw.walkDir(alloc, null);

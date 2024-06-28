@@ -149,9 +149,9 @@ pub const FileIgnorer = struct {
     }
 };
 
-/// A file ignorer that takes another file ignorer and inverts its result.
+/// A `FileIgnorer` that takes another file ignorer and inverts its result.
 ///
-/// Thus, what was ignored in the child FileIgnorer is not ignored in the
+/// Thus, what was ignored in the child `FileIgnorer` is not ignored in the
 /// parent, and what was not ignored in the child is now ignored in the parent.
 pub const FileIgnorerInverter = struct {
     file_ignorer: FileIgnorer,
@@ -167,23 +167,26 @@ pub const FileIgnorerInverter = struct {
         };
     }
 
+    /// Straight pass through to the internal `file_ignorer`.
     pub fn put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) anyerror!void {
         const self = @as(*FileIgnorerInverter, @ptrCast(context));
         try self.file_ignorer.put_patterns(relpath, patterns);
     }
 
+    /// Straight pass through to the internal `file_ignorer`.
     pub fn remove_patterns(context: *anyopaque, relpath: []const u8) void {
         const self = @as(*FileIgnorerInverter, @ptrCast(context));
         self.file_ignorer.remove_patterns(relpath);
     }
 
+    /// Returns the opposite of what the internal `file_ignorer` returns.
     pub fn is_ignored(context: *anyopaque, relpath: []const u8) bool {
         const self = @as(*FileIgnorerInverter, @ptrCast(context));
         return !self.file_ignorer.is_ignored(relpath);
     }
 };
 
-/// A FileIgnorer that chains multiple ignorers together.
+/// A `FileIgnorer` that chains multiple ignorers together.
 pub const ChainedFileIgnorer = struct {
     file_ignorers: []FileIgnorer,
 
@@ -191,13 +194,33 @@ pub const ChainedFileIgnorer = struct {
         return .{
             .context = @ptrCast(self),
             .vtable = .{
-                .put_patterns = noop_put_patterns,
-                .remove_patterns = noop_remove_patterns,
+                .put_patterns = put_patterns,
+                .remove_patterns = remove_patterns,
                 .is_ignored = is_ignored,
             },
         };
     }
 
+    /// Only put patterns on first (i.e. "zeroeth") internal file ignorer, or
+    /// does nothing if internal `file_ignorers` slice is empty.
+    pub fn put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) anyerror!void {
+        const self = @as(*ChainedFileIgnorer, @ptrCast(context));
+        if (self.file_ignorers.len != 0) {
+            try self.file_ignorers[0].put_patterns(relpath, patterns);
+        }
+    }
+
+    /// Only remove patterns from first (i.e. "zeroeth") internal file ignorer,
+    /// or does nothing if internal `file_ignorers` slice is empty.
+    pub fn remove_patterns(context: *anyopaque, relpath: []const u8) void {
+        const self = @as(*ChainedFileIgnorer, @ptrCast(context));
+        if (self.file_ignorers.len != 0) {
+            self.file_ignorers[0].remove_patterns(relpath);
+        }
+    }
+
+    /// Checks all internal file ignorers in order until one returns `true`,
+    /// otherwise returns `false`.
     pub fn is_ignored(context: *anyopaque, relpath: []const u8) bool {
         const self = @as(*ChainedFileIgnorer, @ptrCast(context));
         for (self.file_ignorers) |file_ignorer| {

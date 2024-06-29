@@ -1,6 +1,9 @@
 const std = @import("std");
-const c = @import("c.zig");
 const unicode = std.unicode;
+
+const c = @import("c.zig");
+const dir_walker = @import("dir_walker.zig");
+const IgnorePattern = dir_walker.IgnorePattern;
 
 const log = std.log.scoped(.pcre);
 
@@ -169,3 +172,50 @@ test "Matcher.convertGlob" {
     const matches3 = matcher.dfaMatchBool("add.zig", null);
     try std.testing.expect(matches3);
 }
+
+pub const FileIgnorer = struct {
+    const MatcherMap = std.StringHashMap(Matcher);
+
+    compiled_patterns: MatcherMap,
+
+    pub fn init(alloc: std.mem.Allocator) !FileIgnorer {
+        return .{
+            .compiled_patterns = MatcherMap.init(alloc),
+        };
+    }
+
+    pub fn deinit(self: *FileIgnorer) void {
+        self.compiled_patterns.deinit();
+    }
+
+    pub fn fileIgnorer(self: *FileIgnorer) dir_walker.FileIgnorer {
+        return .{
+            .context = @ptrCast(self),
+            .vtable = .{
+                .put_patterns = put_patterns,
+                .remove_patterns = remove_patterns,
+                .is_ignored = is_ignored,
+            },
+        };
+    }
+
+    pub fn put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) anyerror!void {
+        const self = @as(*FileIgnorer, @ptrCast(context));
+        _ = self; // autofix
+        _ = patterns; // autofix
+        _ = relpath; // autofix
+    }
+
+    pub fn remove_patterns(context: *anyopaque, relpath: []const u8) void {
+        const self = @as(*FileIgnorer, @ptrCast(context));
+        _ = self; // autofix
+        _ = relpath; // autofix
+    }
+
+    pub fn is_ignored(context: *anyopaque, relpath: []const u8) bool {
+        const self = @as(*FileIgnorer, @ptrCast(context));
+        _ = self; // autofix
+        _ = relpath; // autofix
+        return false;
+    }
+};

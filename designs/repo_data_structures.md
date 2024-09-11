@@ -35,6 +35,11 @@ are hashed as part of the hash reference generation for the commit
   order in which they were merged, thus the order matters. Any number of
   parents is supported.
 
+#### References
+
+- git commit object format: <https://wyag.thb.lt/#orgfe2859f>
+  - With a few small variations, `hvrt` could use a similar format for hashing.
+
 ### Tree
 
 R list of paths, file ids, and blob ids. Paths cannot/should not be
@@ -100,5 +105,5 @@ integrity.
 
 ### Hash ID
 
-A UTF-8 string of the form `<data type>:<hash algorithm>:<hex   digest>`.
+A UTF-8 string of the form `<data type>:<hash algorithm>:<hex digest>`.
 This is cast to bytes to calculate for composite types like trees.

@@ -1,5 +1,5 @@
 CREATE TABLE vcs_version (
-	"id"	INTEGER,
+	"id"	INTEGER PRIMARY KEY,
 
 	"prev"	INTEGER REFERENCES vcs_version("id"),
 	-- semantic version
@@ -7,7 +7,6 @@ CREATE TABLE vcs_version (
 	"created_at" INTEGER NOT NULL,
 	"modified_at" INTEGER NOT NULL,
 	UNIQUE ("version")
-	PRIMARY KEY ("id" AUTOINCREMENT)
 );
 
 CREATE TABLE tags (
@@ -21,10 +20,9 @@ CREATE TABLE tags (
 );
 
 CREATE TABLE default_branch (
-	"id"	INTEGER,
+	"id"	INTEGER PRIMARY KEY,
 	"name"	TEXT NOT NULL,
-	UNIQUE ("name")
-	PRIMARY KEY ("id" AUTOINCREMENT)
+	UNIQUE ("name"),
 	FOREIGN KEY ("name") REFERENCES "tags" ("name") ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -68,7 +66,7 @@ CREATE TABLE commits (
 	-- * message: Commit message
 	"message" TEXT NOT NULL,
 
-	PRIMARY KEY ("hash", "hash_algo")
+	PRIMARY KEY ("hash", "hash_algo"),
 	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -88,7 +86,7 @@ CREATE TABLE commit_headers (
 
 	-- Other headers for signing and whatnot can easily be added later.
 
-	PRIMARY KEY ("commit_hash", "commit_hash_algo", "key")
+	PRIMARY KEY ("commit_hash", "commit_hash_algo", "key"),
 	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -97,7 +95,7 @@ CREATE INDEX commit_headers_idx ON commit_headers ("key", "value");
 CREATE TABLE commit_annotations (
 	-- annotations are considered when hashing commits
 
-	"id" INTEGER,
+	"id" INTEGER PRIMARY KEY,
 	"parent_commit_hash"	TEXT NOT NULL,
 	"parent_commit_hash_algo"	TEXT NOT NULL,
 
@@ -108,11 +106,10 @@ CREATE TABLE commit_annotations (
 	-- Perhaps this is the best place to put signatures for commits?
 	"key"	TEXT NOT NULL,
 	"value"	TEXT NOT NULL,
-	CHECK ( NOT (parent_commit_hash = reference_commit_hash AND parent_commit_hash_algo = reference_commit_hash_algo) )
-	PRIMARY KEY ("id" AUTOINCREMENT)
+	CHECK ( NOT (parent_commit_hash = reference_commit_hash AND parent_commit_hash_algo = reference_commit_hash_algo) ),
 
-	UNIQUE ("parent_commit_hash", "parent_commit_hash_algo", "reference_commit_hash", "reference_commit_hash_algo", "key", "value")
-	FOREIGN KEY ("parent_commit_hash", "parent_commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+	UNIQUE ("parent_commit_hash", "parent_commit_hash_algo", "reference_commit_hash", "reference_commit_hash_algo", "key", "value"),
+	FOREIGN KEY ("parent_commit_hash", "parent_commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
 	FOREIGN KEY ("reference_commit_hash", "reference_commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -124,8 +121,8 @@ CREATE TABLE commit_tags (
 	"commit_hash"	TEXT NOT NULL,
 	"commit_hash_algo"	TEXT NOT NULL,
 	"tag_name"	TEXT NOT NULL,
-	PRIMARY KEY ("commit_hash", "commit_hash_algo", "tag_name")
-	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	PRIMARY KEY ("commit_hash", "commit_hash_algo", "tag_name"),
+	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
 	FOREIGN KEY ("tag_name") REFERENCES "tags" ("name") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -154,12 +151,12 @@ CREATE TABLE commit_parents (
 	"parent_hash_algo"	TEXT NOT NULL,
 	"parent_type"	TEXT NOT NULL,
 	"order"	INTEGER NOT NULL,
-	PRIMARY KEY ("commit_hash", "commit_hash_algo", "parent_hash", "parent_hash_algo")
+	PRIMARY KEY ("commit_hash", "commit_hash_algo", "parent_hash", "parent_hash_algo"),
 
 	-- two parents should not be able to be put into the same location in the order.
-	UNIQUE ("commit_hash", "commit_hash_algo", "order")
-	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
-	FOREIGN KEY ("parent_hash", "parent_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	UNIQUE ("commit_hash", "commit_hash_algo", "order"),
+	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+	FOREIGN KEY ("parent_hash", "parent_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
 	FOREIGN KEY ("parent_type") REFERENCES "commit_parent_types" ("name") ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -183,7 +180,7 @@ CREATE TABLE bundle_annotations (
 	-- Bundles don't strictly need headers since they aren't part of the merkle
 	-- tree, so we can probably just get away with only having annotation headers
 	-- that are created "after-the-fact".
-	"id" INTEGER,
+	"id" INTEGER PRIMARY KEY,
 	"bundle_hash"	TEXT NOT NULL,
 	"bundle_hash_algo"	TEXT NOT NULL,
 
@@ -194,7 +191,6 @@ CREATE TABLE bundle_annotations (
 	"key"	TEXT NOT NULL,
 	"value"	TEXT NOT NULL,
 
-	PRIMARY KEY ("id")
 	FOREIGN KEY ("bundle_hash", "bundle_hash_algo") REFERENCES "bundles" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -209,8 +205,8 @@ CREATE TABLE bundle_commits (
 
 	-- A commit should never be part of more than one bundle, so make that the
 	-- primary key.
-	PRIMARY KEY ("commit_hash", "commit_hash_algo")
-	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	PRIMARY KEY ("commit_hash", "commit_hash_algo"),
+	FOREIGN KEY ("commit_hash", "commit_hash_algo") REFERENCES "commits" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
 	FOREIGN KEY ("bundle_hash", "bundle_hash_algo") REFERENCES "bundles" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -220,9 +216,9 @@ CREATE TABLE file_ids (
 	"hash"	TEXT NOT NULL,
 	"hash_algo"	TEXT NOT NULL,
 	"path"	TEXT NOT NULL,
-	PRIMARY KEY ("hash", "hash_algo")
+	PRIMARY KEY ("hash", "hash_algo"),
 
-	-- ALthough the `UNIQUE` constraint below is not needed internally to this
+	-- Although the `UNIQUE` constraint below is not needed internally to this
 	-- table, it is required for the `tree_members` table to ensure that two
 	-- separate file IDs with the same path value are not added to a single tree
 	-- AND that the `("hash", "hash_algo", "path")` tuple in `tree_members`
@@ -238,8 +234,8 @@ CREATE TABLE file_id_parents (
 	"parent_hash"	TEXT NOT NULL,
 	"parent_hash_algo"	TEXT NOT NULL,
 	"order"	INTEGER NOT NULL,
-	PRIMARY KEY ("file_id_hash", "file_id_hash_algo", "parent_hash", "parent_hash_algo")
-	FOREIGN KEY ("file_id_hash", "file_id_hash_algo") REFERENCES "file_ids" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	PRIMARY KEY ("file_id_hash", "file_id_hash_algo", "parent_hash", "parent_hash_algo"),
+	FOREIGN KEY ("file_id_hash", "file_id_hash_algo") REFERENCES "file_ids" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
 	FOREIGN KEY ("parent_hash", "parent_hash_algo") REFERENCES "file_ids" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -256,7 +252,7 @@ CREATE TABLE unversioned_files (
 	"blob_hash_algo"	TEXT NOT NULL,
 	"created_at" INTEGER DEFAULT CURRENT_TIMESTAMP,
 
-	PRIMARY KEY ("path")
+	PRIMARY KEY ("path"),
 	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -268,10 +264,10 @@ CREATE TABLE tree_members (
 	"path"	TEXT NOT NULL,
 	"blob_hash"	TEXT NOT NULL,
 	"blob_hash_algo"	TEXT NOT NULL,
-	UNIQUE ("tree_hash", "tree_hash_algo", "path")
-	PRIMARY KEY ("tree_hash", "tree_hash_algo", "file_id_hash", "file_id_hash_algo")
-	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
-	FOREIGN KEY ("file_id_hash", "file_id_hash_algo", "path") REFERENCES "file_ids" ("hash", "hash_algo", "path") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	UNIQUE ("tree_hash", "tree_hash_algo", "path"),
+	PRIMARY KEY ("tree_hash", "tree_hash_algo", "file_id_hash", "file_id_hash_algo"),
+	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+	FOREIGN KEY ("file_id_hash", "file_id_hash_algo", "path") REFERENCES "file_ids" ("hash", "hash_algo", "path") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
 	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -295,8 +291,8 @@ CREATE TABLE new_tree_members (
 	--   1010­000­000000000 (120000): Symbolic link
 	--   1110­000­000000000 (160000): Gitlink
 	"mode" TEXT NOT NULL CHECK ( mode in ('040000', '100644', '100664', '100755', '120000', '160000') ),
-	UNIQUE ("tree_hash", "tree_hash_algo", "name")
-	PRIMARY KEY ("tree_hash", "tree_hash_algo", "name")
+	UNIQUE ("tree_hash", "tree_hash_algo", "name"),
+	PRIMARY KEY ("tree_hash", "tree_hash_algo", "name"),
 	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -310,10 +306,10 @@ CREATE TABLE tree_tree_members (
 	"name"	TEXT NOT NULL,
 	"child_hash"	TEXT NOT NULL,
 	"child_hash_algo"	TEXT NOT NULL,
-	UNIQUE ("tree_hash", "tree_hash_algo", "name")
-	PRIMARY KEY ("tree_hash", "tree_hash_algo", "child_hash", "child_hash_algo")
-	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
-	FOREIGN KEY ("child_hash", "child_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	UNIQUE ("tree_hash", "tree_hash_algo", "name"),
+	PRIMARY KEY ("tree_hash", "tree_hash_algo", "child_hash", "child_hash_algo"),
+	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+	FOREIGN KEY ("child_hash", "child_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
 	CHECK (NOT (tree_hash = child_hash AND tree_hash_algo = child_hash_algo))
 );
 
@@ -327,9 +323,9 @@ CREATE TABLE tree_blob_members (
 	"name"	TEXT NOT NULL,
 	"child_hash"	TEXT NOT NULL,
 	"child_hash_algo"	TEXT NOT NULL,
-	UNIQUE ("tree_hash", "tree_hash_algo", "name")
-	PRIMARY KEY ("tree_hash", "tree_hash_algo", "child_hash", "child_hash_algo")
-	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	UNIQUE ("tree_hash", "tree_hash_algo", "name"),
+	PRIMARY KEY ("tree_hash", "tree_hash_algo", "child_hash", "child_hash_algo"),
+	FOREIGN KEY ("tree_hash", "tree_hash_algo") REFERENCES "trees" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
 	FOREIGN KEY ("child_hash", "child_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -346,11 +342,11 @@ CREATE TABLE tree_copy_sources (
 	"src_tree_hash_algo"	TEXT NOT NULL,
 	"src_name"	TEXT NOT NULL,
 	"order"	INTEGER NOT NULL,
-	PRIMARY KEY ("dst_tree_hash", "dst_tree_hash_algo", "dst_name", "src_tree_hash", "src_tree_hash_algo", "src_name")
+	PRIMARY KEY ("dst_tree_hash", "dst_tree_hash_algo", "dst_name", "src_tree_hash", "src_tree_hash_algo", "src_name"),
 
 	-- two sources should not be able to be put into the same location in the order.
-	UNIQUE ("dst_tree_hash", "dst_tree_hash_algo", "order")
-	FOREIGN KEY ("dst_tree_hash", "dst_tree_hash_algo", "dst_name") REFERENCES "new_tree_members" ("hash", "hash_algo", "name") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+	UNIQUE ("dst_tree_hash", "dst_tree_hash_algo", "order"),
+	FOREIGN KEY ("dst_tree_hash", "dst_tree_hash_algo", "dst_name") REFERENCES "new_tree_members" ("hash", "hash_algo", "name") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
 	FOREIGN KEY ("src_tree_hash", "src_tree_hash_algo", "src_name") REFERENCES "new_tree_members" ("hash", "hash_algo", "name") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -384,10 +380,10 @@ CREATE TABLE blob_chunks (
 	"start_byte"	INTEGER NOT NULL,
 	"end_byte"	INTEGER NOT NULL,
 
-	PRIMARY KEY ("blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte") ON CONFLICT IGNORE
+	PRIMARY KEY ("blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte") ON CONFLICT IGNORE,
 
 	-- When a blob is deleted, its association with any chunks should be severed.
-	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+	FOREIGN KEY ("blob_hash", "blob_hash_algo") REFERENCES "blobs" ("hash", "hash_algo") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
 
 	-- If connections to existing blobs exist, chunks cannot be deleted. They
 	-- should be garbage collected in an offline process or secondary step.

@@ -90,10 +90,12 @@ pub fn RefCounted(comptime T: type) type {
             }
         }
 
-        /// With a weak reference, there is no guarantee whether or when the
-        /// referent will be deallocated. This could potentially lead to
-        /// dereferencing a pointer to invalid memory if the caller is not
-        /// careful with the pointer returned.
+        /// A weak references is just an unnaccounted for raw pointer.
+        ///
+        /// Thus with a weak reference,
+        /// there is no guarantee whether or when the referent will be deallocated.
+        /// This could potentially lead to dereferencing a pointer to invalid memory
+        /// if the caller is not careful with the pointer returned.
         pub fn weakRef(self: Self) ?*T {
             return if (self.tagged_ref_ptr) |ref_ptr| &ref_ptr.data else null;
         }

@@ -90,7 +90,7 @@ pub fn RefCounted(comptime T: type) type {
             }
         }
 
-        /// A weak references is just an unnaccounted for raw pointer.
+        /// A weak references is just an uncounted raw pointer.
         ///
         /// Thus with a weak reference,
         /// there is no guarantee whether or when the referent will be deallocated.

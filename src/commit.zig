@@ -234,7 +234,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
             );
         }
 
-        // Should only be run when no errors have occured.
+        // Should only be run when no errors have occurred.
         try wt_db.exec(wt_sql.clear);
     }
 }

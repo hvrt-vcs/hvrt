@@ -122,7 +122,7 @@ CREATE TABLE staged_to_remove (
     -- copied from another file (or being recreated from scratch). However,
     -- this situation would only happen if the user explicitly called `hvrt rm
     -- <file>; hvrt mv <other> <file>`. Otherwise, the file would be seen as
-    -- being modified in place when commiting. The tools will only
+    -- being modified in place when committing. The tools will only
     -- heuristically remove the file from the repo when it doesn't exist at all
     -- in the working tree at commit time or if the user called `hvrt add .`
     -- and added the missing file to the staging area for the next commit.
@@ -140,7 +140,7 @@ CREATE TABLE staged_to_remove (
 
     -- An explicit removal is one triggered by `hvrt rm` or `hvrt mv`. If the
     -- file simply disappeared and its removal was recorded by running `hvrt
-    -- add .` or commiting, then it will not be considered an explicit removal.
+    -- add .` or committing, then it will not be considered an explicit removal.
     -- This will effect how mv/cp/rm heuristics are determined.
 
     explicit BOOLEAN NOT NULL DEFAULT FALSE,
@@ -164,7 +164,7 @@ INSERT INTO head_commit (id, hash, hash_algo) VALUES (1, '0', 'nil');
 -- need to have at least one tag (usually a branch) in order to be valid?
 -- Detached heads cause people lots of pain. However, we don't want to hamstring
 -- users. I guess we just generally discourage detached heads, but still allow
--- them for the sake of flexibility and for compatiblity with git.
+-- them for the sake of flexibility and for compatibility with git.
 
 CREATE TABLE current_tag (
     -- Should only have one entry at any given time? Ensure this by always

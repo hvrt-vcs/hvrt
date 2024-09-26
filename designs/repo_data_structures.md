@@ -1,44 +1,94 @@
 # Repo Data Structures
 
-Although Havarti is similar to other distributed version control systems in its
-designs, it differs enough that it is worth recording explicitly how it is
-structured under the hood.
+Havarti differs somewhat from git and other version control systems.
+We will describe its data structures here.
 
 General data structure notes:
 
-- Hash algorithms are flexible in Havarti. For example, it is not tied down to a
-  single algorithm like git is (i.e. sha1). The algorithm name is, along with
-  the digest value, part of the lookup key for a data type. This is what makes
-  it possible to swap algorithms at any time, even within the same repo. It is
-  also used in the hash for parent types.
-- Hash ID - a UTF-8 string of the form
-  `<data type>:<hash algorithm>:<hex digest>`. This is cast to bytes to
-  calculate for composite types like trees and commits.
+- Hash algorithms are flexible in Havarti.
+  For example, Havarti is not tied down to a single algorithm like git is (i.e. sha1).
+  The algorithm name is, along with the digest value,
+  part of the lookup key for a data type.
+  This is what makes it possible to swap algorithms at any time,
+  even within the same repo.
+  The algorithm name is also used in the hash for parent types.
+- Hash ID - a UTF-8 string of the form `<data type>:<hash algorithm>:<hex digest>`.
+  This is cast to bytes to calculate for composite types like trees and commits.
 
-## Some of the main data types in Havarti:
+## Main data types
 
 ### Commit
 
-A commit is a pointer to a tree object and a list of header values.
-Both the tree reference (a hash) and the headers (the key/value pair strings)
-are hashed as part of the hash reference generation for the commit
+This is the format of a `git` commit object in a `git` repo,
+as taken from this [URL](https://wyag.thb.lt/#orgfe2859f):
 
-- The key of a commit header can contain any character except the equals sign
-  (`=`) and newline. Leading and trailing whitespace will be stripped.
-  Although equals signs are allowed in the header value, newlines are not.
-  Newlines must be encoded or escaped.
-- When hashing, header keys and values are joined by an equals sign and
-  headers are delimited by newlines.
-- The hash value of any parent commits is also hashed as part of the
-  calculation. This is what makes it a merkle tree. It is hashed in the format
-  `parent <commit hash id> <parent type>`. The order of parent commits is the
-  order in which they were merged, thus the order matters. Any number of
-  parents is supported.
+```gitcommit
+tree 29ff16c9c14e2652b22f8b78bb08a5a07930c147
+parent 206941306e8a8af65b66eaaaea388a7ae24d49a0
+author Thibault Polge <thibault@thb.lt> 1527025023 +0200
+committer Thibault Polge <thibault@thb.lt> 1527025044 +0200
+gpgsig -----BEGIN PGP SIGNATURE-----
 
-#### References
+ iQIzBAABCAAdFiEExwXquOM8bWb4Q2zVGxM2FxoLkGQFAlsEjZQACgkQGxM2FxoL
+ kGQdcBAAqPP+ln4nGDd2gETXjvOpOxLzIMEw4A9gU6CzWzm+oB8mEIKyaH0UFIPh
+ rNUZ1j7/ZGFNeBDtT55LPdPIQw4KKlcf6kC8MPWP3qSu3xHqx12C5zyai2duFZUU
+ wqOt9iCFCscFQYqKs3xsHI+ncQb+PGjVZA8+jPw7nrPIkeSXQV2aZb1E68wa2YIL
+ 3eYgTUKz34cB6tAq9YwHnZpyPx8UJCZGkshpJmgtZ3mCbtQaO17LoihnqPn4UOMr
+ V75R/7FjSuPLS8NaZF4wfi52btXMSxO/u7GuoJkzJscP3p4qtwe6Rl9dc1XC8P7k
+ NIbGZ5Yg5cEPcfmhgXFOhQZkD0yxcJqBUcoFpnp2vu5XJl2E5I/quIyVxUXi6O6c
+ /obspcvace4wy8uO0bdVhc4nJ+Rla4InVSJaUaBeiHTW8kReSFYyMmDCzLjGIu1q
+ doU61OM3Zv1ptsLu3gUE6GU27iWYj2RWN3e3HE4Sbd89IFwLXNdSuM0ifDLZk7AQ
+ WBhRhipCCgZhkj9g2NEk7jRVslti1NdN5zoQLaJNqSwO1MtxTmJ15Ksk3QP6kfLB
+ Q52UWybBzpaP9HEd4XnR+HuQ4k2K0ns2KgNImsNvIyFwbpMUyUWLMPimaV1DWUXo
+ 5SBjDB/V/W2JBFR+XKHFJeFwYhj7DD/ocsGr4ZMx/lgc8rjIBkI=
+ =lgTX
+ -----END PGP SIGNATURE-----
 
-- git commit object format: <https://wyag.thb.lt/#orgfe2859f>
-  - With a few small variations, `hvrt` could use a similar format for hashing.
+Create first draft
+```
+
+With small variations, `hvrt` could use a similar format for hashing.
+
+Here is a possible variation for `hvrt`:
+
+```hvrtcommit
+tree sha1:29ff16c9c14e2652b22f8b78bb08a5a07930c147
+parent sha1:206941306e8a8af65b66eaaaea388a7ae24d49a0 cherrypick
+author Thibault Polge <thibault@thb.lt> 1527025023 +0200
+committer Thibault Polge <thibault@thb.lt> 1527025044 +0200
+gpgsig -----BEGIN PGP SIGNATURE-----
+
+ iQIzBAABCAAdFiEExwXquOM8bWb4Q2zVGxM2FxoLkGQFAlsEjZQACgkQGxM2FxoL
+ kGQdcBAAqPP+ln4nGDd2gETXjvOpOxLzIMEw4A9gU6CzWzm+oB8mEIKyaH0UFIPh
+ rNUZ1j7/ZGFNeBDtT55LPdPIQw4KKlcf6kC8MPWP3qSu3xHqx12C5zyai2duFZUU
+ wqOt9iCFCscFQYqKs3xsHI+ncQb+PGjVZA8+jPw7nrPIkeSXQV2aZb1E68wa2YIL
+ 3eYgTUKz34cB6tAq9YwHnZpyPx8UJCZGkshpJmgtZ3mCbtQaO17LoihnqPn4UOMr
+ V75R/7FjSuPLS8NaZF4wfi52btXMSxO/u7GuoJkzJscP3p4qtwe6Rl9dc1XC8P7k
+ NIbGZ5Yg5cEPcfmhgXFOhQZkD0yxcJqBUcoFpnp2vu5XJl2E5I/quIyVxUXi6O6c
+ /obspcvace4wy8uO0bdVhc4nJ+Rla4InVSJaUaBeiHTW8kReSFYyMmDCzLjGIu1q
+ doU61OM3Zv1ptsLu3gUE6GU27iWYj2RWN3e3HE4Sbd89IFwLXNdSuM0ifDLZk7AQ
+ WBhRhipCCgZhkj9g2NEk7jRVslti1NdN5zoQLaJNqSwO1MtxTmJ15Ksk3QP6kfLB
+ Q52UWybBzpaP9HEd4XnR+HuQ4k2K0ns2KgNImsNvIyFwbpMUyUWLMPimaV1DWUXo
+ 5SBjDB/V/W2JBFR+XKHFJeFwYhj7DD/ocsGr4ZMx/lgc8rjIBkI=
+ =lgTX
+ -----END PGP SIGNATURE-----
+
+Create first draft
+```
+
+- Differences:
+  - Although part of the hash bytes,
+    these same values are persisted in the DB in tables.
+  - Hashes are explicitly prepended with the hash algo.
+  - The parent hash is trailed by its merge type.
+    - Parent commits have a type in `hvrt`,
+      one of `regular`, `merge`, `cherrypick`, or `revert`.
+      `regular` and `merge` are currently synonyms;
+      one of them may be removed,
+      or a stronger greater distinction defined,
+      before finalization.
+    - "But what about rebase?" you say.
+      [Rebasing is just a series of `cherrypick` operations 🍒](https://stackoverflow.com/a/11837630/1733321).
 
 ### Tree
 
@@ -65,20 +115,23 @@ copies and renames.
 
 ### Blob
 
-The raw binary data within a file. For the most part, Havarti doesn't
-care about file contents. If blobs differ at the byte level, they are
-different blobs. Blobs are referred to by their  hash value, since this should
-not clash
+The raw binary data within a file.
+Havarti doesn't care about file contents.
+If blobs differ at the byte level, they are different blobs.
+Blobs are referred to by their hash value, since this should not clash.
 
 ### Chunk
 
-A chunk is a part of a blob. This is mostly an implementation detail
-to overcome the fact that most SQL DBs (including SQLite and PostgreSQL) have
-limits on the size of a binary blob row type. Although this limit is quite
-large (several GiB at the extreme end), this still isn't ideal as blobs cannot
-be streamed from the databases without some trickery. By dividing blob data
-into chunks, we can use mostly identical logic on all DBs and overcome the
-streaming limitation of SQL DBs by taking small chunks at a time.
+A chunk is a part of a blob.
+This is mostly an implementation detail
+to overcome the fact that most SQL DBs (including SQLite and PostgreSQL)
+have limits on the size of a binary blob row type.
+Although this limit is large (several GiB at the extreme end),
+this still isn't ideal
+as blobs cannot be streamed from the databases without some trickery.
+By dividing blob data into chunks,
+we can use nearly identical logic on all DBs
+and overcome the streaming limitation of SQL DBs by taking small chunks at a time.
 
 - Within a SQL DB, a blob is a list of ordered chunks.
   Thus, it is possible
@@ -86,22 +139,26 @@ streaming limitation of SQL DBs by taking small chunks at a time.
 - Is it worth making chunks a canonical part of the hash calculation and merkle tree?
   This may create a weird situation where blob contents may match,
   but their hashes differ because they were chunked differently at different times.
-  Perhaps there is a way to do this that isn't merely hashing chunk references to generate the blob hash.
+  Perhaps there is a way to do this
+  that isn't merely hashing chunk references to generate the blob hash.
 
 ### Annotation
 
-Annotations make modifications to commits after the initial
-commit. They are included in hash calculations for the current commit, but do
-not change previous commit hash calculations, so they are non destructive in
-nature. They can only change header data, not blob or tree data. One can think
-of annotations as non-destructively layer new headers ontop of old headers.
-For example, if a commit authorship was incorrectly attributed to a dev, an
-annotation could layer this change on top of the original commit without
-destroying the original author data that goes into checking merkle tree
-integrity.
+Annotations make modifications to commits after the initial commit.
+They are included in hash calculations for the current commit,
+but do not change previous commit hash calculations,
+thus they are non destructive in nature.
+They can change header data, not blob or tree data.
+One can think of annotations as non-destructively layering new headers
+on top of old headers.
+For example, if a commit authorship was incorrectly attributed to a dev,
+an annotation could layer this change on top of the original commit
+without destroying the original author data
+that goes into checking merkle tree integrity.
 
 - Open question: which annotation "wins" in a merge situation with annotations
   in both branches?
+  - Probably the one from the commit with the latest timestamp.
 
 ### Hash ID
 

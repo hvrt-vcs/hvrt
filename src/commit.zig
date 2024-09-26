@@ -96,21 +96,11 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     defer header_stmt.finalize() catch unreachable;
 
     {
-        var repo_tx_ok = true;
         const repo_tx = try sqlite.Transaction.init(repo_db, "repo_commit_cmd");
-        defer if (repo_tx_ok) repo_tx.commit() catch unreachable;
-        errdefer {
-            repo_tx_ok = false;
-            repo_tx.rollback() catch unreachable;
-        }
+        errdefer repo_tx.rollback() catch unreachable;
 
-        var wt_tx_ok = true;
         const wt_tx = try sqlite.Transaction.init(wt_db, "work_tree_commit_cmd");
-        defer if (wt_tx_ok) wt_tx.commit() catch unreachable;
-        errdefer {
-            wt_tx_ok = false;
-            wt_tx.rollback() catch unreachable;
-        }
+        errdefer wt_tx.rollback() catch unreachable;
 
         log.debug("\nIterating over blob entries in work tree.\n", .{});
         var i: u64 = 0;
@@ -236,5 +226,8 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
 
         // Should only be run when no errors have occurred.
         try wt_db.exec(wt_sql.clear);
+
+        try repo_tx.commit();
+        try wt_tx.commit();
     }
 }

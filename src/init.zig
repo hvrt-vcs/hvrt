@@ -55,11 +55,8 @@ fn initDatabase(db_uri: [:0]const u8, tx_name: [:0]const u8, sqlfiles: anytype) 
     const db = try sqlite.DataBase.open(db_uri);
     defer db.close() catch unreachable;
 
-    var tx_ok = true;
     const tx = try sqlite.Transaction.init(db, tx_name);
-    defer if (tx_ok) tx.commit() catch unreachable;
     errdefer tx.rollback() catch unreachable;
-    errdefer tx_ok = false;
 
     try db.exec(sqlfiles.init.tables);
 
@@ -83,4 +80,6 @@ fn initDatabase(db_uri: [:0]const u8, tx_name: [:0]const u8, sqlfiles: anytype) 
 
     try prepared_stmt3.bind(1, false, default_branch);
     try prepared_stmt3.auto_step();
+
+    try tx.commit();
 }

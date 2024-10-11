@@ -82,11 +82,9 @@ Create first draft
   - Hashes are explicitly prepended with the hash algo.
   - The parent hash is trailed by its merge type.
     - Parent commits have a type in `hvrt`,
-      one of `regular`, `merge`, `cherrypick`, or `revert`.
-      `regular` and `merge` are currently synonyms;
-      one of them may be removed,
-      or a stronger greater distinction defined,
-      before finalization.
+      one of `regular`, `cherrypick`, or `revert`.
+      `regular` means the common merge style that git does.
+    - The first parent should always be `regular`.
     - "But what about rebase?" you say.
       [Rebasing is just a series of `cherrypick` operations 🍒](https://stackoverflow.com/a/11837630/1733321).
 

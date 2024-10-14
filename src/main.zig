@@ -256,3 +256,42 @@ test "invoke without args" {
         try std.testing.expectError(expected_error, actual_error_union);
     };
 }
+
+test "first commit parent must have `regular` parent type" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try setup_init_test(&tmp);
+
+    const repo_db_path = try tmp.dir.realpathAlloc(test_alloc, ".hvrt/repo.hvrt");
+    defer test_alloc.free(repo_db_path);
+
+    const repo_db_pathz = try test_alloc.dupeZ(u8, repo_db_path);
+    defer test_alloc.free(repo_db_pathz);
+
+    const repo_db = try sqlite.DataBase.open(repo_db_pathz);
+    defer repo_db.close() catch unreachable;
+
+    const stmt1 =
+        \\INSERT INTO commit_parents (
+        \\    commit_hash,
+        \\    commit_hash_algo,
+        \\    parent_hash,
+        \\    parent_hash_algo,
+        \\    parent_type,
+        \\    "order"
+        \\) VALUES ($1, $2, $3, $4, $5, $6);
+    ;
+
+    // worktree statements
+    const insert_bad_parent_stmt = try sqlite.Statement.prepare(repo_db, stmt1);
+    defer insert_bad_parent_stmt.finalize() catch unreachable;
+
+    // TODO: attempt to insert a merge parent other than `regular`
+    // and ensure it returns an error.
+
+    // std.testing.expectError(anyerror{}, null);
+
+    // std.log.debug("\nbefore_stat.size: {}\nafter_stat.size: {}\n\n", .{ before_stat.size, after_stat.size });
+    // try std.testing.expect(before_stat.size < after_stat.size);
+}

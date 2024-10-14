@@ -1,3 +1,4 @@
+-- sqlfluff:dialect:sqlite
 CREATE TABLE vcs_version (
     id INTEGER PRIMARY KEY,
 
@@ -184,7 +185,7 @@ CREATE TABLE commit_parent_types (
 );
 
 INSERT INTO commit_parent_types (name) VALUES ('regular');
-INSERT INTO commit_parent_types (name) VALUES ('merge');
+INSERT INTO commit_parent_types (name) VALUES ('hidden');
 INSERT INTO commit_parent_types (name) VALUES ('cherry_pick');
 INSERT INTO commit_parent_types (name) VALUES ('revert');
 
@@ -193,13 +194,18 @@ CREATE TABLE commit_parents (
 -- If a given commit points to parent that does not exist, it is because of a
 -- shallow clone.
 
-    id INTEGER,
     commit_hash TEXT NOT NULL,
     commit_hash_algo TEXT NOT NULL,
     parent_hash TEXT NOT NULL,
     parent_hash_algo TEXT NOT NULL,
     parent_type TEXT NOT NULL,
-    "order" INTEGER NOT NULL,
+
+    -- `order` must be a positive integer greater than zero *and*
+    -- the `parent_type` of the first parent must be `regular`.
+    "order" INTEGER NOT NULL CHECK (
+        "order" >= 1 AND ("order" != 1 OR parent_type = 'regular')
+    ),
+
     PRIMARY KEY (
         commit_hash, commit_hash_algo, parent_hash, parent_hash_algo
     ),

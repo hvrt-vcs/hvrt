@@ -82,42 +82,22 @@ Create first draft
   - Hashes are explicitly prepended with the hash algo.
   - The parent hash is trailed by its merge type.
     - Parent commits have a type in `hvrt`,
-      one of `regular`, `cherrypick`, `revert`, or `squash`.
+      one of `regular`, `hidden`, `cherrypick`, or `revert`.
     - `regular` means the common merge style that git does.
       - The first parent should always be `regular`.
         However, it kind of doesn't matter
         because the type of the first parent is ignored
         when it comes time to apply subsequent merge operation(s).
+    - `hidden` is the same as `regular`,
+      except, as the name implies, it is hidden by default in any UI implementations.
+      This is most similar to git's squash style merges.
+      A git squash merge does the same merge calculation as a regular merge,
+      but does not track the commit it was merged from,
+      thus hiding potentially important information.
     - `cherrypick` uses the same algorithm described for [`git cherry-pick`](https://git-scm.com/docs/git-cherry-pick),
       except the cherrypicked commit is explicitly tracked as a parent.
     - `revert` uses the same algorithm described in [`git revert`](https://git-scm.com/docs/git-revert),
       except the reverted commit is explicitly tracked as a parent.
-    - `squash` style merge parents have not been fully defined yet.
-      There are two options.
-      First option, it forgets/overwrites any changes
-      from any preceding merge parents.
-      Second option, it behaves like `git merge --squash`,
-      which isn't really very different from a `regular` merge.
-      The one big difference in the second style
-      would be that it wouldn't show in the UI by default.
-      Maybe that is enough.
-      Perhaps this second style should be renamed `silent` or something.
-      I don't know.
-      Requires more thought.
-      - In the case of the first behavior described above,
-        havarti will automatically elide
-        the preceding merge parents between the initial parent and the `squash` parent.
-        - The user can disable eliding
-          if they care to record all parents for some reason.
-          In this circumstance, the user will need to deal with any merge conflicts
-          in intermediate merges
-          even though the resolved changes will get thrown away
-          once the `squash` parent is applied.
-          - I don't know.
-            Maybe this shouldn't be allowed.
-            It is kind of silly.
-            What value does it have?
-            Maybe there can just be a flag to fail if this eliding would happen.
     - "But what about rebase?" you say.
       [Rebasing is just a series of `cherrypick` operations 🍒](https://stackoverflow.com/a/11837630/1733321).
     - In any UI, only `regular` merges are shown by default.
@@ -130,12 +110,14 @@ Create first draft
       but not all are shown by default.
       This is usually the reason given to delete history in git:
       "It clutters the history to do true merges. We just rebase and/or squash everything."
-      With Havarti you can have your cake and eat it too: clean looking history
-      *and* all the data to know where things originally came from.
+      With Havarti you can have your cake and eat it too:
+      clean looking history
+      *and* all the data to know where things originally came from
+      if and when you need that information.
     - It should be noted
       that all the forgetful git style operations can still be done in Havarti.
-      You just have an alternative to those as well,
-      Hopefully one you will choose.
+      You just have an alternative using these non-forgetful merge styles as well.
+      The less forgetful ones (Havarti style) are the default.
 
 ### Tree
 

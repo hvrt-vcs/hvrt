@@ -342,39 +342,6 @@ CREATE INDEX tbmemb_blobs_idx ON tree_blob_members (
     child_hash, child_hash_algo
 );
 
--- FIXME: This won't work when a tree is referencing itself. i.e. `.` (period)
-CREATE TABLE tree_copy_sources (
-    dst_tree_hash TEXT NOT NULL,
-    dst_tree_hash_algo TEXT NOT NULL,
-    dst_name TEXT NOT NULL,
-    src_tree_hash TEXT NOT NULL,
-    src_tree_hash_algo TEXT NOT NULL,
-    src_name TEXT NOT NULL,
-    "order" INTEGER NOT NULL CHECK ("order" >= 1),
-    PRIMARY KEY (
-        dst_tree_hash,
-        dst_tree_hash_algo,
-        dst_name,
-        src_tree_hash,
-        src_tree_hash_algo,
-        src_name
-    ),
-
-    -- two sources should not be able to be put into the same location
-    -- in the order.
-    UNIQUE (dst_tree_hash, dst_tree_hash_algo, "order"),
-    FOREIGN KEY (
-        dst_tree_hash, dst_tree_hash_algo, dst_name
-    ) REFERENCES tree_members (
-        hash, hash_algo, name
-    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
-    FOREIGN KEY (
-        src_tree_hash, src_tree_hash_algo, src_name
-    ) REFERENCES tree_members (
-        hash, hash_algo, name
-    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
-);
-
 CREATE TABLE chunks (
     hash TEXT NOT NULL,
     hash_algo TEXT NOT NULL,

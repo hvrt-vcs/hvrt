@@ -38,6 +38,9 @@ pub const Repo = struct {
         commit_parent: [:0]const u8,
         header: [:0]const u8,
         tree: [:0]const u8,
+        tree_blob_member: [:0]const u8,
+        tree_member: [:0]const u8,
+        tree_tree_member: [:0]const u8,
     },
 
     init: struct {
@@ -64,6 +67,9 @@ pub const sqlite = DatabaseFiles{
             .commit_parent = @embedFile("embedded/sql/sqlite/repo/commit/commit_parent.sql"),
             .header = @embedFile("embedded/sql/sqlite/repo/commit/header.sql"),
             .tree = @embedFile("embedded/sql/sqlite/repo/commit/tree.sql"),
+            .tree_blob_member = @embedFile("embedded/sql/sqlite/repo/commit/tree_blob_member.sql"),
+            .tree_member = @embedFile("embedded/sql/sqlite/repo/commit/tree_member.sql"),
+            .tree_tree_member = @embedFile("embedded/sql/sqlite/repo/commit/tree_tree_member.sql"),
         },
 
         .init = .{

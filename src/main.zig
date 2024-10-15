@@ -275,7 +275,10 @@ test "first commit parent must have `regular` parent type" {
 
     const commit_parent_stmt_txt = sql.sqlite.repo.commit.commit_parent;
     const commit_stmt_txt = sql.sqlite.repo.commit.commit;
+    const tree_blob_member_stmt_txt = sql.sqlite.repo.commit.tree_member;
+    const tree_member_stmt_txt = sql.sqlite.repo.commit.tree_member;
     const tree_stmt_txt = sql.sqlite.repo.commit.tree;
+    const tree_tree_member_stmt_txt = sql.sqlite.repo.commit.tree_tree_member;
 
     // db statements
     const commit_stmt = try sqlite.Statement.prepare(repo_db, commit_stmt_txt);
@@ -286,6 +289,15 @@ test "first commit parent must have `regular` parent type" {
 
     const tree_stmt = try sqlite.Statement.prepare(repo_db, tree_stmt_txt);
     defer tree_stmt.finalize() catch unreachable;
+
+    const tree_member_stmt = try sqlite.Statement.prepare(repo_db, tree_member_stmt_txt);
+    defer tree_member_stmt.finalize() catch unreachable;
+
+    const tree_blob_member_stmt = try sqlite.Statement.prepare(repo_db, tree_blob_member_stmt_txt);
+    defer tree_blob_member_stmt.finalize() catch unreachable;
+
+    const tree_tree_member_stmt = try sqlite.Statement.prepare(repo_db, tree_tree_member_stmt_txt);
+    defer tree_tree_member_stmt.finalize() catch unreachable;
 
     // TODO: attempt to insert a merge parent other than `regular`
     // and ensure it returns an error.

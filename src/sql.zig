@@ -1,7 +1,7 @@
 const std = @import("std");
 
 /// XXX: Although a type is defined for WorkTree, the worktree DB is
-/// going to be SQLite, for the forseeable future.
+/// going to be SQLite, for the foreseeable future.
 pub const WorkTree = struct {
     clear: [:0]const u8,
 
@@ -26,7 +26,7 @@ pub const WorkTree = struct {
 };
 
 /// A Repo can be implemented in any SQL database that supports foreign key
-/// constraints, unique (string) keys, and transacitons. For now, only sqlite
+/// constraints, unique (string) keys, and transactions. For now, only sqlite
 /// is being implemented. Once that is fully working, a DB abstraction layer
 /// can be defined and other DBs like postgres can be implemented.
 pub const Repo = struct {
@@ -34,7 +34,10 @@ pub const Repo = struct {
         blob: [:0]const u8,
         blob_chunk: [:0]const u8,
         chunk: [:0]const u8,
+        commit: [:0]const u8,
+        commit_parent: [:0]const u8,
         header: [:0]const u8,
+        tree: [:0]const u8,
     },
 
     init: struct {
@@ -45,14 +48,10 @@ pub const Repo = struct {
     },
 };
 
-/// A supported database should support one or both of Repo and WorkTree
+/// A supported database must support both Repo and WorkTree.
 pub const DatabaseFiles = struct {
-    // FIXME: it may make more sense to just make every Database implementation
-    // support both `Repo` and `WorkTree` and make these fields non-optional.
-    // Even if SQLite make the sense in most circumstances, there is no good
-    // reason to limit users regarding how they use the VCS.
-    repo: ?Repo,
-    work_tree: ?WorkTree,
+    repo: Repo,
+    work_tree: WorkTree,
 };
 
 pub const sqlite = DatabaseFiles{
@@ -61,7 +60,10 @@ pub const sqlite = DatabaseFiles{
             .blob = @embedFile("embedded/sql/sqlite/repo/commit/blob.sql"),
             .blob_chunk = @embedFile("embedded/sql/sqlite/repo/commit/blob_chunk.sql"),
             .chunk = @embedFile("embedded/sql/sqlite/repo/commit/chunk.sql"),
+            .commit = @embedFile("embedded/sql/sqlite/repo/commit/commit.sql"),
+            .commit_parent = @embedFile("embedded/sql/sqlite/repo/commit/commit_parent.sql"),
             .header = @embedFile("embedded/sql/sqlite/repo/commit/header.sql"),
+            .tree = @embedFile("embedded/sql/sqlite/repo/commit/tree.sql"),
         },
 
         .init = .{
@@ -99,7 +101,8 @@ pub const sqlite = DatabaseFiles{
 pub const postgres = DatabaseFiles{ .repo = @compileError("PostgreSQL is not implemented yet."), .work_tree = @compileError("PostgreSQL is not implemented yet.") };
 
 test "check if sqlfiles compiles" {
-    try std.testing.expectEqual(?WorkTree, @TypeOf(sqlite.work_tree));
-    try std.testing.expectEqual(?Repo, @TypeOf(sqlite.repo));
+    try std.testing.expectEqual(WorkTree, @TypeOf(sqlite.work_tree));
+    try std.testing.expectEqual(Repo, @TypeOf(sqlite.repo));
+    // try std.testing.expectEqual(WorkTree, @TypeOf(postgres.work_tree));
     // try std.testing.expectEqual(Repo, @TypeOf(postgres.repo));
 }

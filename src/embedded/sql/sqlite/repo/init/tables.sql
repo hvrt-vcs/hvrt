@@ -30,14 +30,10 @@ CREATE TABLE default_branch (
 );
 
 CREATE TABLE trees (
-    -- It is theoretically possible to have a single tree shared between
-    -- multiple commits. This can happen under the following conditions: the
-    -- file IDs and associated blob IDs are identical (since these are the only
-    -- values hashed to generate the tree ID). This might happen, for
-    -- example, when a troublesome commit is reverted without modification. The
-    -- values are sorted by the file ID path, then hashed on file ID hash (as a
-    -- UTF8 hex string) and blob ID hash (as a UTF8 hex string), in that
-    -- order.
+    -- It is possible
+    -- to have a single tree shared between multiple commits.
+    -- So long as the tree contents are identical,
+    -- they will be hashed to an identical value.
     hash TEXT NOT NULL,
     hash_algo TEXT NOT NULL,
     PRIMARY KEY (hash, hash_algo) ON CONFLICT IGNORE
@@ -231,104 +227,6 @@ CREATE INDEX commit_parents_parent_id_idx ON commit_parents (
     parent_hash, parent_hash_algo
 );
 
-CREATE TABLE bundles (
-    -- Bundles can be used in place of squashing to preserve commit history.
-    -- They are ephemeral metadata that is not hashed into the merkle tree.
-
-    -- The hash of a bundle is the hash of all it's child commit hashes.
-    -- In what order should they be hashed?
-    -- Sorted by hash value before hashing?
-    -- It needs to be deterministic.
-
-    hash TEXT NOT NULL,
-    hash_algo TEXT NOT NULL,
-
-    PRIMARY KEY (hash, hash_algo)
-);
-
-CREATE TABLE bundle_annotations (
-    -- Bundles don't strictly need headers
-    -- since they aren't part of the merkle tree,
-    -- so we can probably just get away
-    -- with only having annotation headers that are created "after-the-fact".
-    id INTEGER PRIMARY KEY,
-    bundle_hash TEXT NOT NULL,
-    bundle_hash_algo TEXT NOT NULL,
-
-    -- Latest annotation "wins".
-    -- Previous annotations are listed as "Previous edits".
-    created_at INTEGER NOT NULL,
-
-    -- Use similar header values to commits.
-    annotations_key TEXT NOT NULL,
-    annotations_value TEXT NOT NULL,
-
-    FOREIGN KEY (bundle_hash, bundle_hash_algo) REFERENCES bundles (
-        hash, hash_algo
-    ) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
-);
-
-CREATE INDEX bundle_annotations_hash_idx ON bundle_annotations (
-    bundle_hash, bundle_hash_algo
-);
-
-CREATE TABLE bundle_commits (
-    bundle_hash TEXT NOT NULL,
-    bundle_hash_algo TEXT NOT NULL,
-
-    commit_hash TEXT NOT NULL,
-    commit_hash_algo TEXT NOT NULL,
-
-    -- A commit should never be part of more than one bundle, so make that the
-    -- primary key.
-    PRIMARY KEY (commit_hash, commit_hash_algo),
-    FOREIGN KEY (commit_hash, commit_hash_algo) REFERENCES commits (
-        hash, hash_algo
-    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
-    FOREIGN KEY (bundle_hash, bundle_hash_algo) REFERENCES bundles (
-        hash, hash_algo
-    ) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
-);
-
-CREATE INDEX bundle_commits_hash_idx ON bundle_commits (
-    bundle_hash, bundle_hash_algo
-);
-
-CREATE TABLE file_ids (
-    hash TEXT NOT NULL,
-    hash_algo TEXT NOT NULL,
-    path TEXT NOT NULL,
-    PRIMARY KEY (hash, hash_algo),
-
-    -- Although the `UNIQUE` constraint below
-    -- is not needed internally to this table,
-    -- it is required for the `tree_members` table
-    -- to ensure that two separate file IDs
-    -- with the same path value are not added to a single tree
-    -- AND that the `("hash", "hash_algo", "path")` tuple in `tree_members`
-    -- actually corresponds to a real entry in this table.
-    -- See the constraints on the `tree_members` table for more details.
-    UNIQUE (hash, hash_algo, path)
-);
-
-CREATE TABLE file_id_parents (
--- If a given file_id has no parents, it was created "ex nihilo".
-    file_id_hash TEXT NOT NULL,
-    file_id_hash_algo TEXT NOT NULL,
-    parent_hash TEXT NOT NULL,
-    parent_hash_algo TEXT NOT NULL,
-    "order" INTEGER NOT NULL,
-    PRIMARY KEY (
-        file_id_hash, file_id_hash_algo, parent_hash, parent_hash_algo
-    ),
-    FOREIGN KEY (file_id_hash, file_id_hash_algo) REFERENCES file_ids (
-        hash, hash_algo
-    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
-    FOREIGN KEY (parent_hash, parent_hash_algo) REFERENCES file_ids (
-        hash, hash_algo
-    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
-);
-
 CREATE TABLE blobs (
     hash TEXT NOT NULL,
     hash_algo TEXT NOT NULL,
@@ -336,6 +234,11 @@ CREATE TABLE blobs (
     PRIMARY KEY (hash, hash_algo) ON CONFLICT IGNORE
 );
 
+-- XXX: fossil has something similar.
+-- My thinking was that this would be useful for hosting static sites,
+-- but this may be beyond the scope of the project.
+-- There are plenty of places and ways to host static files;
+-- it doesn't necessarily need to be in the repo DB.
 CREATE TABLE unversioned_files (
     path TEXT NOT NULL,
     blob_hash TEXT NOT NULL,
@@ -349,39 +252,6 @@ CREATE TABLE unversioned_files (
 );
 
 CREATE TABLE tree_members (
-    tree_hash TEXT NOT NULL,
-    tree_hash_algo TEXT NOT NULL,
-    file_id_hash TEXT NOT NULL,
-    file_id_hash_algo TEXT NOT NULL,
-    path TEXT NOT NULL,
-    blob_hash TEXT NOT NULL,
-    blob_hash_algo TEXT NOT NULL,
-    UNIQUE (tree_hash, tree_hash_algo, path),
-    PRIMARY KEY (
-        tree_hash, tree_hash_algo, file_id_hash, file_id_hash_algo
-    ),
-    FOREIGN KEY (tree_hash, tree_hash_algo) REFERENCES trees (
-        hash, hash_algo
-    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
-    FOREIGN KEY (
-        file_id_hash, file_id_hash_algo, path
-    ) REFERENCES file_ids (
-        hash, hash_algo, path
-    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
-    FOREIGN KEY (blob_hash, blob_hash_algo) REFERENCES blobs (
-        hash, hash_algo
-    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
-);
-
-CREATE INDEX tmemb_trees_idx ON tree_members (tree_hash, tree_hash_algo);
-CREATE INDEX tmemb_file_ids_idx ON tree_members (
-    file_id_hash, file_id_hash_algo, path
-);
-CREATE INDEX tmemb_file_id_hashes_idx ON tree_members (file_id_hash);
-CREATE INDEX tmemb_paths_idx ON tree_members (path);
-CREATE INDEX tmemb_blobs_idx ON tree_members (blob_hash, blob_hash_algo);
-
-CREATE TABLE new_tree_members (
     tree_hash TEXT NOT NULL,
     tree_hash_algo TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -414,10 +284,10 @@ CREATE TABLE new_tree_members (
     ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
-CREATE INDEX ntmemb_trees_idx ON new_tree_members (
+CREATE INDEX tmemb_trees_idx ON tree_members (
     tree_hash, tree_hash_algo
 );
-CREATE INDEX ntmemb_names_idx ON new_tree_members (name);
+CREATE INDEX tmemb_names_idx ON tree_members (name);
 
 CREATE TABLE tree_tree_members (
     tree_hash TEXT NOT NULL,
@@ -480,7 +350,7 @@ CREATE TABLE tree_copy_sources (
     src_tree_hash TEXT NOT NULL,
     src_tree_hash_algo TEXT NOT NULL,
     src_name TEXT NOT NULL,
-    "order" INTEGER NOT NULL,
+    "order" INTEGER NOT NULL CHECK ("order" >= 1),
     PRIMARY KEY (
         dst_tree_hash,
         dst_tree_hash_algo,
@@ -495,12 +365,12 @@ CREATE TABLE tree_copy_sources (
     UNIQUE (dst_tree_hash, dst_tree_hash_algo, "order"),
     FOREIGN KEY (
         dst_tree_hash, dst_tree_hash_algo, dst_name
-    ) REFERENCES new_tree_members (
+    ) REFERENCES tree_members (
         hash, hash_algo, name
     ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
     FOREIGN KEY (
         src_tree_hash, src_tree_hash_algo, src_name
-    ) REFERENCES new_tree_members (
+    ) REFERENCES tree_members (
         hash, hash_algo, name
     ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );

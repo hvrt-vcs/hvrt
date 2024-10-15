@@ -60,6 +60,7 @@ pub fn main() !void {
     std.process.exit(status_code);
 }
 
+const sql = @import("sql.zig");
 const test_alloc = std.testing.allocator;
 
 /// Wrapper to return two hex bytes for every byte read from the internal
@@ -272,20 +273,19 @@ test "first commit parent must have `regular` parent type" {
     const repo_db = try sqlite.DataBase.open(repo_db_pathz);
     defer repo_db.close() catch unreachable;
 
-    const stmt1 =
-        \\INSERT INTO commit_parents (
-        \\    commit_hash,
-        \\    commit_hash_algo,
-        \\    parent_hash,
-        \\    parent_hash_algo,
-        \\    parent_type,
-        \\    "order"
-        \\) VALUES ($1, $2, $3, $4, $5, $6);
-    ;
+    const commit_parent_stmt_txt = sql.sqlite.repo.commit.commit_parent;
+    const commit_stmt_txt = sql.sqlite.repo.commit.commit;
+    const tree_stmt_txt = sql.sqlite.repo.commit.tree;
 
-    // worktree statements
-    const insert_bad_parent_stmt = try sqlite.Statement.prepare(repo_db, stmt1);
-    defer insert_bad_parent_stmt.finalize() catch unreachable;
+    // db statements
+    const commit_stmt = try sqlite.Statement.prepare(repo_db, commit_stmt_txt);
+    defer commit_stmt.finalize() catch unreachable;
+
+    const commit_parent_stmt = try sqlite.Statement.prepare(repo_db, commit_parent_stmt_txt);
+    defer commit_parent_stmt.finalize() catch unreachable;
+
+    const tree_stmt = try sqlite.Statement.prepare(repo_db, tree_stmt_txt);
+    defer tree_stmt.finalize() catch unreachable;
 
     // TODO: attempt to insert a merge parent other than `regular`
     // and ensure it returns an error.

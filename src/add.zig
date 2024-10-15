@@ -68,7 +68,7 @@ pub const FileAdder = struct {
         const wt_db = try sqlite.DataBase.open(db_path);
         errdefer wt_db.close() catch unreachable;
 
-        const wt_sql = sql.sqlite.work_tree orelse unreachable;
+        const wt_sql = sql.sqlite.work_tree;
 
         const file_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.add.file);
         errdefer file_stmt.finalize() catch unreachable;

@@ -38,7 +38,7 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     defer alloc.free(wt_db_path);
     std.log.debug("what is wt_db_path: {s}\n", .{wt_db_path});
 
-    const wt_sql = sql.sqlite.work_tree orelse unreachable;
+    const wt_sql = sql.sqlite.work_tree;
     try initDatabase(wt_db_path, "worktree_init", wt_sql);
 
     // Repo
@@ -47,7 +47,7 @@ pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
     defer alloc.free(repo_db_path);
 
     // TODO: add postgres support
-    const repo_sql = sql.sqlite.repo orelse unreachable;
+    const repo_sql = sql.sqlite.repo;
     try initDatabase(repo_db_path, "repo_init", repo_sql);
 }
 

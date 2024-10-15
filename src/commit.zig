@@ -72,8 +72,8 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: [:0]const u8, message: [:0]co
     // var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
     // _ = fifo;
 
-    const wt_sql = sql.sqlite.work_tree orelse unreachable;
-    const repo_sql = sql.sqlite.repo orelse unreachable;
+    const wt_sql = sql.sqlite.work_tree;
+    const repo_sql = sql.sqlite.repo;
 
     // worktree statements
     const read_blobs_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.read_blobs);

@@ -1,0 +1,21 @@
+# A type of "sqlite" means the repo exists as a local sqlite DB file.
+# A type of "postgresql" means the repo exists as a remote postgresql DB server.
+worktree.repo.type = "sqlite"
+
+# If not otherwise specified,
+# the repo sqlite file is created inside the primary worktree
+# and is referenced relative to it.
+# When the repo lives inside the worktree,
+# the worktree will refuse deletion if requested,
+# unless the `--force` flag is passed.
+# We always use a well formed URI,
+# even for local SQLite files.
+# File URI paths can be absolute
+# or relative to the worktree root.
+#
+# See links:
+# * https://en.wikipedia.org/wiki/File_URI_scheme
+# * https://www.sqlite.org/uri.html
+# * https://www.sqlite.org/c3ref/open.html
+# * https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS
+worktree.repo.uri = "file:.hvrt/repo.hvrt"

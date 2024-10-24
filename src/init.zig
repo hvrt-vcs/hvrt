@@ -8,8 +8,8 @@ const sql = @import("sql.zig");
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 const repo_db_name: [:0]const u8 = "repo.hvrt";
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
-const default_config_name: [:0]const u8 = "config.toml";
-const default_config: [:0]const u8 = @embedFile("embedded/default.toml");
+const default_config_name: [:0]const u8 = "config.voll";
+const default_config: [:0]const u8 = @embedFile("embedded/default.voll");
 const default_branch: [:0]const u8 = "master";
 
 const version: [:0]const u8 = @embedFile("embedded/VERSION.txt");

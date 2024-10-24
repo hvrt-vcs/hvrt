@@ -214,7 +214,7 @@ test "invoke with init sub-command" {
 
     try setup_init_test(&tmp);
 
-    _ = try tmp.dir.statFile(".hvrt/config.toml");
+    _ = try tmp.dir.statFile(".hvrt/config.voll");
     _ = try tmp.dir.statFile(".hvrt/repo.hvrt");
     _ = try tmp.dir.statFile(".hvrt/work_tree_state.sqlite");
 }

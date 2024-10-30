@@ -80,6 +80,33 @@ CREATE TABLE commits (
     ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
 );
 
+CREATE TABLE commit_tree_copies (
+    commit_hash TEXT NOT NULL,
+    commit_hash_algo TEXT NOT NULL,
+
+    parent_hash TEXT NOT NULL,
+    parent_hash_algo TEXT NOT NULL,
+    parent_path TEXT NOT NULL,
+    dst_path TEXT NOT NULL,
+
+    PRIMARY KEY (
+        commit_hash,
+        commit_hash_algo,
+        parent_hash,
+        parent_hash_algo,
+        parent_path,
+        dst_path
+    ),
+
+    FOREIGN KEY (commit_hash, commit_hash_algo) REFERENCES commits (
+        hash, hash_algo
+    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+
+    FOREIGN KEY (parent_hash, parent_hash_algo) REFERENCES commits (
+        hash, hash_algo
+    ) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+);
+
 CREATE TABLE commit_headers (
     commit_hash TEXT NOT NULL,
     commit_hash_algo TEXT NOT NULL,

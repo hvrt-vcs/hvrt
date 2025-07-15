@@ -134,7 +134,7 @@ pub const Statement = struct {
                     index,
                     value.ptr,
                     value.len,
-                    (if (mem_copy) c.SQLITE_TRANSIENT else c.SQLITE_STATIC),
+                    (if (mem_copy) c.sqliteTransientAsDestructor() else c.SQLITE_STATIC),
                     c.SQLITE_UTF8,
                 );
             } else {
@@ -156,7 +156,7 @@ pub const Statement = struct {
                     index,
                     value.ptr,
                     value.len,
-                    (if (mem_copy) c.SQLITE_TRANSIENT else c.SQLITE_STATIC),
+                    (if (mem_copy) c.sqliteTransientAsDestructor() else c.SQLITE_STATIC),
                 );
             } else {
                 break :blk c.sqlite3_bind_null(stmt.stmt, index);

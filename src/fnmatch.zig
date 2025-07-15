@@ -68,7 +68,7 @@ pub const Utf8Iterator = struct {
 pub fn fnmatch(pattern: []const u8, string: []const u8, flags: u32) bool {
     _ = flags; // autofix
 
-    const temp_buffer: [std.fs.MAX_PATH_BYTES * 3]u8 = undefined;
+    const temp_buffer: [std.fs.max_path_bytes * 3]u8 = undefined;
     _ = temp_buffer; // autofix
 
     const string_view = try std.unicode.Utf8View.init(string);

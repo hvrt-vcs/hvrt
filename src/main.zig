@@ -120,7 +120,7 @@ fn test_pathz(alloc: std.mem.Allocator, tmp: *std.testing.TmpDir) ![:0]u8 {
     return try alloc.dupeZ(u8, tmp_path);
 }
 
-fn prngRead(prng: std.rand.Random, buffer: []u8) !usize {
+fn prngRead(prng: std.Random, buffer: []u8) !usize {
     prng.bytes(buffer);
     return buffer.len;
 }
@@ -142,9 +142,9 @@ fn setup_test_files(dir: *std.fs.Dir, files: []const [:0]const u8) !void {
     const target_sz = 1024 * 8;
     const fifo_buffer_size = 1024 * 4;
 
-    var prng = std.rand.DefaultPrng.init(0);
+    var prng = std.Random.DefaultPrng.init(0);
     const prngRand = prng.random();
-    const prng_reader = std.io.Reader(std.rand.Random, anyerror, prngRead){ .context = prngRand };
+    const prng_reader = std.io.Reader(std.Random, anyerror, prngRead){ .context = prngRand };
     const prng_hex_reader = hexReader(prng_reader, 80);
     _ = prng_hex_reader;
     const fifo_buf = try test_alloc.alloc(u8, fifo_buffer_size);

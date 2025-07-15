@@ -28,8 +28,15 @@ pub fn build(b: *std.Build) void {
         .name = "sqlite",
         .target = target,
         .optimize = optimize,
-        .link_libc = true,
     });
+    sqlite.linkLibC();
+    sqlite.addCSourceFile(.{
+        .file = b.path("src/c/sqlite_transient_workaround.c"),
+        .flags = &[_][]const u8{
+            "-std=c99",
+        },
+    });
+    sqlite.addIncludePath(b.path("src/c"));
     sqlite.addCSourceFile(.{
         .file = b.path(sqlite_include_path ++ "/sqlite3.c"),
         .flags = &[_][]const u8{
@@ -110,6 +117,7 @@ pub fn build(b: *std.Build) void {
     exe.linkLibrary(sqlite);
     exe.linkLibrary(pcre);
     exe.addIncludePath(b.path(sqlite_include_path));
+    exe.addIncludePath(b.path("src/c"));
 
     // We use c_allocator from libc for allocator implementation, since it is
     // the fastest builtin allocator currently offered by zig.
@@ -154,6 +162,7 @@ pub fn build(b: *std.Build) void {
     unit_tests.linkLibrary(sqlite);
     unit_tests.linkLibrary(pcre);
     unit_tests.addIncludePath(b.path(sqlite_include_path));
+    unit_tests.addIncludePath(b.path("src/c"));
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 

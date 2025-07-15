@@ -68,7 +68,7 @@ pub const Matcher = struct {
 
     pub fn convertGlob(alloc: std.mem.Allocator, glob: []const u8) ![:0]u8 {
         const options: u32 = 0 | c.PCRE2_CONVERT_GLOB;
-        var output_opt: ?[*:0]u8 = null;
+        var output_opt: [*c]u8 = null;
         var output_size: usize = 0;
         const context: ?*c.pcre2_convert_context_8 = null;
 

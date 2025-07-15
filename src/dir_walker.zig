@@ -286,7 +286,7 @@ pub fn DirWalker(
         }
 
         pub fn walkDir(self: *Self, gpa: std.mem.Allocator, start_path: ?[]const u8) !void {
-            var fba_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+            var fba_buf: [std.fs.max_path_bytes]u8 = undefined;
             const repo_root_string = try self.repo_root.realpath(".", &fba_buf);
             log.debug("What is the repo root? {s}\n", .{repo_root_string});
 

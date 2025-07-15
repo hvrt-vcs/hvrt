@@ -2,6 +2,7 @@
 
 pub usingnamespace @cImport({
     @cInclude("sqlite3.h");
+    @cInclude("sqlite_transient_workaround.h");
 
     // Defining this cmacro here is a dirty hack to get pcre2 to build. Fix
     // build.zig so this @cDefine isn't needed here.

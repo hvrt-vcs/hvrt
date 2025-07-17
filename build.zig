@@ -81,33 +81,33 @@ pub fn build(b: *std.Build) void {
     //     .linkage = .static,
     // });
 
-    // pcre2_sl.linkLibrary(pcre2_dep.artifact("pcre2"));
+    // pcre2_sl.linkLibrary(pcre2_dep.artifact("pcre2-8"));
     // pcre2_sl.linkLibC();
 
     const pcreCopyFiles = b.addWriteFiles();
     _ = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/config.h.generic"), "config.h");
     _ = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/pcre2.h.generic"), "pcre2.h");
 
-    const pcre = b.addStaticLibrary(.{
+    const pcre2_sl = b.addStaticLibrary(.{
         .name = b.fmt("pcre2-{s}", .{pcre_code_unit_width_value}),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
 
-    pcre.root_module.addCMacro(pcre_code_unit_width_name, pcre_code_unit_width_value);
+    pcre2_sl.root_module.addCMacro(pcre_code_unit_width_name, pcre_code_unit_width_value);
 
-    pcre.addCSourceFile(.{
+    pcre2_sl.addCSourceFile(.{
         .file = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/pcre2_chartables.c.dist"), "pcre2_chartables.c"),
         .flags = &.{
             "-DHAVE_CONFIG_H",
         },
     });
 
-    pcre.addIncludePath(b.path(pcre_include_path ++ "/src"));
-    pcre.addIncludePath(pcreCopyFiles.getDirectory());
+    pcre2_sl.addIncludePath(b.path(pcre_include_path ++ "/src"));
+    pcre2_sl.addIncludePath(pcreCopyFiles.getDirectory());
 
-    pcre.addCSourceFiles(.{
+    pcre2_sl.addCSourceFiles(.{
         .files = &.{
             pcre_include_path ++ "/src/pcre2_auto_possess.c",
             pcre_include_path ++ "/src/pcre2_chkdint.c",
@@ -142,7 +142,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    pcre.installHeader(b.path(pcre_include_path ++ "/src/pcre2.h.generic"), "pcre2.h");
+    pcre2_sl.installHeader(b.path(pcre_include_path ++ "/src/pcre2.h.generic"), "pcre2.h");
 
     const exe = b.addExecutable(.{
         .name = "hvrt",
@@ -154,8 +154,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.linkLibrary(sqlite_sl);
-    // exe.linkLibrary(pcre2_sl);
-    exe.linkLibrary(pcre);
+    exe.linkLibrary(pcre2_sl);
     exe.addIncludePath(b.path(sqlite_include_path));
     exe.addIncludePath(b.path("src/c"));
 
@@ -200,8 +199,7 @@ pub fn build(b: *std.Build) void {
     });
 
     unit_tests.linkLibrary(sqlite_sl);
-    unit_tests.linkLibrary(pcre);
-    // unit_tests.linkLibrary(pcre2_sl);
+    unit_tests.linkLibrary(pcre2_sl);
     unit_tests.addIncludePath(b.path(sqlite_include_path));
     unit_tests.addIncludePath(b.path("src/c"));
 

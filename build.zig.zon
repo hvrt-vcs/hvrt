@@ -8,6 +8,10 @@
             .url = "https://www.sqlite.org/2025/sqlite-amalgamation-3490200.zip",
             .hash = "N-V-__8AAH-mpwB7g3MnqYU-ooUBF1t99RP27dZ9addtMVXD",
         },
+        // .pcre2 = .{
+        //     .url = "https://github.com/PCRE2Project/pcre2/archive/refs/tags/pcre2-10.45.zip",
+        //     .hash = "N-V-__8AAPh79wDJJ3MaSzH16_i08z8O_m-hVhzc8CbznL7l",
+        // },
     },
     .paths = .{"."},
 }

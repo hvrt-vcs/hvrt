@@ -15,6 +15,10 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    const sqlite_flags = &[_][]const u8{
+        "-std=c99",
+    };
+
     const third_party_path = "third_party";
     const sqlite_include_path = third_party_path ++ "/sqlite3";
 
@@ -24,26 +28,61 @@ pub fn build(b: *std.Build) void {
     const pcre_prefix = "pcre2";
     const pcre_include_path = third_party_path ++ "/" ++ pcre_prefix;
 
-    const sqlite = b.addStaticLibrary(.{
-        .name = "sqlite",
+    // refer to the dependency in build.zig.zon
+    const sqlite_dep = b.dependency("sqlite", .{
         .target = target,
         .optimize = optimize,
     });
-    sqlite.linkLibC();
-    sqlite.addCSourceFile(.{
+
+    const sqlite_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    b.modules.put(b.dupe("sqlite"), sqlite_mod) catch unreachable;
+
+    const sqlite_sl = b.addLibrary(.{
+        .name = "sqlite",
+        .root_module = sqlite_mod,
+        .linkage = .static,
+    });
+
+    // sqlite_sl.linkLibrary(sqlite_dep.artifact("sqlite"));
+    sqlite_sl.addCSourceFile(.{
+        .file = sqlite_dep.path("sqlite3.c"),
+        .flags = sqlite_flags,
+    });
+    sqlite_sl.addIncludePath(sqlite_dep.path("."));
+
+    // Workaround code
+    sqlite_sl.addCSourceFile(.{
         .file = b.path("src/c/sqlite_transient_workaround.c"),
-        .flags = &[_][]const u8{
-            "-std=c99",
-        },
+        .flags = sqlite_flags,
     });
-    sqlite.addIncludePath(b.path("src/c"));
-    sqlite.addCSourceFile(.{
-        .file = b.path(sqlite_include_path ++ "/sqlite3.c"),
-        .flags = &[_][]const u8{
-            "-std=c99",
-        },
-    });
-    sqlite.addIncludePath(b.path(sqlite_include_path));
+    sqlite_sl.addIncludePath(b.path("src/c"));
+    sqlite_sl.linkLibC();
+
+    // // refer to the dependency in build.zig.zon
+    // const pcre2_dep = b.dependency("pcre2", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+
+    // const pcre2_mod = b.createModule(.{
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+
+    // b.modules.put(b.dupe("pcre2"), pcre2_mod) catch unreachable;
+
+    // const pcre2_sl = b.addLibrary(.{
+    //     .name = "sqlite",
+    //     .root_module = pcre2_mod,
+    //     .linkage = .static,
+    // });
+
+    // pcre2_sl.linkLibrary(pcre2_dep.artifact("pcre2"));
+    // pcre2_sl.linkLibC();
 
     const pcreCopyFiles = b.addWriteFiles();
     _ = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/config.h.generic"), "config.h");
@@ -114,7 +153,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.linkLibrary(sqlite);
+    exe.linkLibrary(sqlite_sl);
+    // exe.linkLibrary(pcre2_sl);
     exe.linkLibrary(pcre);
     exe.addIncludePath(b.path(sqlite_include_path));
     exe.addIncludePath(b.path("src/c"));
@@ -159,8 +199,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    unit_tests.linkLibrary(sqlite);
+    unit_tests.linkLibrary(sqlite_sl);
     unit_tests.linkLibrary(pcre);
+    // unit_tests.linkLibrary(pcre2_sl);
     unit_tests.addIncludePath(b.path(sqlite_include_path));
     unit_tests.addIncludePath(b.path("src/c"));
 

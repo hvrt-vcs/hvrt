@@ -1,4 +1,4 @@
-name: Build and test Havarti using Zig
+name: Zig build
 on:
   pull_request:
     branches:
@@ -10,7 +10,7 @@ jobs:
   # TODO: add a build task for compiling multiple targets. Name it `all`.
   build_all:
     runs-on: ubuntu-latest
-    name: Build all cross compile targets
+    name: Build all targets
     steps:
       - uses: actions/checkout@v3
       - uses: mlugg/setup-zig@v2

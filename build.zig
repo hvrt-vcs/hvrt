@@ -25,8 +25,8 @@ pub fn build(b: *std.Build) void {
     // Since Zig uses utf8 strings, we'll use pcre with 8bit support.
     const pcre_code_unit_width_name = "PCRE2_CODE_UNIT_WIDTH";
     const pcre_code_unit_width_value = "8";
-    const pcre_prefix = "pcre2";
-    const pcre_include_path = third_party_path ++ "/" ++ pcre_prefix;
+    // const pcre_prefix = "pcre2";
+    // const pcre_include_path = third_party_path ++ "/" ++ pcre_prefix;
 
     // refer to the dependency in build.zig.zon
     const sqlite_dep = b.dependency("sqlite", .{
@@ -62,87 +62,87 @@ pub fn build(b: *std.Build) void {
     sqlite_sl.addIncludePath(b.path("src/c"));
     sqlite_sl.linkLibC();
 
-    // // refer to the dependency in build.zig.zon
-    // const pcre2_dep = b.dependency("pcre2", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
+    // refer to the dependency in build.zig.zon
+    const pcre2_dep = b.dependency("pcre2", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
-    // const pcre2_mod = b.createModule(.{
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
+    const pcre2_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    });
 
-    // b.modules.put(b.dupe("pcre2"), pcre2_mod) catch unreachable;
+    b.modules.put(b.dupe("pcre2"), pcre2_mod) catch unreachable;
 
-    // const pcre2_sl = b.addLibrary(.{
-    //     .name = "sqlite",
-    //     .root_module = pcre2_mod,
-    //     .linkage = .static,
-    // });
+    const pcre2_sl = b.addLibrary(.{
+        .name = b.fmt("pcre2-{s}", .{pcre_code_unit_width_value}),
+        .root_module = pcre2_mod,
+        .linkage = .static,
+    });
+    pcre2_sl.linkLibC();
+
+    pcre2_sl.root_module.addCMacro(pcre_code_unit_width_name, pcre_code_unit_width_value);
 
     // pcre2_sl.linkLibrary(pcre2_dep.artifact("pcre2-8"));
     // pcre2_sl.linkLibC();
 
     const pcreCopyFiles = b.addWriteFiles();
-    _ = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/config.h.generic"), "config.h");
-    _ = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/pcre2.h.generic"), "pcre2.h");
-
-    const pcre2_sl = b.addStaticLibrary(.{
-        .name = b.fmt("pcre2-{s}", .{pcre_code_unit_width_value}),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
+    _ = pcreCopyFiles.addCopyFile(pcre2_dep.path("src/config.h.generic"), "config.h");
+    _ = pcreCopyFiles.addCopyFile(pcre2_dep.path("src/pcre2.h.generic"), "pcre2.h");
 
     pcre2_sl.root_module.addCMacro(pcre_code_unit_width_name, pcre_code_unit_width_value);
 
     pcre2_sl.addCSourceFile(.{
-        .file = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/pcre2_chartables.c.dist"), "pcre2_chartables.c"),
+        .file = pcreCopyFiles.addCopyFile(pcre2_dep.path("src/pcre2_chartables.c.dist"), "pcre2_chartables.c"),
         .flags = &.{
             "-DHAVE_CONFIG_H",
         },
     });
 
-    pcre2_sl.addIncludePath(b.path(pcre_include_path ++ "/src"));
+    pcre2_sl.addIncludePath(pcre2_dep.path("src"));
     pcre2_sl.addIncludePath(pcreCopyFiles.getDirectory());
 
-    pcre2_sl.addCSourceFiles(.{
-        .files = &.{
-            pcre_include_path ++ "/src/pcre2_auto_possess.c",
-            pcre_include_path ++ "/src/pcre2_chkdint.c",
-            pcre_include_path ++ "/src/pcre2_compile.c",
-            pcre_include_path ++ "/src/pcre2_config.c",
-            pcre_include_path ++ "/src/pcre2_context.c",
-            pcre_include_path ++ "/src/pcre2_convert.c",
-            pcre_include_path ++ "/src/pcre2_dfa_match.c",
-            pcre_include_path ++ "/src/pcre2_error.c",
-            pcre_include_path ++ "/src/pcre2_extuni.c",
-            pcre_include_path ++ "/src/pcre2_find_bracket.c",
-            pcre_include_path ++ "/src/pcre2_maketables.c",
-            pcre_include_path ++ "/src/pcre2_match.c",
-            pcre_include_path ++ "/src/pcre2_match_data.c",
-            pcre_include_path ++ "/src/pcre2_newline.c",
-            pcre_include_path ++ "/src/pcre2_ord2utf.c",
-            pcre_include_path ++ "/src/pcre2_pattern_info.c",
-            pcre_include_path ++ "/src/pcre2_script_run.c",
-            pcre_include_path ++ "/src/pcre2_serialize.c",
-            pcre_include_path ++ "/src/pcre2_string_utils.c",
-            pcre_include_path ++ "/src/pcre2_study.c",
-            pcre_include_path ++ "/src/pcre2_substitute.c",
-            pcre_include_path ++ "/src/pcre2_substring.c",
-            pcre_include_path ++ "/src/pcre2_tables.c",
-            pcre_include_path ++ "/src/pcre2_ucd.c",
-            pcre_include_path ++ "/src/pcre2_valid_utf.c",
-            pcre_include_path ++ "/src/pcre2_xclass.c",
-        },
-        .flags = &.{
-            "-DHAVE_CONFIG_H",
-            "-DPCRE2_STATIC",
-        },
-    });
+    const rel_files: []const []const u8 = &.{
+        "src/pcre2_auto_possess.c",
+        "src/pcre2_chkdint.c",
+        "src/pcre2_compile.c",
+        "src/pcre2_config.c",
+        "src/pcre2_context.c",
+        "src/pcre2_convert.c",
+        "src/pcre2_dfa_match.c",
+        "src/pcre2_error.c",
+        "src/pcre2_extuni.c",
+        "src/pcre2_find_bracket.c",
+        "src/pcre2_maketables.c",
+        "src/pcre2_match.c",
+        "src/pcre2_match_data.c",
+        "src/pcre2_newline.c",
+        "src/pcre2_ord2utf.c",
+        "src/pcre2_pattern_info.c",
+        "src/pcre2_script_run.c",
+        "src/pcre2_serialize.c",
+        "src/pcre2_string_utils.c",
+        "src/pcre2_study.c",
+        "src/pcre2_substitute.c",
+        "src/pcre2_substring.c",
+        "src/pcre2_tables.c",
+        "src/pcre2_ucd.c",
+        "src/pcre2_valid_utf.c",
+        "src/pcre2_xclass.c",
+    };
 
-    pcre2_sl.installHeader(b.path(pcre_include_path ++ "/src/pcre2.h.generic"), "pcre2.h");
+    for (rel_files) |rf| {
+        pcre2_sl.addCSourceFile(.{
+            .file = pcre2_dep.path(rf),
+            .flags = &.{
+                "-DHAVE_CONFIG_H",
+                "-DPCRE2_STATIC",
+            },
+        });
+    }
+
+    pcre2_sl.installHeader(pcre2_dep.path("src/pcre2.h.generic"), "pcre2.h");
 
     const exe = b.addExecutable(.{
         .name = "hvrt",

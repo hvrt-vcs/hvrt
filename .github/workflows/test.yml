@@ -1,4 +1,4 @@
-name: Zig build
+name: Test
 on:
   pull_request:
     branches:
@@ -7,13 +7,6 @@ on:
     branches:
       - master
 jobs:
-  build_all:
-    runs-on: ubuntu-latest
-    name: Compile all targets
-    steps:
-      - uses: actions/checkout@v3
-      - uses: mlugg/setup-zig@v2
-      - run: zig build --summary all
   test:
     runs-on: ubuntu-latest
     name: Test

@@ -1,11 +1,15 @@
 # Havarti
 
+[![Build](https://github.com/hvrt-vcs/hvrt/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/hvrt-vcs/hvrt/actions/workflows/build.yml)
+[![Test](https://github.com/hvrt-vcs/hvrt/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/hvrt-vcs/hvrt/actions/workflows/test.yml)
+
 The primary repo for this project is currently hosted on
 [Github](https://github.com/hvrt-vcs/hvrt). Issues and pull requests can be
 created there.
 
 ### WIP:
-I have opened up havarti publicly in an incomplete, non-working state. 
+
+I have opened up havarti publicly in an incomplete, non-working state.
 I am starting a new job and thought it best to avoid any potential conficts
 of interest by allowing this work to be done out in the open. Consequently,
 Havarti will have lots of rough edges for a while, and I apologize. You are
@@ -16,7 +20,7 @@ with your own.
 
 #### Havarti is a Hybrid VCS that works both distributed and/or centralized.
 
-`git` is (as of this writing) the reigning champion of version control systems. 
+`git` is (as of this writing) the reigning champion of version control systems.
 It was originally created to meet the needs of the
 completely distributed development model of the Linux kernel. It is a hairy
 problem to tackle, and it accomplishes the goal admirably. However, the projects I
@@ -78,6 +82,7 @@ value similar features:
 | **Local webapp issue tracker, forum, etc.** | ❌       | ❌   | ✔️     | ❌         | ❌          |
 
 #### Footnotes:
+
 1. Lazily calculated heuristically from tree snapshots. Can be wrong depending
   on CLI flags passed to `git blame` and/or amount of file changes between commits.
 2. Windows support via a Posix compatibility layer. Comes bundled with many indirect dependency programs like `bash`, `perl`, and `curl`.

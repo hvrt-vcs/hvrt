@@ -1,32 +1,26 @@
 const std = @import("std");
 
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
-pub fn build(b: *std.Build) void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
-    const target = b.standardTargetOptions(.{});
+const targets: []const std.Target.Query = &.{
+    .{ .cpu_arch = .aarch64, .os_tag = .macos },
+    .{ .cpu_arch = .aarch64, .os_tag = .linux },
+    .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
+    .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
+    .{ .cpu_arch = .x86_64, .os_tag = .windows },
+};
 
-    // Standard optimization options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
-    // set a preferred release mode, allowing the user to decide how to optimize.
-    const optimize = b.standardOptimizeOption(.{});
+const third_party_path = "third_party";
+const sqlite_include_path = third_party_path ++ "/sqlite3";
 
-    const sqlite_flags = &[_][]const u8{
-        "-std=c99",
-    };
+// Since Zig uses utf8 strings, we'll use pcre with 8bit support.
+const pcre_code_unit_width_name = "PCRE2_CODE_UNIT_WIDTH";
+const pcre_code_unit_width_value = "8";
+const pcre_prefix = "pcre2";
+const pcre_include_path = third_party_path ++ "/" ++ pcre_prefix;
+const sqlite_flags = &[_][]const u8{
+    "-std=c99",
+};
 
-    const third_party_path = "third_party";
-    const sqlite_include_path = third_party_path ++ "/sqlite3";
-
-    // Since Zig uses utf8 strings, we'll use pcre with 8bit support.
-    const pcre_code_unit_width_name = "PCRE2_CODE_UNIT_WIDTH";
-    const pcre_code_unit_width_value = "8";
-    const pcre_prefix = "pcre2";
-    const pcre_include_path = third_party_path ++ "/" ++ pcre_prefix;
+fn compileSqlite(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
 
     // refer to the dependency in build.zig.zon
     const sqlite_dep = b.dependency("sqlite", .{
@@ -61,6 +55,26 @@ pub fn build(b: *std.Build) void {
     });
     sqlite_sl.addIncludePath(b.path("src/c"));
     sqlite_sl.linkLibC();
+
+    return sqlite_sl;
+}
+
+// Although this function looks imperative, note that its job is to
+// declaratively construct a build graph that will be executed by an external
+// runner.
+pub fn build(b: *std.Build) void {
+    // Standard target options allows the person running `zig build` to choose
+    // what target to build for. Here we do not override the defaults, which
+    // means any target is allowed, and the default is native. Other options
+    // for restricting supported target set are available.
+    const target = b.standardTargetOptions(.{});
+
+    // Standard optimization options allow the person running `zig build` to select
+    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
+    // set a preferred release mode, allowing the user to decide how to optimize.
+    const optimize = b.standardOptimizeOption(.{});
+
+    const sqlite_sl = compileSqlite(b, target, optimize);
 
     // // refer to the dependency in build.zig.zon
     // const pcre2_dep = b.dependency("pcre2", .{

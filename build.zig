@@ -59,23 +59,7 @@ fn compileSqlite(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     return sqlite_sl;
 }
 
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
-pub fn build(b: *std.Build) void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
-    const target = b.standardTargetOptions(.{});
-
-    // Standard optimization options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
-    // set a preferred release mode, allowing the user to decide how to optimize.
-    const optimize = b.standardOptimizeOption(.{});
-
-    const sqlite_sl = compileSqlite(b, target, optimize);
-
+fn compilePcre2(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
     // // refer to the dependency in build.zig.zon
     // const pcre2_dep = b.dependency("pcre2", .{
     //     .target = target,
@@ -157,6 +141,28 @@ pub fn build(b: *std.Build) void {
     });
 
     pcre2_sl.installHeader(b.path(pcre_include_path ++ "/src/pcre2.h.generic"), "pcre2.h");
+
+    return pcre2_sl;
+}
+
+// Although this function looks imperative, note that its job is to
+// declaratively construct a build graph that will be executed by an external
+// runner.
+pub fn build(b: *std.Build) void {
+    // Standard target options allows the person running `zig build` to choose
+    // what target to build for. Here we do not override the defaults, which
+    // means any target is allowed, and the default is native. Other options
+    // for restricting supported target set are available.
+    const target = b.standardTargetOptions(.{});
+
+    // Standard optimization options allow the person running `zig build` to select
+    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
+    // set a preferred release mode, allowing the user to decide how to optimize.
+    const optimize = b.standardOptimizeOption(.{});
+
+    const sqlite_sl = compileSqlite(b, target, optimize);
+
+    const pcre2_sl = compilePcre2(b, target, optimize);
 
     const exe = b.addExecutable(.{
         .name = "hvrt",

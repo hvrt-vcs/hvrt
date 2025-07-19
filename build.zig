@@ -9,7 +9,6 @@ const targets: []const std.Target.Query = &.{
 };
 
 const third_party_path = "third_party";
-const sqlite_include_path = third_party_path ++ "/sqlite3";
 
 // Since Zig uses utf8 strings, we'll use pcre with 8bit support.
 const pcre_code_unit_width_name = "PCRE2_CODE_UNIT_WIDTH";
@@ -146,6 +145,11 @@ fn compilePcre2(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
 }
 
 fn compileExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+    const sqlite_dep = b.dependency("sqlite", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const sqlite_sl = compileSqlite(b, target, optimize);
 
     const pcre2_sl = compilePcre2(b, target, optimize);
@@ -161,7 +165,7 @@ fn compileExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
 
     exe.linkLibrary(sqlite_sl);
     exe.linkLibrary(pcre2_sl);
-    exe.addIncludePath(b.path(sqlite_include_path));
+    exe.addIncludePath(sqlite_dep.path("."));
     exe.addIncludePath(b.path("src/c"));
 
     // We use c_allocator from libc for allocator implementation, since it is
@@ -190,17 +194,33 @@ pub fn build(b: *std.Build) void {
 
     const pcre2_sl = compilePcre2(b, target, optimize);
 
-    const exe = compileExe(b, target, optimize);
+    const native_exe = compileExe(b, target, optimize);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
-    b.installArtifact(exe);
+    b.installArtifact(native_exe);
+
+    // Build artifacts for all desired targets
+    for (targets) |t| {
+        const exe = compileExe(b, b.resolveTargetQuery(t), optimize);
+
+        const custom_dest = t.zigTriple(b.allocator) catch unreachable;
+        const target_output = b.addInstallArtifact(exe, .{
+            .dest_dir = .{
+                .override = .{
+                    .custom = custom_dest,
+                },
+            },
+        });
+
+        b.getInstallStep().dependOn(&target_output.step);
+    }
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
-    const run_cmd = b.addRunArtifact(exe);
+    const run_cmd = b.addRunArtifact(native_exe);
 
     // By making the run step depend on the install step, it will be run from the
     // installation directory rather than directly from within the cache directory.
@@ -228,9 +248,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const sqlite_dep = b.dependency("sqlite", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     unit_tests.linkLibrary(sqlite_sl);
     unit_tests.linkLibrary(pcre2_sl);
-    unit_tests.addIncludePath(b.path(sqlite_include_path));
+    unit_tests.addIncludePath(sqlite_dep.path("."));
     unit_tests.addIncludePath(b.path("src/c"));
 
     const run_unit_tests = b.addRunArtifact(unit_tests);

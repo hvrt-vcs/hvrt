@@ -70,7 +70,11 @@ pub const Matcher = struct {
         const options: u32 = 0 | c.PCRE2_CONVERT_GLOB;
         var output_opt: [*c]u8 = null;
         var output_size: usize = 0;
-        const context: ?*c.pcre2_convert_context_8 = null;
+        const context: ?*c.pcre2_convert_context_8 = c.pcre2_convert_context_create_8(null);
+        defer c.pcre2_convert_context_free_8(context);
+
+        const rcs = c.pcre2_set_glob_separator_8(context, '/');
+        if (rcs != 0) unreachable;
 
         const rc = c.pcre2_pattern_convert_8(
             glob.ptr,

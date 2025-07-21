@@ -45,7 +45,7 @@ pub fn main() !void {
                 sqlite.Error.SQLITE_CANTOPEN => 4,
                 else => {
                     // Any error other than the explicitly listed ones in the
-                    // switch should just bubble up normally, printing a error
+                    // switch should just bubble up normally, printing an error
                     // trace.
                     return err;
                 },

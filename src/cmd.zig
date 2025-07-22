@@ -7,54 +7,35 @@ const commit = @import("commit.zig").commit;
 
 /// It is the responsibility of the caller of `internalMain` to deallocate and
 /// deinit args and gpa, if necessary.
-pub fn internalMain(gpa: std.mem.Allocator, args: []const [:0]const u8) !void {
-    const parsed_args = try parse_args.parseArgs(gpa, args);
-    defer parsed_args.deinit();
+pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !void {
+    const args = try parse_args.Args.parseArgs(gpa, raw_args);
+    defer args.deinit();
 
-    if (args.len > 1) {
-        const sub_cmd = args[1];
-        const cmd_enum_opt = std.meta.stringToEnum(parse_args.Command, sub_cmd);
-        if (cmd_enum_opt) |cmd_enum| {
-            const repo_dir = if (args.len > 2) try std.fs.realpathAlloc(gpa, args[2]) else try std.process.getCwdAlloc(gpa);
-            defer gpa.free(repo_dir);
-            const repo_dirZ = try gpa.dupeZ(u8, repo_dir);
-            defer gpa.free(repo_dirZ);
+    switch (args.command) {
+        .global => {
+            try args.command.notImplemented();
+        },
+        .init => {
+            try init(gpa, args.repo_dirZ);
+        },
+        .add => {
+            // FIXME: this doesn't work if a repo path isn't passed.
+            // Need to do real args parsing at some point.
+            // const files = if (raw_args.len > 3) raw_args[3..] else raw_args[2..];
 
-            switch (cmd_enum) {
-                .init => {
-                    try init(gpa, repo_dirZ);
-                },
-                .add => {
-                    // FIXME: this doesn't work if they don't pass a repo path.
-                    // Need to do real args parsing at some point.
-                    const files = if (args.len > 3) args[3..] else args[2..];
-
-                    try add(gpa, repo_dirZ, files);
-                },
-                .commit => {
-                    try commit(gpa, repo_dirZ, "Dummy message");
-                },
-                .mv => {
-                    try notImplemented(sub_cmd);
-                },
-                .cp => {
-                    try notImplemented(sub_cmd);
-                },
-                .rm => {
-                    try notImplemented(sub_cmd);
-                },
-            }
-        } else {
-            std.log.warn("Unknown sub-command given: {s}\n", .{sub_cmd});
-            return error.ArgumentError;
-        }
-    } else {
-        std.log.warn("No sub-command given.\n", .{});
-        return error.ArgumentError;
+            try add(gpa, args.repo_dirZ, args.add_files);
+        },
+        .commit => {
+            try commit(gpa, args.repo_dirZ, "Dummy message");
+        },
+        .mv => {
+            try args.command.notImplemented();
+        },
+        .cp => {
+            try args.command.notImplemented();
+        },
+        .rm => {
+            try args.command.notImplemented();
+        },
     }
-}
-
-fn notImplemented(sub_cmd: []const u8) !void {
-    std.log.err("Sub-command not implemented yet: {s}.\n", .{sub_cmd});
-    return error.NotImplementedError;
 }

@@ -41,6 +41,7 @@ pub fn main() !void {
 
         cmd.internalMain(allocator, args) catch |err| {
             status_code = switch (err) {
+                error.ArgumentError => 2,
                 sqlite.Error.SQLITE_ERROR => 3,
                 sqlite.Error.SQLITE_CANTOPEN => 4,
                 else => {
@@ -252,7 +253,32 @@ test "invoke without args" {
     // https://github.com/ziglang/zig/issues/5738#issuecomment-1466902082
     const basic_args = [_][:0]const u8{"test_prog_name"};
     cmd.internalMain(std.testing.allocator, &basic_args) catch |err| {
+        // const expected_error = error.ArgumentError;
+        const expected_error = error.NotImplementedError;
+        const actual_error_union: anyerror!void = err;
+        try std.testing.expectError(expected_error, actual_error_union);
+    };
+}
+
+test "invoke with unknown subcommand" {
+    // TODO: disable failure on error message here. See:
+    // https://github.com/ziglang/zig/issues/5738#issuecomment-1466902082
+    const basic_args = [_][:0]const u8{ "test_prog_name", "blahblahblah" };
+    cmd.internalMain(std.testing.allocator, &basic_args) catch |err| {
+        // const expected_error = error.ArgumentError;
         const expected_error = error.ArgumentError;
+        const actual_error_union: anyerror!void = err;
+        try std.testing.expectError(expected_error, actual_error_union);
+    };
+}
+
+test "invoke with unimplemented subcommand" {
+    // TODO: disable failure on error message here. See:
+    // https://github.com/ziglang/zig/issues/5738#issuecomment-1466902082
+    const basic_args = [_][:0]const u8{ "test_prog_name", "cp" };
+    cmd.internalMain(std.testing.allocator, &basic_args) catch |err| {
+        // const expected_error = error.ArgumentError;
+        const expected_error = error.NotImplementedError;
         const actual_error_union: anyerror!void = err;
         try std.testing.expectError(expected_error, actual_error_union);
     };

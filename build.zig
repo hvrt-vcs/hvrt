@@ -166,6 +166,7 @@ fn compileExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
     exe.linkLibrary(sqlite_sl);
     exe.linkLibrary(pcre2_sl);
     exe.addIncludePath(sqlite_dep.path("."));
+    exe.addIncludePath(b.path(third_party_path ++ "/klib"));
     exe.addIncludePath(b.path("src/c"));
 
     // We use c_allocator from libc for allocator implementation, since it is
@@ -256,6 +257,7 @@ pub fn build(b: *std.Build) void {
     unit_tests.linkLibrary(sqlite_sl);
     unit_tests.linkLibrary(pcre2_sl);
     unit_tests.addIncludePath(sqlite_dep.path("."));
+    unit_tests.addIncludePath(b.path(third_party_path ++ "/klib"));
     unit_tests.addIncludePath(b.path("src/c"));
 
     const run_unit_tests = b.addRunArtifact(unit_tests);

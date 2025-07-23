@@ -22,7 +22,6 @@ pub const Command = enum {
 };
 
 pub const Args = struct {
-    alloc: std.mem.Allocator,
     arena_ptr: *std.heap.ArenaAllocator,
 
     command: Command,
@@ -72,7 +71,6 @@ pub const Args = struct {
             }
 
             return Args{
-                .alloc = gpa,
                 .arena_ptr = arena_ptr,
                 .command = cmd_enum,
                 .repo_dirZ = repo_dirZ,
@@ -86,7 +84,8 @@ pub const Args = struct {
 
     // This must be called or memory will be leaked.
     pub fn deinit(self: Args) void {
+        const child_allocator = self.arena_ptr.child_allocator;
         self.arena_ptr.deinit();
-        self.alloc.destroy(self.arena_ptr);
+        child_allocator.destroy(self.arena_ptr);
     }
 };

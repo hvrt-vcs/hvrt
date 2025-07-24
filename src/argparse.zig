@@ -145,8 +145,15 @@ pub const ArgumentParser = struct {
         try self.args_ptr.append(arg);
     }
 
-    pub fn parse_args(self: *const ArgumentParser, raw_args: []const [:0]const u8) !void {
+    pub fn parse_args(self: *const ArgumentParser, raw_args: []const [:0]const u8, strip_first: bool) !void {
+        // if (raw_args.len == 0 || (raw_args.len <= 1 and strip_first)) {
+        //     return;
+        // }
+
+        const largs = if (strip_first) raw_args[1..] else raw_args;
+        for (largs) |arg| {
+            log.debug("What did we get passed? {s}", .{arg});
+        }
         _ = self;
-        _ = raw_args;
     }
 };

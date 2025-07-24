@@ -15,7 +15,7 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
     const argparser = try argparse.ArgumentParser.init(gpa);
     defer argparser.deinit();
 
-    try argparser.parse_args(raw_args);
+    try argparser.parse_args(raw_args, true);
 
     switch (args.command) {
         .global => {

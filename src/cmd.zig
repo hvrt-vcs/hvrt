@@ -2,6 +2,7 @@ const std = @import("std");
 
 const parse_args = @import("parse_args.zig");
 const argparse = @import("argparse.zig");
+const allyouropts = @import("allyouropt.zig");
 const init = @import("init.zig").init;
 const add = @import("add.zig").add;
 const commit = @import("commit.zig").commit;

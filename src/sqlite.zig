@@ -20,23 +20,22 @@ pub const DataBase = struct {
         errdefer if (db_optional) |db| DataBase.close(.{ .db = db }) catch unreachable;
         try ResultCode.fromInt(rc).check(if (db_optional) |db| .{ .db = db } else null);
 
-        // SQLite did not indicate an error, so pointer should not be null
-        // after the error check.
-        std.debug.assert(db_optional != null);
-
         // Enable extended error codes
-        const db = db_optional.?;
-        const self: DataBase = .{ .db = db };
-        rc = c.sqlite3_extended_result_codes(self.db, 1);
-        try ResultCode.fromInt(rc).check(self);
+        if (db_optional) |db| {
+            const self: DataBase = .{ .db = db };
+            rc = c.sqlite3_extended_result_codes(self.db, 1);
+            try ResultCode.fromInt(rc).check(self);
 
-        // For Havarti, we almost always want to default these pragmas to
-        // the values below.
-        try self.exec("PRAGMA foreign_keys = true;");
-        try self.exec("PRAGMA ignore_check_constraints = false;");
-        try self.exec("PRAGMA automatic_index = true;");
+            // For Havarti, we almost always want to default these pragmas to
+            // the values below.
+            try self.exec("PRAGMA foreign_keys = true;");
+            try self.exec("PRAGMA ignore_check_constraints = false;");
+            try self.exec("PRAGMA automatic_index = true;");
 
-        return self;
+            return self;
+        } else {
+            std.debug.panic("SQLite did not indicate an error, but db_optional is still null when opening file: {s}\n", .{filename});
+        }
     }
 
     /// Close and free a sqlite database or return an error if the given database
@@ -64,12 +63,11 @@ pub const Statement = struct {
         const rc = c.sqlite3_prepare_v2(db.db, stmt.ptr, @intCast(stmt.len + 1), &stmt_opt, null);
         try ResultCode.fromInt(rc).check(db);
 
-        // SQLite did not indicate an error, so pointer should not be null
-        // after the error check.
-        std.debug.assert(stmt_opt != null);
-
-        const stmt_ptr = stmt_opt.?;
-        return .{ .stmt = stmt_ptr, .db = db };
+        if (stmt_opt) |stmt_ptr| {
+            return .{ .stmt = stmt_ptr, .db = db };
+        } else {
+            std.debug.panic("SQLite did not indicate an error, but stmt_opt is still null: {s}\n", .{stmt});
+        }
     }
 
     /// Finalize (i.e. "free") a prepared sql statement

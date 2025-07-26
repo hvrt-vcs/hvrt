@@ -2,6 +2,7 @@
 
 [![Build](https://github.com/hvrt-vcs/hvrt/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/hvrt-vcs/hvrt/actions/workflows/build.yml)
 [![Test](https://github.com/hvrt-vcs/hvrt/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/hvrt-vcs/hvrt/actions/workflows/test.yml)
+[![codecov](https://codecov.io/github/hvrt-vcs/hvrt/branch/master/graph/badge.svg?token=37ZZ9RJUUY)](https://codecov.io/github/hvrt-vcs/hvrt)
 
 The primary repo for this project is currently hosted on
 [Github](https://github.com/hvrt-vcs/hvrt). Issues and pull requests can be

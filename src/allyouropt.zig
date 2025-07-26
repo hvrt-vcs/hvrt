@@ -6,6 +6,26 @@ const c = @import("c.zig");
 
 const log = std.log.scoped(.allyouropt);
 
+pub const OptIterator = struct {
+    pub fn next() ?ParsedOpt {}
+};
+
+pub const ParsedOpt = struct {
+    flag: []const u8,
+    value: ?[]const u8,
+    arg_index: usize,
+};
+
+pub fn getopt(
+    args: []const []const u8,
+    short_flags: []const u8,
+    long_flags: []const []const u8,
+) !OptIterator {
+    _ = args;
+    _ = short_flags;
+    _ = long_flags;
+}
+
 /// A struct defining an option.
 ///
 /// At least one of `short_flags` or `long_flags` is required. A single option

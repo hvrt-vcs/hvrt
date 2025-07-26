@@ -20,22 +20,23 @@ pub const DataBase = struct {
         errdefer if (db_optional) |db| DataBase.close(.{ .db = db }) catch unreachable;
         try ResultCode.fromInt(rc).check(if (db_optional) |db| .{ .db = db } else null);
 
+        // SQLite did not indicate an error, so pointer should not be null
+        // after the error check.
+        std.debug.assert(db_optional != null);
+
         // Enable extended error codes
-        if (db_optional) |db| {
-            const self: DataBase = .{ .db = db };
-            rc = c.sqlite3_extended_result_codes(self.db, 1);
-            try ResultCode.fromInt(rc).check(self);
+        const db = db_optional.?;
+        const self: DataBase = .{ .db = db };
+        rc = c.sqlite3_extended_result_codes(self.db, 1);
+        try ResultCode.fromInt(rc).check(self);
 
-            // For Havarti, we almost always want to default these pragmas to
-            // the values below.
-            try self.exec("PRAGMA foreign_keys = true;");
-            try self.exec("PRAGMA ignore_check_constraints = false;");
-            try self.exec("PRAGMA automatic_index = true;");
+        // For Havarti, we almost always want to default these pragmas to
+        // the values below.
+        try self.exec("PRAGMA foreign_keys = true;");
+        try self.exec("PRAGMA ignore_check_constraints = false;");
+        try self.exec("PRAGMA automatic_index = true;");
 
-            return self;
-        } else {
-            std.debug.panic("SQLite did not indicate an error, but db_optional is still null when opening file: {s}\n", .{filename});
-        }
+        return self;
     }
 
     /// Close and free a sqlite database or return an error if the given database
@@ -63,11 +64,12 @@ pub const Statement = struct {
         const rc = c.sqlite3_prepare_v2(db.db, stmt.ptr, @intCast(stmt.len + 1), &stmt_opt, null);
         try ResultCode.fromInt(rc).check(db);
 
-        if (stmt_opt) |stmt_ptr| {
-            return .{ .stmt = stmt_ptr, .db = db };
-        } else {
-            std.debug.panic("SQLite did not indicate an error, but stmt_opt is still null: {s}\n", .{stmt});
-        }
+        // SQLite did not indicate an error, so pointer should not be null
+        // after the error check.
+        std.debug.assert(stmt_opt != null);
+
+        const stmt_ptr = stmt_opt.?;
+        return .{ .stmt = stmt_ptr, .db = db };
     }
 
     /// Finalize (i.e. "free") a prepared sql statement
@@ -77,11 +79,13 @@ pub const Statement = struct {
     }
 
     pub fn clear_bindings(stmt: Statement) !void {
-        try ResultCode.fromInt(c.sqlite3_clear_bindings(stmt.stmt)).check(stmt.db);
+        const rc = c.sqlite3_clear_bindings(stmt.stmt);
+        try ResultCode.fromInt(rc).check(stmt.db);
     }
 
     pub fn reset(stmt: Statement) !void {
-        try ResultCode.fromInt(c.sqlite3_reset(stmt.stmt)).check(stmt.db);
+        const rc = c.sqlite3_reset(stmt.stmt);
+        try ResultCode.fromInt(rc).check(stmt.db);
     }
 
     /// Return all result codes except `SQLITE_DONE`. When `SQLITE_DONE` is
@@ -90,7 +94,8 @@ pub const Statement = struct {
     /// possible to get into an infinite loop. See `auto_step` for a simple
     /// example of how to check for errors in the return code.
     pub fn step(stmt: Statement) Error!?ResultCode {
-        const code = ResultCode.fromInt(c.sqlite3_step(stmt.stmt));
+        const rc = c.sqlite3_step(stmt.stmt);
+        const code = ResultCode.fromInt(rc);
         try code.check(stmt.db);
         return if (code == ResultCode.SQLITE_DONE) null else code;
     }
@@ -752,9 +757,9 @@ pub const ResultCode = enum(c_int) {
             ResultCode.SQLITE_CORRUPT_INDEX => Error.SQLITE_CORRUPT_INDEX,
             ResultCode.SQLITE_CORRUPT_SEQUENCE => Error.SQLITE_CORRUPT_SEQUENCE,
             ResultCode.SQLITE_CORRUPT_VTAB => Error.SQLITE_CORRUPT_VTAB,
-            ResultCode.SQLITE_ERROR_MISSING_COLLSEQ => error.SQLITE_ERROR_MISSING_COLLSEQ,
-            ResultCode.SQLITE_ERROR_RETRY => error.SQLITE_ERROR_RETRY,
-            ResultCode.SQLITE_ERROR_SNAPSHOT => error.SQLITE_ERROR_SNAPSHOT,
+            ResultCode.SQLITE_ERROR_MISSING_COLLSEQ => Error.SQLITE_ERROR_MISSING_COLLSEQ,
+            ResultCode.SQLITE_ERROR_RETRY => Error.SQLITE_ERROR_RETRY,
+            ResultCode.SQLITE_ERROR_SNAPSHOT => Error.SQLITE_ERROR_SNAPSHOT,
             ResultCode.SQLITE_IOERR_ACCESS => Error.SQLITE_IOERR_ACCESS,
             ResultCode.SQLITE_IOERR_AUTH => Error.SQLITE_IOERR_AUTH,
             ResultCode.SQLITE_IOERR_BEGIN_ATOMIC => Error.SQLITE_IOERR_BEGIN_ATOMIC,

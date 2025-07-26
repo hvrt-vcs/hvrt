@@ -17,7 +17,7 @@ pub const DataBase = struct {
         const flags: c_int = c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE | c.SQLITE_OPEN_URI;
 
         rc = c.sqlite3_open_v2(filename.ptr, &db_optional, flags, null);
-        errdefer if (db_optional) |db| DataBase.close(.{ .db = db }) catch unreachable;
+        errdefer if (db_optional) |db| DataBase.close(.{ .db = db }) catch unreachable; // NO_COV_LINE
         try ResultCode.fromInt(rc).check(if (db_optional) |db| .{ .db = db } else null);
 
         // Enable extended error codes
@@ -34,7 +34,7 @@ pub const DataBase = struct {
 
             return self;
         } else {
-            std.debug.panic("SQLite did not indicate an error, but db_optional is still null when opening file: {s}\n", .{filename});
+            std.debug.panic("SQLite did not indicate an error, but db_optional is still null when opening file: {s}\n", .{filename}); // NO_COV_LINE
         }
     }
 
@@ -66,7 +66,7 @@ pub const Statement = struct {
         if (stmt_opt) |stmt_ptr| {
             return .{ .stmt = stmt_ptr, .db = db };
         } else {
-            std.debug.panic("SQLite did not indicate an error, but stmt_opt is still null: {s}\n", .{stmt});
+            std.debug.panic("SQLite did not indicate an error, but stmt_opt is still null: {s}\n", .{stmt}); // NO_COV_LINE
         }
     }
 
@@ -698,6 +698,7 @@ pub const ResultCode = enum(c_int) {
             // non-error result codes
             ResultCode.SQLITE_OK, ResultCode.SQLITE_DONE, ResultCode.SQLITE_ROW => null,
 
+            // NO_COV_START
             // Primary codes
             ResultCode.SQLITE_ABORT => Error.SQLITE_ABORT,
             ResultCode.SQLITE_AUTH => Error.SQLITE_AUTH,
@@ -803,6 +804,7 @@ pub const ResultCode = enum(c_int) {
             ResultCode.SQLITE_READONLY_RECOVERY => Error.SQLITE_READONLY_RECOVERY,
             ResultCode.SQLITE_READONLY_ROLLBACK => Error.SQLITE_READONLY_ROLLBACK,
             ResultCode.SQLITE_WARNING_AUTOINDEX => Error.SQLITE_WARNING_AUTOINDEX,
+            // NO_COV_END
         };
     }
 };

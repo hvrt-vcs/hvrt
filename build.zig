@@ -270,6 +270,10 @@ pub fn build(b: *std.Build) void {
         run_kcov.addPrefixedDirectoryArg("--include-path=", b.path("src"));
         run_kcov.addArg("--clean");
 
+        // Patterns to ignore coverage for ranges and single lines
+        run_kcov.addArg("--exclude-region=NO_COV_START:NO_COV_END");
+        run_kcov.addArg("--exclude-line=NO_COV_LINE");
+
         const kcov_out_dir_path = run_kcov.addPrefixedOutputDirectoryArg("", "kcov-out");
         run_kcov.addFileArg(unit_tests.getEmittedBin());
 

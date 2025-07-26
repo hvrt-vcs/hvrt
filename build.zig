@@ -180,6 +180,8 @@ fn compileExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
 // declaratively construct a build graph that will be executed by an external
 // runner.
 pub fn build(b: *std.Build) void {
+    const report_coverage = b.option(bool, "report-coverage", "Generates a test code coverage using kcov") orelse false;
+
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -260,11 +262,34 @@ pub fn build(b: *std.Build) void {
     unit_tests.addIncludePath(b.path(third_party_path ++ "/klib"));
     unit_tests.addIncludePath(b.path("src/c"));
 
-    const run_unit_tests = b.addRunArtifact(unit_tests);
-
-    // Similar to creating the run step earlier, this exposes a `test` step to
-    // the `zig build --help` menu, providing a way for the user to request
-    // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_unit_tests.step);
+
+    if (report_coverage) {
+        // Generate coverage report with kcov
+        var run_kcov = b.addSystemCommand(&.{"kcov"});
+        run_kcov.addPrefixedDirectoryArg("--include-path=", b.path("src"));
+        run_kcov.addArg("--clean");
+
+        const kcov_out_dir_path = run_kcov.addPrefixedOutputDirectoryArg("", "kcov-out");
+        run_kcov.addFileArg(unit_tests.getEmittedBin());
+
+        run_kcov.has_side_effects = true;
+        run_kcov.stdio = .inherit;
+
+        const install_kcov_dir = b.addInstallDirectory(.{
+            .source_dir = kcov_out_dir_path,
+            .install_dir = .prefix,
+            .install_subdir = "kcov-out",
+        });
+        install_kcov_dir.step.dependOn(&run_kcov.step);
+
+        test_step.dependOn(&install_kcov_dir.step);
+    } else {
+        const run_unit_tests = b.addRunArtifact(unit_tests);
+
+        // Similar to creating the run step earlier, this exposes a `test` step to
+        // the `zig build --help` menu, providing a way for the user to request
+        // running the unit tests.
+        test_step.dependOn(&run_unit_tests.step);
+    }
 }

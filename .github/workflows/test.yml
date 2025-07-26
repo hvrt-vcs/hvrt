@@ -7,6 +7,24 @@ on:
     branches:
       - master
 jobs:
+  test_coverage:
+    runs-on: ubuntu-latest
+    name: Coverage report
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v2
+      - name: Install kcov
+        run: sudo apt-get install kcov -y
+      - name: Run tests with coverage report
+        run: zig build test --summary all -Dreport-coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: hvrt-vcs/hvrt
+          directory: ./zig-out/kcov-out
+          fail_ci_if_error: true
+          verbose: true
   test:
     strategy:
       matrix:

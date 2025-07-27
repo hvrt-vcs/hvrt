@@ -2,7 +2,7 @@ const std = @import("std");
 
 const parse_args = @import("parse_args.zig");
 const argparse = @import("argparse.zig");
-const allyouropts = @import("allyouropt.zig");
+const allyouropt = @import("allyouropt.zig");
 const init = @import("init.zig").init;
 const add = @import("add.zig").add;
 const commit = @import("commit.zig").commit;
@@ -16,6 +16,15 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
     const argparser = try argparse.ArgumentParser.init(gpa);
     defer argparser.deinit();
 
+    var opt_iter = allyouropt.OptIterator{
+        .args = raw_args,
+        .short_flags = &.{},
+        .long_flags = &.{},
+    };
+
+    while (opt_iter.next()) |o| {
+        std.log.debug("What is the next option? {any}", .{o});
+    }
     try argparser.parse_args(raw_args, true);
 
     switch (args.command) {

@@ -157,16 +157,51 @@ pub const OptIterator = struct {
     }
 };
 
-test "invoke with unimplemented subcommand" {
-    const basic_args = [_][:0]const u8{ "test_prog_name", "cp" };
+test OptIterator {
+    // Happy path for all opts
+    const basic_args = [_][:0]const u8{ "test_prog_name", "-a", "-b", "-d=foo", "-d", "bar", "--gggg", "--ffff=foo", "--ffff", "bar", "cp" };
+    const sans_prog = basic_args[1..];
 
-    var opt_iter = OptIterator{
-        .args = &basic_args,
-        .short_flags = &.{},
-        .long_flags = &.{},
+    var opt_iter1 = OptIterator{
+        .args = sans_prog,
+        .short_flags = "abcd:",
+        .long_flags = &.{ "eeee", "ffff=", "gggg" },
     };
 
-    while (opt_iter.next()) |o| {
+    while (opt_iter1.next()) |o| {
         log.debug("What is the next option? {any}", .{o});
     }
+
+    try std.testing.expectEqual(9, opt_iter1.arg_index);
+    try std.testing.expectEqualStrings("cp", sans_prog[opt_iter1.arg_index]);
+
+    // How does it react when the short flag doesn't exist?
+    var opt_iter2 = OptIterator{
+        .args = sans_prog,
+        .short_flags = "acd:",
+        .long_flags = &.{ "eeee", "ffff=", "gggg" },
+    };
+
+    while (opt_iter2.next()) |o| {
+        log.debug("What is the next option? {any}", .{o});
+        // std.debug.print("What is the next option? {any}", .{o});
+    }
+
+    try std.testing.expectEqual(1, opt_iter2.arg_index);
+    try std.testing.expectEqualStrings("-b", sans_prog[opt_iter2.arg_index]);
+
+    // How does it react when the long flag doesn't exist?
+    var opt_iter3 = OptIterator{
+        .args = sans_prog,
+        .short_flags = "abcd:",
+        .long_flags = &.{ "eeee", "ffff=" },
+    };
+
+    while (opt_iter3.next()) |o| {
+        log.debug("What is the next option? {any}", .{o});
+        // std.debug.print("What is the next option? {any}", .{o});
+    }
+
+    try std.testing.expectEqual(5, opt_iter3.arg_index);
+    try std.testing.expectEqualStrings("--gggg", sans_prog[opt_iter3.arg_index]);
 }

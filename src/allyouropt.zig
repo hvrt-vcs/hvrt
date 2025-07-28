@@ -6,6 +6,13 @@ const c = @import("c.zig");
 
 const log = std.log.scoped(.allyouropt);
 
+// pub const Opt = struct {
+//     name: []const u8,
+//     short_flags: []const u8,
+//     long_flags: []const []const u8,
+//     takes_arg: bool = false,
+// };
+
 pub const ParsedOpt = struct {
     flag: []const u8,
     arg_index: usize,
@@ -19,15 +26,6 @@ pub const OptIterator = struct {
     arg_index: usize = 0,
 
     pub fn next(self: *OptIterator) ?ParsedOpt {
-        // while args and args[0].startswith('-') and args[0] != '-':
-        //     if args[0] == '--':
-        //         args = args[1:]
-        //         break
-        //     if args[0].startswith('--'):
-        //         opts, args = do_longs(opts, args[0][2:], longopts, args[1:])
-        //     else:
-        //         opts, args = do_shorts(opts, args[0][1:], shortopts, args[1:])
-
         if (self.arg_index >= self.args.len) return null;
 
         const arg = self.args[self.arg_index];
@@ -48,6 +46,10 @@ pub const OptIterator = struct {
         }
 
         return null;
+    }
+
+    pub fn remaining_args(self: OptIterator) []const []const u8 {
+        return self.args[self.arg_index..];
     }
 
     fn do_long_flag(self: *OptIterator, arg: []const u8) ?ParsedOpt {
@@ -204,4 +206,6 @@ test OptIterator {
 
     try std.testing.expectEqual(5, opt_iter3.arg_index);
     try std.testing.expectEqualStrings("--gggg", sans_prog[opt_iter3.arg_index]);
+    try std.testing.expectEqual(5, opt_iter3.remaining_args().len);
+    try std.testing.expectEqualStrings("--gggg", opt_iter3.remaining_args()[0]);
 }

@@ -2,7 +2,6 @@
 // See: https://docs.python.org/3/library/argparse.html
 // See: https://docs.python.org/3/library/getopt.html
 const std = @import("std");
-const c = @import("c.zig");
 
 const log = std.log.scoped(.allyouropt);
 
@@ -17,6 +16,40 @@ pub const ParsedOpt = struct {
     flag: []const u8,
     arg_index: usize,
     value: ?[]const u8 = null,
+
+    pub fn to_int(self: ParsedOpt, comptime T: type) !T {
+        if (self.value) |value| {
+            return try std.fmt.parseInt(T, value, 0);
+        } else {
+            return error.NoValue;
+        }
+    }
+
+    pub fn to_float(self: ParsedOpt, comptime T: type) !T {
+        if (self.value) |value| {
+            return try std.fmt.parseFloat(T, value);
+        } else {
+            return error.NoValue;
+        }
+    }
+
+    pub fn to_bool(self: ParsedOpt) !bool {
+        if (self.value) |value| {
+            if (value.len > 5) return error.NotBool;
+            var buf: [5]u8 = undefined;
+            const lowered = std.ascii.lowerString(&buf, value);
+
+            if (std.mem.eql(u8, lowered, "true")) {
+                return true;
+            } else if (std.mem.eql(u8, lowered, "false")) {
+                return false;
+            } else {
+                return error.NotBool;
+            }
+        } else {
+            return error.NoValue;
+        }
+    }
 };
 
 pub const OptIterator = struct {
@@ -67,9 +100,9 @@ pub const OptIterator = struct {
                         // Value is part of the same argument after the '=' symbol.
                         defer self.arg_index += 1;
                         return .{
-                            .flag = flag,
+                            .flag = before_eql,
                             .arg_index = self.arg_index,
-                            .value = trimmed[(eql_index_opt.?)..],
+                            .value = trimmed[(eql_index_opt.? + 1)..],
                         };
                     } else {
                         // Value is the next argument.
@@ -80,7 +113,7 @@ pub const OptIterator = struct {
                             // Add two to skip required arg
                             defer self.arg_index += 2;
                             return .{
-                                .flag = flag,
+                                .flag = before_eql,
                                 .arg_index = self.arg_index,
                                 .value = self.args[self.arg_index + 1],
                             };
@@ -90,7 +123,7 @@ pub const OptIterator = struct {
                     // No value required for flag
                     defer self.arg_index += 1;
                     return .{
-                        .flag = flag,
+                        .flag = before_eql,
                         .arg_index = self.arg_index,
                         .value = null,
                     };
@@ -124,7 +157,7 @@ pub const OptIterator = struct {
                     return .{
                         .flag = flag,
                         .arg_index = self.arg_index,
-                        .value = trimmed[(eql_index_opt.?)..],
+                        .value = trimmed[(eql_index_opt.? + 1)..],
                     };
                 } else {
                     // Value is the next argument.
@@ -161,7 +194,7 @@ pub const OptIterator = struct {
 
 test OptIterator {
     // Happy path for all opts
-    const basic_args = [_][:0]const u8{ "test_prog_name", "-a", "-b", "-d=foo", "-d", "bar", "--gggg", "--ffff=foo", "--ffff", "bar", "cp" };
+    const basic_args = [_][:0]const u8{ "test_prog_name", "-a", "-b", "-d=true", "-d", "false", "--gggg", "--ffff=123", "--ffff", "123.4", "cp" };
     const sans_prog = basic_args[1..];
 
     var opt_iter1 = OptIterator{
@@ -170,10 +203,29 @@ test OptIterator {
         .long_flags = &.{ "eeee", "ffff=", "gggg" },
     };
 
+    var d_value_opt: ?bool = null;
     while (opt_iter1.next()) |o| {
-        log.debug("What is the next option? {any}", .{o});
+        // std.debug.print("What is the next option? {s} {?s} {any}\n", .{ o.flag, o.value, o });
+        if (std.mem.eql(u8, "d", o.flag)) {
+            d_value_opt = try o.to_bool();
+
+            try std.testing.expectError(error.InvalidCharacter, o.to_int(i64));
+
+            try std.testing.expectError(error.InvalidCharacter, o.to_float(f64));
+        }
+        if (std.mem.eql(u8, "ffff", o.flag)) {
+            // std.debug.print("What is the next option? {s} {?s} {any}\n", .{ o.flag, o.value, o });
+            try std.testing.expectError(error.NotBool, o.to_bool());
+        }
+        if (std.mem.eql(u8, "b", o.flag)) {
+            // std.debug.print("What is the next option? {s} {?s} {any}\n", .{ o.flag, o.value, o });
+            try std.testing.expectError(error.NoValue, o.to_bool());
+            try std.testing.expectError(error.NoValue, o.to_int(i64));
+            try std.testing.expectError(error.NoValue, o.to_float(f64));
+        }
     }
 
+    try std.testing.expectEqual(false, d_value_opt.?);
     try std.testing.expectEqual(9, opt_iter1.arg_index);
     try std.testing.expectEqualStrings("cp", sans_prog[opt_iter1.arg_index]);
 

@@ -5,12 +5,12 @@ const std = @import("std");
 
 const log = std.log.scoped(.allyouropt);
 
-// pub const Opt = struct {
-//     name: []const u8,
-//     short_flags: []const u8,
-//     long_flags: []const []const u8,
-//     takes_arg: bool = false,
-// };
+pub const Opt = struct {
+    name: []const u8,
+    short_flags: []const u8 = &.{},
+    long_flags: []const []const u8 = &.{},
+    takes_arg: bool = false,
+};
 
 pub const ParsedOpt = struct {
     flag: []const u8,
@@ -54,8 +54,7 @@ pub const ParsedOpt = struct {
 
 pub const OptIterator = struct {
     args: []const []const u8,
-    short_flags: []const u8,
-    long_flags: []const []const u8,
+    opt_defs: []const Opt = &.{},
     arg_index: usize = 0,
 
     pub fn next(self: *OptIterator) ?ParsedOpt {
@@ -93,44 +92,48 @@ pub const OptIterator = struct {
 
         const before_eql = if (eql_index_opt) |i| trimmed[0..i] else trimmed;
 
-        for (self.long_flags) |flag| {
-            if (std.mem.startsWith(u8, flag, before_eql)) {
-                if (std.mem.endsWith(u8, flag, "=")) {
-                    if (before_eql.len < trimmed.len) {
-                        // Value is part of the same argument after the '=' symbol.
+        for (self.opt_defs) |opt| {
+            for (opt.long_flags) |lflag| {
+                if (std.mem.eql(u8, lflag, before_eql)) {
+                    if (opt.takes_arg) {
+                        if (before_eql.len < trimmed.len) {
+                            // Value is part of the same argument after the '=' symbol.
+                            defer self.arg_index += 1;
+                            return .{
+                                .flag = opt.name,
+                                .arg_index = self.arg_index,
+                                .value = trimmed[(eql_index_opt.? + 1)..],
+                            };
+                        } else {
+                            // Value is the next argument.
+                            if (self.arg_index + 1 >= self.args.len) {
+                                // too few arguments
+                                return null;
+                            } else {
+                                // Add two to skip required arg
+                                defer self.arg_index += 2;
+                                return .{
+                                    .flag = opt.name,
+                                    .arg_index = self.arg_index,
+                                    .value = self.args[self.arg_index + 1],
+                                };
+                            }
+                        }
+                    } else {
+                        // Take no argument.
                         defer self.arg_index += 1;
                         return .{
-                            .flag = before_eql,
+                            .flag = opt.name,
                             .arg_index = self.arg_index,
-                            .value = trimmed[(eql_index_opt.? + 1)..],
+                            .value = null,
                         };
-                    } else {
-                        // Value is the next argument.
-                        if (self.arg_index + 1 >= self.args.len) {
-                            // too few arguments
-                            return null;
-                        } else {
-                            // Add two to skip required arg
-                            defer self.arg_index += 2;
-                            return .{
-                                .flag = before_eql,
-                                .arg_index = self.arg_index,
-                                .value = self.args[self.arg_index + 1],
-                            };
-                        }
                     }
-                } else {
-                    // No value required for flag
-                    defer self.arg_index += 1;
-                    return .{
-                        .flag = before_eql,
-                        .arg_index = self.arg_index,
-                        .value = null,
-                    };
                 }
             }
+        } else {
+            // No such flag
+            return null;
         }
-        return null;
     }
 
     fn do_short_flag(self: *OptIterator, arg: []const u8) ?ParsedOpt {
@@ -144,51 +147,51 @@ pub const OptIterator = struct {
             return null;
         }
 
-        const flag_index_opt = std.mem.indexOfScalar(u8, self.short_flags, before_eql[0]);
+        const flag_char = before_eql[0];
 
-        if (flag_index_opt) |flag_index| {
-            //
-            const flag = self.short_flags[flag_index..(flag_index + 1)];
-            if (flag_index + 1 < self.short_flags.len and (self.short_flags[flag_index + 1] == ':')) {
-                // Has a required argument
-                if (before_eql.len < trimmed.len) {
-                    // Value is part of the same argument after the '=' symbol.
-                    defer self.arg_index += 1;
-                    return .{
-                        .flag = flag,
-                        .arg_index = self.arg_index,
-                        .value = trimmed[(eql_index_opt.? + 1)..],
-                    };
-                } else {
-                    // Value is the next argument.
-                    if (self.arg_index + 1 >= self.args.len) {
-                        // too few arguments
-                        return null;
+        for (self.opt_defs) |opt| {
+            for (opt.short_flags) |short_flag| {
+                if (flag_char == short_flag) {
+                    if (opt.takes_arg) {
+                        // Has a required argument
+                        if (before_eql.len < trimmed.len) {
+                            // Value is part of the same argument after the '=' symbol.
+                            defer self.arg_index += 1;
+                            return .{
+                                .flag = opt.name,
+                                .arg_index = self.arg_index,
+                                .value = trimmed[(eql_index_opt.? + 1)..],
+                            };
+                        } else {
+                            // Value is the next argument.
+                            if (self.arg_index + 1 >= self.args.len) {
+                                // too few arguments
+                                return null;
+                            } else {
+                                // Add two to skip required arg
+                                defer self.arg_index += 2;
+                                return .{
+                                    .flag = opt.name,
+                                    .arg_index = self.arg_index,
+                                    .value = self.args[self.arg_index + 1],
+                                };
+                            }
+                        }
                     } else {
-                        // Add two to skip required arg
-                        defer self.arg_index += 2;
+                        // No value required for flag
+                        defer self.arg_index += 1;
                         return .{
-                            .flag = flag,
+                            .flag = opt.name,
                             .arg_index = self.arg_index,
-                            .value = self.args[self.arg_index + 1],
+                            .value = null,
                         };
                     }
                 }
-            } else {
-                // No value required for flag
-                defer self.arg_index += 1;
-                return .{
-                    .flag = self.short_flags[flag_index..(flag_index + 1)],
-                    .arg_index = self.arg_index,
-                    .value = null,
-                };
             }
         } else {
             // No such flag
             return null;
         }
-
-        return null;
     }
 };
 
@@ -197,16 +200,41 @@ test OptIterator {
     const basic_args = [_][:0]const u8{ "test_prog_name", "-a", "-b", "-d=true", "-d", "false", "--gggg", "--ffff=123", "--ffff", "123.4", "cp" };
     const sans_prog = basic_args[1..];
 
+    const opt_defs1: []const Opt = &.{
+        .{
+            .name = "a",
+            .short_flags = "a",
+        },
+        .{
+            .name = "b",
+            .short_flags = "b",
+        },
+        .{
+            .name = "d",
+            .short_flags = "d",
+            .takes_arg = true,
+        },
+        .{
+            .name = "gggg",
+            .long_flags = &.{"gggg"},
+        },
+        .{
+            .name = "ffff",
+            .long_flags = &.{"ffff"},
+            .takes_arg = true,
+        },
+    };
+
     var opt_iter1 = OptIterator{
         .args = sans_prog,
-        .short_flags = "abcd:",
-        .long_flags = &.{ "eeee", "ffff=", "gggg" },
+        .opt_defs = opt_defs1,
     };
 
     var d_value_opt: ?bool = null;
     while (opt_iter1.next()) |o| {
         // std.debug.print("What is the next option? {s} {?s} {any}\n", .{ o.flag, o.value, o });
         if (std.mem.eql(u8, "d", o.flag)) {
+            // std.debug.print("Did we hit d? {s} {?s} {any}\n", .{ o.flag, o.value, o });
             d_value_opt = try o.to_bool();
 
             try std.testing.expectError(error.InvalidCharacter, o.to_int(i64));
@@ -229,11 +257,31 @@ test OptIterator {
     try std.testing.expectEqual(9, opt_iter1.arg_index);
     try std.testing.expectEqualStrings("cp", sans_prog[opt_iter1.arg_index]);
 
+    const opt_defs2: []const Opt = &.{
+        .{
+            .name = "a",
+            .short_flags = "a",
+        },
+        .{
+            .name = "d",
+            .short_flags = "d",
+            .takes_arg = true,
+        },
+        .{
+            .name = "gggg",
+            .long_flags = &.{"gggg"},
+        },
+        .{
+            .name = "ffff",
+            .long_flags = &.{"ffff"},
+            .takes_arg = true,
+        },
+    };
+
     // How does it react when the short flag doesn't exist?
     var opt_iter2 = OptIterator{
         .args = sans_prog,
-        .short_flags = "acd:",
-        .long_flags = &.{ "eeee", "ffff=", "gggg" },
+        .opt_defs = opt_defs2,
     };
 
     while (opt_iter2.next()) |o| {
@@ -244,11 +292,31 @@ test OptIterator {
     try std.testing.expectEqual(1, opt_iter2.arg_index);
     try std.testing.expectEqualStrings("-b", sans_prog[opt_iter2.arg_index]);
 
+    const opt_defs3: []const Opt = &.{
+        .{
+            .name = "a",
+            .short_flags = "a",
+        },
+        .{
+            .name = "b",
+            .short_flags = "b",
+        },
+        .{
+            .name = "d",
+            .short_flags = "d",
+            .takes_arg = true,
+        },
+        .{
+            .name = "ffff",
+            .long_flags = &.{"ffff"},
+            .takes_arg = true,
+        },
+    };
+
     // How does it react when the long flag doesn't exist?
     var opt_iter3 = OptIterator{
         .args = sans_prog,
-        .short_flags = "abcd:",
-        .long_flags = &.{ "eeee", "ffff=" },
+        .opt_defs = opt_defs3,
     };
 
     while (opt_iter3.next()) |o| {

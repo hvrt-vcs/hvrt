@@ -18,8 +18,6 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
 
     var opt_iter = allyouropt.OptIterator{
         .args = raw_args,
-        .short_flags = &.{},
-        .long_flags = &.{},
     };
 
     while (opt_iter.next()) |o| {

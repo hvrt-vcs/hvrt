@@ -58,9 +58,7 @@ pub const OptIterator = struct {
     arg_index: usize = 0,
 
     pub fn next(self: *OptIterator) ?ParsedOpt {
-        if (self.arg_index >= self.args.len) return null;
-
-        const arg = self.args[self.arg_index];
+        const arg = if (self.arg_index < self.args.len) self.args[self.arg_index] else return null;
 
         if (std.mem.startsWith(u8, arg, "-") and !std.mem.eql(u8, arg, "-")) {
             if (std.mem.eql(u8, arg, "--")) {
@@ -72,12 +70,13 @@ pub const OptIterator = struct {
                 // long opt
                 return self.do_long_flag(arg);
             } else {
-                // short opts
+                // short opt
                 return self.do_short_flag(arg);
             }
+        } else {
+            // it's an arg, not an opt.
+            return null;
         }
-
-        return null;
     }
 
     pub fn remaining_args(self: OptIterator) []const []const u8 {
@@ -197,7 +196,7 @@ pub const OptIterator = struct {
 
 test OptIterator {
     // Happy path for all opts
-    const basic_args = [_][:0]const u8{ "test_prog_name", "-a", "-b", "-d=true", "-d", "false", "--gggg", "--ffff=123", "--ffff", "123.4", "cp" };
+    const basic_args = [_][:0]const u8{ "test_prog_name", "-a", "-b", "-d=true", "-d", "false", "--gggg", "--ffff=123", "--ffff", "123.4", "--", "cp" };
     const sans_prog = basic_args[1..];
 
     const opt_defs1: []const Opt = &.{
@@ -255,7 +254,7 @@ test OptIterator {
 
     try std.testing.expectEqual(false, d_value_opt.?);
     try std.testing.expectEqual(9, opt_iter1.arg_index);
-    try std.testing.expectEqualStrings("cp", sans_prog[opt_iter1.arg_index]);
+    try std.testing.expectEqualStrings("--", sans_prog[opt_iter1.arg_index]);
 
     const opt_defs2: []const Opt = &.{
         .{
@@ -326,6 +325,6 @@ test OptIterator {
 
     try std.testing.expectEqual(5, opt_iter3.arg_index);
     try std.testing.expectEqualStrings("--gggg", sans_prog[opt_iter3.arg_index]);
-    try std.testing.expectEqual(5, opt_iter3.remaining_args().len);
+    try std.testing.expectEqual(6, opt_iter3.remaining_args().len);
     try std.testing.expectEqualStrings("--gggg", opt_iter3.remaining_args()[0]);
 }

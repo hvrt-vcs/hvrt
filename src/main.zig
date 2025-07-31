@@ -1,7 +1,20 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const sqlite = @import("sqlite.zig");
 const cmd = @import("cmd.zig");
+
+var gpa_state = std.heap.DebugAllocator(.{}).init;
+
+const allocator: std.mem.Allocator = blk: {
+    if (builtin.is_test) {
+        break :blk std.testing.allocator;
+    } else if (builtin.mode == .Debug) {
+        break :blk gpa_state.allocator();
+    } else {
+        break :blk std.heap.c_allocator;
+    }
+};
 
 // Good references for git internals:
 // * https://wyag.thb.lt/
@@ -18,20 +31,9 @@ pub fn main() !void {
     var status_code: u8 = 0;
 
     {
-        var env_var_buf: [128]u8 = undefined;
-        var fba_state = std.heap.FixedBufferAllocator.init(&env_var_buf);
-        const fba = fba_state.allocator();
-
-        const debug_opt: ?[]u8 = std.process.getEnvVarOwned(fba, "HVRT_DEBUG") catch null;
-        defer if (debug_opt) |debug_slice| fba.free(debug_slice);
-
-        // Get allocator
-        var gpa_state = std.heap.GeneralPurposeAllocator(.{}){};
-        defer _ = gpa_state.deinit();
-        const gpa = gpa_state.allocator();
-
-        // c_allocator is vastly faster, but less safe than the current GeneralPurposeAllocator.
-        const allocator = if (debug_opt != null) gpa else std.heap.c_allocator;
+        defer if (builtin.mode == .Debug) {
+            _ = gpa_state.deinit();
+        };
 
         // Args parsing from here: https://ziggit.dev/t/read-command-line-arguments/220/7
 

@@ -3,18 +3,9 @@ const builtin = @import("builtin");
 
 const sqlite = @import("sqlite.zig");
 const cmd = @import("cmd.zig");
+const mem = @import("mem.zig");
 
-var gpa_state = std.heap.DebugAllocator(.{}).init;
-
-const allocator: std.mem.Allocator = blk: {
-    if (builtin.is_test) {
-        break :blk std.testing.allocator;
-    } else if (builtin.mode == .Debug) {
-        break :blk gpa_state.allocator();
-    } else {
-        break :blk std.heap.c_allocator;
-    }
-};
+const allocator = mem.galloc;
 
 // Good references for git internals:
 // * https://wyag.thb.lt/
@@ -31,9 +22,7 @@ pub fn main() !void {
     var status_code: u8 = 0;
 
     {
-        defer if (builtin.mode == .Debug) {
-            _ = gpa_state.deinit();
-        };
+        defer mem.deinit();
 
         // Args parsing from here: https://ziggit.dev/t/read-command-line-arguments/220/7
 
@@ -64,7 +53,9 @@ pub fn main() !void {
 }
 
 const sql = @import("sql.zig");
-const test_alloc = std.testing.allocator;
+
+// allocator/galloc should be set to std.testing.allocator during test runs.
+const test_alloc = allocator;
 
 /// Wrapper to return two hex bytes for every byte read from the internal
 /// reader reference. Keeps track of leftover byte, if necessary. Adds a

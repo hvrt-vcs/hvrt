@@ -37,6 +37,18 @@ const GlobalOpts: []const allyouropt.Opt = &.{
         .short_flags = "V",
         .long_flags = &.{"version"},
     },
+    .{
+        // Set the current working directory
+        .name = "cwd",
+        .short_flags = "C",
+        .takes_arg = true,
+    },
+    .{
+        // Set the work tree
+        .name = "work-tree",
+        .long_flags = &.{"work-tree"},
+        .takes_arg = true,
+    },
 };
 
 pub const Args = struct {
@@ -66,8 +78,13 @@ pub const Args = struct {
             .opt_defs = GlobalOpts,
         };
 
+        var work_tree_opt: ?[]const u8 = null;
+
         while (opt_iter_global.next()) |o| {
             log.debug("What is the next option? {any}\n\n", .{o});
+            if (std.mem.eql(u8, o.opt.name, "work-tree")) {
+                work_tree_opt = o.value orelse unreachable;
+            }
         }
 
         const remaining_args = opt_iter_global.remaining_args();
@@ -77,12 +94,12 @@ pub const Args = struct {
         const cmd_enum_opt = std.meta.stringToEnum(Command, sub_cmd);
 
         if (cmd_enum_opt) |cmd_enum| {
-            const repo_dir = if (remaining_args.len > 1) try std.fs.realpathAlloc(gpa, remaining_args[1]) else try std.process.getCwdAlloc(gpa);
+            const repo_dir = if (work_tree_opt) |wt| try std.fs.realpathAlloc(gpa, wt) else try std.process.getCwdAlloc(gpa);
             defer gpa.free(repo_dir);
             const repo_dirZ = try arena_alloc.dupeZ(u8, repo_dir);
 
             // For .add command
-            const files_slice = if (remaining_args.len > 2) remaining_args[2..] else &.{};
+            const files_slice = if (remaining_args.len > 1) remaining_args[1..] else &.{};
 
             // Copy files, since there is no guarantee that the original slice
             // will stay around for the duration of this Args object.

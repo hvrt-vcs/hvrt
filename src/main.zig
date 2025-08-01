@@ -176,7 +176,7 @@ fn setup_init_test(tmp: *std.testing.TmpDir) !void {
     const tmp_pathz = try test_pathz(test_alloc, tmp);
     defer test_alloc.free(tmp_pathz);
 
-    const basic_args = [_][:0]const u8{ "hvrt", "init", tmp_pathz };
+    const basic_args = [_][:0]const u8{ "hvrt", "--work-tree", tmp_pathz, "init" };
     try cmd.internalMain(test_alloc, &basic_args);
 }
 
@@ -195,7 +195,7 @@ fn setup_add_test(tmp: *std.testing.TmpDir) !void {
     const files2 = [_][:0]const u8{ "baz.txt", "buz.txt" };
     try setup_test_files(&sub_dir, &files2);
 
-    const basic_args = [_][:0]const u8{ "hvrt", "add", tmp_pathz, files[0], files[1] };
+    const basic_args = [_][:0]const u8{ "hvrt", "--work-tree", tmp_pathz, "add", files[0], files[1] };
     try cmd.internalMain(test_alloc, &basic_args);
 }
 
@@ -207,7 +207,7 @@ fn setup_commit_test(tmp: *std.testing.TmpDir) !void {
 
     // try setup_test_files(tmp, &files);
 
-    const basic_args = [_][:0]const u8{ "hvrt", "commit", tmp_pathz, "Some message" };
+    const basic_args = [_][:0]const u8{ "hvrt", "--work-tree", tmp_pathz, "commit", "Some message" };
     try cmd.internalMain(test_alloc, &basic_args);
 }
 

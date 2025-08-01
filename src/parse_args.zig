@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig");
+const allyouropt = @import("allyouropt.zig");
 
 const log = std.log.scoped(.parse_args);
 
@@ -19,6 +19,24 @@ pub const Command = enum {
         log.warn("Sub-command not implemented yet: {s}.\n", .{@tagName(cmd)});
         return error.NotImplementedError;
     }
+};
+
+const GlobalOpts: []const allyouropt.Opt = &.{
+    .{
+        .name = "help",
+        .short_flags = "h",
+        .long_flags = &.{"help"},
+    },
+    .{
+        .name = "verbose",
+        .short_flags = "v",
+        .long_flags = &.{"verbose"},
+    },
+    .{
+        .name = "version",
+        .short_flags = "V",
+        .long_flags = &.{"version"},
+    },
 };
 
 pub const Args = struct {
@@ -41,27 +59,30 @@ pub const Args = struct {
             gpa.destroy(arena_ptr);
         }
 
-        // TODO: invoke ketopt here
-        for (args[1..], 1..) |arg, i| {
-            _ = arg;
-            _ = i;
+        const sans_prog_name = if (args.len > 0) args[1..] else &.{};
+
+        var opt_iter_global = allyouropt.OptIterator{
+            .args = sans_prog_name,
+            .opt_defs = GlobalOpts,
+        };
+
+        while (opt_iter_global.next()) |o| {
+            log.debug("What is the next option? {any}\n\n", .{o});
         }
 
-        // if (args.len < 2) {
-        //     log.warn("No sub-command given.\n", .{});
-        //     return error.ArgumentError;
-        // }
+        const remaining_args = opt_iter_global.remaining_args();
 
-        const sub_cmd = if (args.len < 2) "global" else args[1];
+        const sub_cmd = if (remaining_args.len > 0) remaining_args[0] else "global";
 
         const cmd_enum_opt = std.meta.stringToEnum(Command, sub_cmd);
+
         if (cmd_enum_opt) |cmd_enum| {
-            const repo_dir = if (args.len > 2) try std.fs.realpathAlloc(gpa, args[2]) else try std.process.getCwdAlloc(gpa);
+            const repo_dir = if (remaining_args.len > 1) try std.fs.realpathAlloc(gpa, remaining_args[1]) else try std.process.getCwdAlloc(gpa);
             defer gpa.free(repo_dir);
             const repo_dirZ = try arena_alloc.dupeZ(u8, repo_dir);
 
             // For .add command
-            const files_slice = if (args.len > 3) args[3..] else &.{};
+            const files_slice = if (remaining_args.len > 2) remaining_args[2..] else &.{};
 
             // Copy files, since there is no guarantee that the original slice
             // will stay around for the duration of this Args object.
@@ -70,12 +91,19 @@ pub const Args = struct {
                 files_copy[i] = try arena_alloc.dupeZ(u8, f);
             }
 
-            return Args{
+            const self = Args{
                 .arena_ptr = arena_ptr,
                 .command = cmd_enum,
                 .repo_dirZ = repo_dirZ,
                 .add_files = files_copy,
             };
+
+            log.debug("What is Args.repo_dirZ? {s}\n\n", .{self.repo_dirZ});
+            if (self.add_files.len > 0) {
+                log.debug("What is Args.add_files[0]? {s}\n\n", .{self.add_files[0]});
+            }
+
+            return self;
         } else {
             log.warn("Unknown sub-command given: {s}\n", .{sub_cmd});
             return error.ArgumentError;

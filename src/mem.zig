@@ -27,6 +27,8 @@ pub fn deinit() void {
 
 /// A C style `malloc` using the galloc Allocator.
 ///
+/// See here: https://www.sqlite.org/c3ref/mem_methods.html
+///
 /// FIXME: since `cFree` isn't implemented properly yet,
 /// using this is just a memory leak.
 ///

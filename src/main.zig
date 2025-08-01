@@ -4,8 +4,7 @@ const builtin = @import("builtin");
 const sqlite = @import("sqlite.zig");
 const cmd = @import("cmd.zig");
 const mem = @import("mem.zig");
-
-const allocator = mem.galloc;
+const galloc = mem.galloc;
 
 // Good references for git internals:
 // * https://wyag.thb.lt/
@@ -27,10 +26,10 @@ pub fn main() !void {
         // Args parsing from here: https://ziggit.dev/t/read-command-line-arguments/220/7
 
         // Parse args into string array
-        const args = try std.process.argsAlloc(allocator);
-        defer std.process.argsFree(allocator, args);
+        const args = try std.process.argsAlloc(galloc);
+        defer std.process.argsFree(galloc, args);
 
-        cmd.internalMain(allocator, args) catch |err| {
+        cmd.internalMain(galloc, args) catch |err| {
             status_code = switch (err) {
                 error.ArgumentError => 2,
                 sqlite.Error.SQLITE_ERROR => 3,
@@ -55,7 +54,7 @@ pub fn main() !void {
 const sql = @import("sql.zig");
 
 // allocator/galloc should be set to std.testing.allocator during test runs.
-const test_alloc = allocator;
+const test_alloc = galloc;
 
 /// Wrapper to return two hex bytes for every byte read from the internal
 /// reader reference. Keeps track of leftover byte, if necessary. Adds a

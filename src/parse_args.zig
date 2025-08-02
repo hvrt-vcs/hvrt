@@ -51,6 +51,36 @@ const GlobalOpts: []const allyouropt.Opt = &.{
     },
 };
 
+pub const GlobalParsedOpts = struct {
+    // Toggles
+    help: bool = false,
+    version: bool = false,
+
+    // counted
+    verbose: u3 = 0,
+
+    // optional and take args
+    cwd: ?[]const u8 = null,
+    work_tree: ?[]const u8 = null,
+
+    pub fn consume_opt(self: *GlobalParsedOpts, popt: allyouropt.ParsedOpt) !void {
+        if (std.mem.eql(u8, popt.opt.name, "help")) {
+            self.help = true;
+        } else if (std.mem.eql(u8, popt.opt.name, "version")) {
+            self.version = true;
+        } else if (std.mem.eql(u8, popt.opt.name, "verbose")) {
+            self.verbose +|= 1;
+        } else if (std.mem.eql(u8, popt.opt.name, "cwd")) {
+            self.cwd = popt.value;
+        } else if (std.mem.eql(u8, popt.opt.name, "work-tree")) {
+            self.work_tree = popt.value;
+        } else {
+            log.warn("Unknown option given: {s}", .{popt.opt.name});
+            return error.UnknownOpt;
+        }
+    }
+};
+
 pub const Args = struct {
     arena_ptr: *std.heap.ArenaAllocator,
 
@@ -58,6 +88,7 @@ pub const Args = struct {
     repo_dirZ: [:0]const u8,
     verbose: i4 = 0,
     add_files: []const [:0]const u8,
+    gpopts: GlobalParsedOpts,
 
     // On successful return, the caller must call `deinit` on the returned
     // `Args` object when it is no longer needed, otherwise memory will be
@@ -71,6 +102,14 @@ pub const Args = struct {
             gpa.destroy(arena_ptr);
         }
 
+        var self = Args{
+            .arena_ptr = arena_ptr,
+            .command = .global,
+            .repo_dirZ = &.{},
+            .add_files = &.{},
+            .gpopts = .{},
+        };
+
         const sans_prog_name = if (args.len > 0) args[1..] else &.{};
 
         var opt_iter_global = allyouropt.OptIterator{
@@ -82,6 +121,8 @@ pub const Args = struct {
 
         while (opt_iter_global.next()) |o| {
             log.debug("What is the next option? {any}\n\n", .{o});
+            try self.gpopts.consume_opt(o);
+
             if (std.mem.eql(u8, o.opt.name, "work-tree")) {
                 work_tree_opt = o.value orelse unreachable;
             }
@@ -108,12 +149,9 @@ pub const Args = struct {
                 files_copy[i] = try arena_alloc.dupeZ(u8, f);
             }
 
-            const self = Args{
-                .arena_ptr = arena_ptr,
-                .command = cmd_enum,
-                .repo_dirZ = repo_dirZ,
-                .add_files = files_copy,
-            };
+            self.command = cmd_enum;
+            self.repo_dirZ = repo_dirZ;
+            self.add_files = files_copy;
 
             log.debug("What is Args.repo_dirZ? {s}\n\n", .{self.repo_dirZ});
             if (self.add_files.len > 0) {

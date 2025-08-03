@@ -51,6 +51,16 @@ const GlobalOpts: []const allyouropt.Opt = &.{
     },
 };
 
+const CommitOpts: []const allyouropt.Opt = &.{
+    .{
+        // Set the message for the commit
+        .name = "message",
+        .short_flags = "m",
+        .long_flags = &.{"message"},
+        .takes_arg = true,
+    },
+};
+
 pub const GlobalParsedOpts = struct {
     // Toggles
     help: bool = false,
@@ -135,9 +145,7 @@ pub const Args = struct {
         const cmd_enum_opt = std.meta.stringToEnum(Command, sub_cmd);
 
         if (cmd_enum_opt) |cmd_enum| {
-            const repo_dir = if (work_tree_opt) |wt| try std.fs.realpathAlloc(gpa, wt) else try std.process.getCwdAlloc(gpa);
-            defer gpa.free(repo_dir);
-            const repo_dirZ = try arena_alloc.dupeZ(u8, repo_dir);
+            self.gpopts.work_tree = if (self.gpopts.work_tree) |wt| try std.fs.realpathAlloc(arena_alloc, wt) else try std.process.getCwdAlloc(arena_alloc);
 
             // For .add command
             const files_slice = if (remaining_args.len > 1) remaining_args[1..] else &.{};
@@ -150,10 +158,8 @@ pub const Args = struct {
             }
 
             self.command = cmd_enum;
-            self.repo_dirZ = repo_dirZ;
             self.add_files = files_copy;
 
-            log.debug("What is Args.repo_dirZ? {s}\n\n", .{self.repo_dirZ});
             if (self.add_files.len > 0) {
                 log.debug("What is Args.add_files[0]? {s}\n\n", .{self.add_files[0]});
             }

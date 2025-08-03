@@ -17,17 +17,17 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
             try args.command.notImplemented();
         },
         .init => {
-            try init(gpa, args.repo_dirZ);
+            try init(gpa, (args.gpopts.work_tree orelse "."));
         },
         .add => {
             // FIXME: this doesn't work if a repo path isn't passed.
             // Need to do real args parsing at some point.
             // const files = if (raw_args.len > 3) raw_args[3..] else raw_args[2..];
 
-            try add(gpa, args.repo_dirZ, args.add_files);
+            try add(gpa, (args.gpopts.work_tree orelse "."), args.add_files);
         },
         .commit => {
-            try commit(gpa, args.repo_dirZ, "Dummy message");
+            try commit(gpa, (args.gpopts.work_tree orelse "."), "Dummy message");
         },
         .mv => {
             try args.command.notImplemented();

@@ -16,7 +16,7 @@ const version: [:0]const u8 = @embedFile("embedded/VERSION.txt");
 
 /// It is the responsibility of the caller of `init` to deallocate and
 /// deinit dir_path and alloc, if necessary.
-pub fn init(alloc: std.mem.Allocator, repo_path: [:0]const u8) !void {
+pub fn init(alloc: std.mem.Allocator, repo_path: []const u8) !void {
     var repo_dir = try std.fs.openDirAbsolute(repo_path, .{});
     defer repo_dir.close();
 

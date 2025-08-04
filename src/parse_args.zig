@@ -73,6 +73,10 @@ pub const GlobalParsedOpts = struct {
     cwd: ?[]const u8 = null,
     work_tree: ?[]const u8 = null,
 
+    pub fn get_work_tree(self: GlobalParsedOpts) []const u8 {
+        return self.work_tree orelse ".";
+    }
+
     pub fn consume_opt(self: *GlobalParsedOpts, popt: allyouropt.ParsedOpt) !void {
         if (std.mem.eql(u8, popt.opt.name, "help")) {
             self.help = true;

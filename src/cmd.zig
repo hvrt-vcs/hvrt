@@ -20,7 +20,7 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
             try init(gpa, args.gpopts.get_work_tree());
         },
         .add => {
-            try add(gpa, args.gpopts.get_work_tree(), args.add_files);
+            try add(gpa, args.gpopts.get_work_tree(), args.trailing_args);
         },
         .commit => {
             try commit(gpa, args.gpopts.get_work_tree(), "Dummy message");

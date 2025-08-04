@@ -51,16 +51,6 @@ const GlobalOpts: []const allyouropt.Opt = &.{
     },
 };
 
-const CommitOpts: []const allyouropt.Opt = &.{
-    .{
-        // Set the message for the commit
-        .name = "message",
-        .short_flags = "m",
-        .long_flags = &.{"message"},
-        .takes_arg = true,
-    },
-};
-
 pub const GlobalParsedOpts = struct {
     // Toggles
     help: bool = false,
@@ -93,6 +83,34 @@ pub const GlobalParsedOpts = struct {
             return error.UnknownOpt;
         }
     }
+
+    pub fn finalize_opts(self: *GlobalParsedOpts, arena_alloc: std.mem.Allocator) !void {
+        self.work_tree = if (self.work_tree) |wt| try std.fs.realpathAlloc(arena_alloc, wt) else try std.process.getCwdAlloc(arena_alloc);
+    }
+};
+
+const CommitOpts: []const allyouropt.Opt = &.{
+    .{
+        // Set the message for the commit
+        .name = "message",
+        .short_flags = "m",
+        .long_flags = &.{"message"},
+        .takes_arg = true,
+    },
+};
+
+pub const CommitParsedOpts = struct {
+    // optional and take args
+    message: ?[]const u8 = null,
+
+    pub fn consume_opt(self: *GlobalParsedOpts, popt: allyouropt.ParsedOpt) !void {
+        if (std.mem.eql(u8, popt.opt.name, "message")) {
+            self.message = popt.value;
+        } else {
+            log.warn("Unknown option given: {s}", .{popt.opt.name});
+            return error.UnknownOpt;
+        }
+    }
 };
 
 pub const Args = struct {
@@ -101,7 +119,7 @@ pub const Args = struct {
     command: Command,
     repo_dirZ: [:0]const u8,
     verbose: i4 = 0,
-    add_files: []const [:0]const u8,
+    trailing_args: []const []const u8,
     gpopts: GlobalParsedOpts,
 
     // On successful return, the caller must call `deinit` on the returned
@@ -120,7 +138,7 @@ pub const Args = struct {
             .arena_ptr = arena_ptr,
             .command = .global,
             .repo_dirZ = &.{},
-            .add_files = &.{},
+            .trailing_args = &.{},
             .gpopts = .{},
         };
 
@@ -149,23 +167,16 @@ pub const Args = struct {
         const cmd_enum_opt = std.meta.stringToEnum(Command, sub_cmd);
 
         if (cmd_enum_opt) |cmd_enum| {
-            self.gpopts.work_tree = if (self.gpopts.work_tree) |wt| try std.fs.realpathAlloc(arena_alloc, wt) else try std.process.getCwdAlloc(arena_alloc);
-
-            // For .add command
-            const files_slice = if (remaining_args.len > 1) remaining_args[1..] else &.{};
-
-            // Copy files, since there is no guarantee that the original slice
-            // will stay around for the duration of this Args object.
-            const files_copy = try arena_alloc.alloc([:0]const u8, files_slice.len);
-            for (files_slice, 0..) |f, i| {
-                files_copy[i] = try arena_alloc.dupeZ(u8, f);
-            }
-
             self.command = cmd_enum;
-            self.add_files = files_copy;
+            try self.gpopts.finalize_opts(arena_alloc);
 
-            if (self.add_files.len > 0) {
-                log.debug("What is Args.add_files[0]? {s}\n\n", .{self.add_files[0]});
+            // TODO: parse subcommand opts
+
+            const trailing_args = if (remaining_args.len > 1) remaining_args[1..] else &.{};
+            self.trailing_args = trailing_args;
+
+            if (self.trailing_args.len > 0) {
+                log.debug("What is Args.trailing_args[0]? {s}\n\n", .{self.trailing_args[0]});
             }
 
             return self;

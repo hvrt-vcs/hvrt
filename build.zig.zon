@@ -1,7 +1,7 @@
 .{
     .name = .hvrt,
     .fingerprint = 0xc5cbba43afd6c71a,
-    .minimum_zig_version = "0.14.0",
+    .minimum_zig_version = "0.14.1",
     .version = "0.1.0",
     .dependencies = .{
         .sqlite = .{

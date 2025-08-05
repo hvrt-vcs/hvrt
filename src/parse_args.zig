@@ -21,6 +21,24 @@ pub const Command = enum {
     }
 };
 
+pub const CommandOpts = union(Command) {
+    // i.e. no subcommand given
+    global: GlobalParsedOpts,
+
+    // subcommands
+    add: bool,
+    commit: CommitParsedOpts,
+    cp: bool,
+    init: bool,
+    mv: bool,
+    rm: bool,
+
+    pub fn notImplemented(cmd: CommandOpts) !void {
+        log.warn("Sub-command not implemented yet: {s}.\n", .{@tagName(cmd)});
+        return error.NotImplementedError;
+    }
+};
+
 const GlobalOpts: []const allyouropt.Opt = &.{
     .{
         .name = "help",
@@ -67,6 +85,22 @@ pub const GlobalParsedOpts = struct {
         return self.work_tree orelse ".";
     }
 
+    /// Parse all global args and return any unconsumed arguments.
+    pub fn iter_opts(self: *GlobalParsedOpts, args_sans_prog_name: []const []const u8) ![]const []const u8 {
+        var opt_iter_global = allyouropt.OptIterator{
+            .args = args_sans_prog_name,
+            .opt_defs = GlobalOpts,
+        };
+
+        while (opt_iter_global.next()) |o| {
+            log.debug("What is the next option? {any}\n\n", .{o});
+            try self.consume_opt(o);
+        }
+
+        const remaining_args = opt_iter_global.remaining_args();
+        return remaining_args;
+    }
+
     pub fn consume_opt(self: *GlobalParsedOpts, popt: allyouropt.ParsedOpt) !void {
         if (std.mem.eql(u8, popt.opt.name, "help")) {
             self.help = true;
@@ -103,7 +137,39 @@ pub const CommitParsedOpts = struct {
     // optional and take args
     message: ?[]const u8 = null,
 
-    pub fn consume_opt(self: *GlobalParsedOpts, popt: allyouropt.ParsedOpt) !void {
+    pub fn get_message(self: CommitParsedOpts) ![]const u8 {
+        if (self.message) |message| {
+            // Caller set message as an opt, so return that.
+            return message;
+        } else {
+            // TODO: implement calling the user's editor of choice with a
+            // temporary file and then return it's contents.
+            //
+            // Probably do something similar to $GIT_DIR/COMMIT_EDITMSG so that
+            // the message is saved if a crash happens for some reason:
+            // https://git-scm.com/docs/git-commit#Documentation/git-commit.txt-GITDIRCOMMITEDITMSG
+            log.warn("This needs to implement using an external editor to set commit message.\n", .{});
+            return error.NotImplementedError;
+        }
+    }
+
+    /// Parse all `commit` subcommand args and return any unconsumed arguments.
+    pub fn iter_opts(self: *CommitParsedOpts, args_sans_prog_name: []const []const u8) ![]const []const u8 {
+        var opt_iter_subcommand = allyouropt.OptIterator{
+            .args = args_sans_prog_name,
+            .opt_defs = CommitOpts,
+        };
+
+        while (opt_iter_subcommand.next()) |o| {
+            log.debug("What is the next option? {any}\n\n", .{o});
+            try self.consume_opt(o);
+        }
+
+        const remaining_args = opt_iter_subcommand.remaining_args();
+        return remaining_args;
+    }
+
+    pub fn consume_opt(self: *CommitParsedOpts, popt: allyouropt.ParsedOpt) !void {
         if (std.mem.eql(u8, popt.opt.name, "message")) {
             self.message = popt.value;
         } else {
@@ -116,8 +182,7 @@ pub const CommitParsedOpts = struct {
 pub const Args = struct {
     arena_ptr: *std.heap.ArenaAllocator,
 
-    command: Command,
-    repo_dirZ: [:0]const u8,
+    command: CommandOpts,
     verbose: i4 = 0,
     trailing_args: []const []const u8,
     gpopts: GlobalParsedOpts,
@@ -134,49 +199,58 @@ pub const Args = struct {
             gpa.destroy(arena_ptr);
         }
 
-        var self = Args{
-            .arena_ptr = arena_ptr,
-            .command = .global,
-            .repo_dirZ = &.{},
-            .trailing_args = &.{},
-            .gpopts = .{},
-        };
-
         const sans_prog_name = if (args.len > 0) args[1..] else &.{};
 
-        var opt_iter_global = allyouropt.OptIterator{
-            .args = sans_prog_name,
-            .opt_defs = GlobalOpts,
-        };
+        var gopts: GlobalParsedOpts = .{};
 
-        var work_tree_opt: ?[]const u8 = null;
-
-        while (opt_iter_global.next()) |o| {
-            log.debug("What is the next option? {any}\n\n", .{o});
-            try self.gpopts.consume_opt(o);
-
-            if (std.mem.eql(u8, o.opt.name, "work-tree")) {
-                work_tree_opt = o.value orelse unreachable;
-            }
-        }
-
-        const remaining_args = opt_iter_global.remaining_args();
+        const remaining_args = try gopts.iter_opts(sans_prog_name);
+        try gopts.finalize_opts(arena_alloc);
 
         const sub_cmd = if (remaining_args.len > 0) remaining_args[0] else "global";
 
         const cmd_enum_opt = std.meta.stringToEnum(Command, sub_cmd);
 
         if (cmd_enum_opt) |cmd_enum| {
-            self.command = cmd_enum;
-            try self.gpopts.finalize_opts(arena_alloc);
 
             // TODO: parse subcommand opts
 
             const trailing_args = if (remaining_args.len > 1) remaining_args[1..] else &.{};
-            self.trailing_args = trailing_args;
 
-            if (self.trailing_args.len > 0) {
-                log.debug("What is Args.trailing_args[0]? {s}\n\n", .{self.trailing_args[0]});
+            if (trailing_args.len > 0) {
+                log.debug("What is Args.trailing_args[0]? {s}\n\n", .{trailing_args[0]});
+            }
+
+            var self = Args{
+                .arena_ptr = arena_ptr,
+                .command = .{ .global = gopts },
+                .trailing_args = trailing_args,
+                .gpopts = gopts,
+            };
+
+            switch (cmd_enum) {
+                .global => {
+                    self.command = .{ .global = gopts };
+                },
+                .init => {
+                    self.command = .{ .init = true };
+                },
+                .add => {
+                    self.command = .{ .add = true };
+                },
+                .commit => {
+                    var copts: CommitParsedOpts = .{};
+                    self.trailing_args = try copts.iter_opts(trailing_args);
+                    self.command = .{ .commit = copts };
+                },
+                .mv => {
+                    self.command = .{ .mv = true };
+                },
+                .cp => {
+                    self.command = .{ .cp = true };
+                },
+                .rm => {
+                    self.command = .{ .rm = true };
+                },
             }
 
             return self;

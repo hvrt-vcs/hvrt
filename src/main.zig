@@ -197,7 +197,7 @@ fn setup_commit_test(tmp: *std.testing.TmpDir) !void {
 
     // try setup_test_files(tmp, &files);
 
-    const basic_args = [_][:0]const u8{ "hvrt", "--work-tree", tmp_pathz, "commit", "Some message" };
+    const basic_args = [_][:0]const u8{ "hvrt", "--work-tree", tmp_pathz, "commit", "--message", "Some message" };
     try cmd.internalMain(test_alloc, &basic_args);
 }
 

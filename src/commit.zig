@@ -32,7 +32,7 @@ const fba_size = 1024 * 64;
 
 /// It is the responsibility of the caller of `commit` to deallocate and
 /// deinit alloc, repo_path, and files, if necessary.
-pub fn commit(alloc: std.mem.Allocator, repo_path: []const u8, message: [:0]const u8) !void {
+pub fn commit(alloc: std.mem.Allocator, repo_path: []const u8, message: []const u8) !void {
     log.debug("what is the message: {s}\n", .{message});
 
     // We allocate lots of short lived memory for copying between databases.

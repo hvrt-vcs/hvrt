@@ -22,8 +22,12 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
         .add => {
             try add(gpa, args.gpopts.get_work_tree(), args.trailing_args);
         },
-        .commit => {
-            try commit(gpa, args.gpopts.get_work_tree(), "Dummy message");
+        .commit => |commit_opts| {
+            try commit(
+                gpa,
+                args.gpopts.get_work_tree(),
+                try commit_opts.get_message(),
+            );
         },
         .mv => {
             try args.command.notImplemented();

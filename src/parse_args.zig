@@ -26,10 +26,10 @@ pub const CommandOpts = union(Command) {
     global: GlobalParsedOpts,
 
     // subcommands
-    add: bool,
+    add: AddParsedOpts,
     commit: CommitParsedOpts,
     cp: bool,
-    init: bool,
+    init: InitParsedOpts,
     mv: bool,
     rm: bool,
 
@@ -70,6 +70,8 @@ const GlobalOpts: []const allyouropt.Opt = &.{
 };
 
 pub const GlobalParsedOpts = struct {
+    const Self = @This();
+
     // Toggles
     help: bool = false,
     version: bool = false,
@@ -81,12 +83,12 @@ pub const GlobalParsedOpts = struct {
     cwd: ?[]const u8 = null,
     work_tree: ?[]const u8 = null,
 
-    pub fn get_work_tree(self: GlobalParsedOpts) []const u8 {
+    pub fn get_work_tree(self: Self) []const u8 {
         return self.work_tree orelse ".";
     }
 
     /// Parse all global args and return any unconsumed arguments.
-    pub fn iter_opts(self: *GlobalParsedOpts, args_sans_prog_name: []const []const u8) ![]const []const u8 {
+    pub fn iter_opts(self: *Self, args_sans_prog_name: []const []const u8) ![]const []const u8 {
         var opt_iter_global = allyouropt.OptIterator{
             .args = args_sans_prog_name,
             .opt_defs = GlobalOpts,
@@ -101,7 +103,7 @@ pub const GlobalParsedOpts = struct {
         return remaining_args;
     }
 
-    pub fn consume_opt(self: *GlobalParsedOpts, popt: allyouropt.ParsedOpt) !void {
+    pub fn consume_opt(self: *Self, popt: allyouropt.ParsedOpt) !void {
         if (std.mem.eql(u8, popt.opt.name, "help")) {
             self.help = true;
         } else if (std.mem.eql(u8, popt.opt.name, "version")) {
@@ -118,7 +120,7 @@ pub const GlobalParsedOpts = struct {
         }
     }
 
-    pub fn finalize_opts(self: *GlobalParsedOpts, arena_alloc: std.mem.Allocator) !void {
+    pub fn finalize_opts(self: *Self, arena_alloc: std.mem.Allocator) !void {
         self.work_tree = if (self.work_tree) |wt| try std.fs.realpathAlloc(arena_alloc, wt) else try std.process.getCwdAlloc(arena_alloc);
     }
 };
@@ -134,10 +136,12 @@ const CommitOpts: []const allyouropt.Opt = &.{
 };
 
 pub const CommitParsedOpts = struct {
+    const Self = @This();
+
     // optional and take args
     message: ?[]const u8 = null,
 
-    pub fn get_message(self: CommitParsedOpts) ![]const u8 {
+    pub fn get_message(self: Self) ![]const u8 {
         if (self.message) |message| {
             // Caller set message as an opt, so return that.
             return message;
@@ -154,7 +158,7 @@ pub const CommitParsedOpts = struct {
     }
 
     /// Parse all `commit` subcommand args and return any unconsumed arguments.
-    pub fn iter_opts(self: *CommitParsedOpts, args_sans_prog_name: []const []const u8) ![]const []const u8 {
+    pub fn iter_opts(self: *Self, args_sans_prog_name: []const []const u8) ![]const []const u8 {
         var opt_iter_subcommand = allyouropt.OptIterator{
             .args = args_sans_prog_name,
             .opt_defs = CommitOpts,
@@ -169,9 +173,87 @@ pub const CommitParsedOpts = struct {
         return remaining_args;
     }
 
-    pub fn consume_opt(self: *CommitParsedOpts, popt: allyouropt.ParsedOpt) !void {
+    pub fn consume_opt(self: *Self, popt: allyouropt.ParsedOpt) !void {
         if (std.mem.eql(u8, popt.opt.name, "message")) {
             self.message = popt.value;
+        } else {
+            log.warn("Unknown option given: {s}", .{popt.opt.name});
+            return error.UnknownOpt;
+        }
+    }
+};
+
+const AddOpts: []const allyouropt.Opt = &.{
+    .{
+        .name = "force",
+        .short_flags = "f",
+        .long_flags = &.{"force"},
+    },
+};
+
+pub const AddParsedOpts = struct {
+    const Self = @This();
+
+    force: bool = false,
+
+    /// Parse all `commit` subcommand args and return any unconsumed arguments.
+    pub fn iter_opts(self: *Self, args_sans_prog_name: []const []const u8) ![]const []const u8 {
+        var opt_iter_subcommand = allyouropt.OptIterator{
+            .args = args_sans_prog_name,
+            .opt_defs = CommitOpts,
+        };
+
+        while (opt_iter_subcommand.next()) |o| {
+            log.debug("What is the next option? {any}\n\n", .{o});
+            try self.consume_opt(o);
+        }
+
+        const remaining_args = opt_iter_subcommand.remaining_args();
+        return remaining_args;
+    }
+
+    pub fn consume_opt(self: *Self, popt: allyouropt.ParsedOpt) !void {
+        if (std.mem.eql(u8, popt.opt.name, "force")) {
+            self.force = true;
+        } else {
+            log.warn("Unknown option given: {s}", .{popt.opt.name});
+            return error.UnknownOpt;
+        }
+    }
+};
+
+const InitOpts: []const allyouropt.Opt = &.{
+    .{
+        .name = "initial-branch",
+        .short_flags = "b",
+        .long_flags = &.{"initial-branch"},
+    },
+};
+
+pub const InitParsedOpts = struct {
+    const Self = @This();
+
+    initial_branch: ?[]const u8 = null,
+
+    /// Parse all `commit` subcommand args and return any unconsumed arguments.
+    pub fn iter_opts(self: *Self, args_sans_prog_name: []const []const u8) ![]const []const u8 {
+        var opt_iter_subcommand = allyouropt.OptIterator{
+            .args = args_sans_prog_name,
+            .opt_defs = CommitOpts,
+        };
+
+        while (opt_iter_subcommand.next()) |o| {
+            log.debug("What is the next option? {any}\n\n", .{o});
+            try self.consume_opt(o);
+        }
+
+        const remaining_args = opt_iter_subcommand.remaining_args();
+        return remaining_args;
+    }
+
+    pub fn consume_opt(self: *Self, popt: allyouropt.ParsedOpt) !void {
+        if (std.mem.eql(u8, popt.opt.name, "initial-branch")) {
+            self.initial_branch = popt.value;
         } else {
             log.warn("Unknown option given: {s}", .{popt.opt.name});
             return error.UnknownOpt;
@@ -232,15 +314,19 @@ pub const Args = struct {
                     self.command = .{ .global = gopts };
                 },
                 .init => {
-                    self.command = .{ .init = true };
+                    var popts: InitParsedOpts = .{};
+                    self.trailing_args = try popts.iter_opts(trailing_args);
+                    self.command = .{ .init = popts };
                 },
                 .add => {
-                    self.command = .{ .add = true };
+                    var popts: AddParsedOpts = .{};
+                    self.trailing_args = try popts.iter_opts(trailing_args);
+                    self.command = .{ .add = popts };
                 },
                 .commit => {
-                    var copts: CommitParsedOpts = .{};
-                    self.trailing_args = try copts.iter_opts(trailing_args);
-                    self.command = .{ .commit = copts };
+                    var popts: CommitParsedOpts = .{};
+                    self.trailing_args = try popts.iter_opts(trailing_args);
+                    self.command = .{ .commit = popts };
                 },
                 .mv => {
                     self.command = .{ .mv = true };

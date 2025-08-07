@@ -83,3 +83,7 @@ fn initDatabase(db_uri: [:0]const u8, tx_name: [:0]const u8, sqlfiles: anytype) 
 
     try tx.commit();
 }
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

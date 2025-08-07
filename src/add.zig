@@ -244,11 +244,6 @@ pub const FileAdder = struct {
     }
 };
 
-test {
-    _ = FileAdder;
-    _ = core_ds;
-    _ = dir_walker;
-    _ = pcre;
-    _ = sql;
-    _ = sqlite;
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
 }

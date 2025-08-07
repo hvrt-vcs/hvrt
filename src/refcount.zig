@@ -123,3 +123,7 @@ test {
     try std.testing.expectEqual(2, usize_ref2.refCount());
     try std.testing.expectEqual(usize_ref.refCount(), usize_ref2.refCount());
 }
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

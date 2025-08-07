@@ -198,3 +198,7 @@ test ChainMap {
         }
     }
 }
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

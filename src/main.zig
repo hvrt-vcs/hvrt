@@ -325,3 +325,7 @@ test "first commit parent must have `regular` parent type" {
     // std.log.debug("\nbefore_stat.size: {}\nafter_stat.size: {}\n\n", .{ before_stat.size, after_stat.size });
     // try std.testing.expect(before_stat.size < after_stat.size);
 }
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

@@ -231,3 +231,7 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: []const u8, message: []const 
         try wt_tx.commit();
     }
 }
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

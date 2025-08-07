@@ -40,3 +40,7 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
         },
     }
 }
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

@@ -353,3 +353,7 @@ pub const Args = struct {
         child_allocator.destroy(self.arena_ptr);
     }
 };
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

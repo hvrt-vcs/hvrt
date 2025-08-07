@@ -813,3 +813,7 @@ test "sqlite3.h include" {
     // std.debug.print("What is the value of SQLITE_OK? {any}\n", .{c.SQLITE_OK});
     try std.testing.expectEqual(0, c.SQLITE_OK);
 }
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

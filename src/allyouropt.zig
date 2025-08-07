@@ -346,3 +346,7 @@ test OptIterator {
     try std.testing.expectEqual(3, opt_iter4.remaining_args().len);
     try std.testing.expectEqualStrings("-ab", opt_iter4.remaining_args()[0]);
 }
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

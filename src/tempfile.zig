@@ -5,7 +5,7 @@ const builtin = @import("builtin");
 pub fn getTempDir(alloc: std.mem.Allocator) ![]const u8 {
     var arena = std.heap.ArenaAllocator.init(alloc);
     defer arena.deinit();
-    var arena_alloc = arena.allocator();
+    const arena_alloc = arena.allocator();
 
     var dirlist2 = std.ArrayList([]const u8).init(arena_alloc);
     defer dirlist2.deinit();
@@ -41,4 +41,8 @@ pub fn getTempDir(alloc: std.mem.Allocator) ![]const u8 {
     }
 
     return error.NoTempDirFound;
+}
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
 }

@@ -79,3 +79,7 @@ export fn cRoundup(size: c_int) c_int {
     const retval = size + (if (mod != 0) mod else cpu_align);
     return retval;
 }
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

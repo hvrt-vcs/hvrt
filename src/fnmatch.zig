@@ -51,7 +51,7 @@ pub const Utf8Iterator = struct {
     }
 
     /// Look ahead at one codepoint without advancing the iterator.
-    pub fn peekCodepoint(it: *Utf8Iterator) ?21 {
+    pub fn peekCodepoint(it: *Utf8Iterator) ?u21 {
         const original_i = it.i;
         defer it.i = original_i;
 
@@ -65,7 +65,7 @@ pub const Utf8Iterator = struct {
 // Take inspiration from the following implementations:
 // * https://github.com/gcc-mirror/gcc/blob/master/libiberty/fnmatch.c
 // * https://opensource.apple.com/source/Libc/Libc-167/gen.subproj/fnmatch.c.auto.html
-pub fn fnmatch(pattern: []const u8, string: []const u8, flags: u32) bool {
+pub fn fnmatch(pattern: []const u8, string: []const u8, flags: u32) !bool {
     _ = flags; // autofix
 
     const temp_buffer: [std.fs.max_path_bytes * 3]u8 = undefined;
@@ -81,7 +81,7 @@ pub fn fnmatch(pattern: []const u8, string: []const u8, flags: u32) bool {
         switch (pattern_rune) {
             '\\' => {
                 // if no next rune exists to escape, then return false
-                const escaped_rune = pattern_iter.nextCodepoint() or return false;
+                const escaped_rune = pattern_iter.nextCodepoint() orelse return false;
                 // if end of string before end of pattern, return false
                 const string_rune = string_iter.nextCodepoint() orelse return false;
 
@@ -136,8 +136,12 @@ test fnmatch {
     const alloc = std.testing.allocator;
     _ = alloc; // autofix
 
-    const match = fnmatch("*bar.baz", "foobar.baz", 0);
+    const match = try fnmatch("*bar.baz", "foobar.baz", 0);
     try std.testing.expect(match);
 }
 
 test translate {}
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

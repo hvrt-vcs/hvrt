@@ -204,22 +204,26 @@ pub const FileIgnorer = struct {
     }
 
     pub fn put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) anyerror!void {
-        const self = @as(*FileIgnorer, @ptrCast(context));
+        const self = @as(*FileIgnorer, @alignCast(@ptrCast(context)));
         _ = self; // autofix
         _ = patterns; // autofix
         _ = relpath; // autofix
     }
 
     pub fn remove_patterns(context: *anyopaque, relpath: []const u8) void {
-        const self = @as(*FileIgnorer, @ptrCast(context));
+        const self = @as(*FileIgnorer, @alignCast(@ptrCast(context)));
         _ = self; // autofix
         _ = relpath; // autofix
     }
 
     pub fn is_ignored(context: *anyopaque, relpath: []const u8) bool {
-        const self = @as(*FileIgnorer, @ptrCast(context));
+        const self = @as(*FileIgnorer, @alignCast(@ptrCast(context)));
         _ = self; // autofix
         _ = relpath; // autofix
         return false;
     }
 };
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
+}

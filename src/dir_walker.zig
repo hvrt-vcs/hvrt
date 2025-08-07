@@ -169,19 +169,19 @@ pub const FileIgnorerInverter = struct {
 
     /// Straight pass through to the internal `file_ignorer`.
     pub fn put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) anyerror!void {
-        const self = @as(*FileIgnorerInverter, @ptrCast(context));
+        const self = @as(*FileIgnorerInverter, @alignCast(@ptrCast(context)));
         try self.file_ignorer.put_patterns(relpath, patterns);
     }
 
     /// Straight pass through to the internal `file_ignorer`.
     pub fn remove_patterns(context: *anyopaque, relpath: []const u8) void {
-        const self = @as(*FileIgnorerInverter, @ptrCast(context));
+        const self = @as(*FileIgnorerInverter, @alignCast(@ptrCast(context)));
         self.file_ignorer.remove_patterns(relpath);
     }
 
     /// Returns the opposite of what the internal `file_ignorer` returns.
     pub fn is_ignored(context: *anyopaque, relpath: []const u8) bool {
-        const self = @as(*FileIgnorerInverter, @ptrCast(context));
+        const self = @as(*FileIgnorerInverter, @alignCast(@ptrCast(context)));
         return !self.file_ignorer.is_ignored(relpath);
     }
 };
@@ -204,7 +204,7 @@ pub const ChainedFileIgnorer = struct {
     /// Only put patterns on first (i.e. "zeroeth") internal file ignorer, or
     /// does nothing if internal `file_ignorers` slice is empty.
     pub fn put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) anyerror!void {
-        const self = @as(*ChainedFileIgnorer, @ptrCast(context));
+        const self = @as(*ChainedFileIgnorer, @alignCast(@ptrCast(context)));
         if (self.file_ignorers.len != 0) {
             try self.file_ignorers[0].put_patterns(relpath, patterns);
         }
@@ -213,7 +213,7 @@ pub const ChainedFileIgnorer = struct {
     /// Only remove patterns from first (i.e. "zeroeth") internal file ignorer,
     /// or does nothing if internal `file_ignorers` slice is empty.
     pub fn remove_patterns(context: *anyopaque, relpath: []const u8) void {
-        const self = @as(*ChainedFileIgnorer, @ptrCast(context));
+        const self = @as(*ChainedFileIgnorer, @alignCast(@ptrCast(context)));
         if (self.file_ignorers.len != 0) {
             self.file_ignorers[0].remove_patterns(relpath);
         }
@@ -222,7 +222,7 @@ pub const ChainedFileIgnorer = struct {
     /// Checks all internal file ignorers in order until one returns `true`,
     /// otherwise returns `false`.
     pub fn is_ignored(context: *anyopaque, relpath: []const u8) bool {
-        const self = @as(*ChainedFileIgnorer, @ptrCast(context));
+        const self = @as(*ChainedFileIgnorer, @alignCast(@ptrCast(context)));
         for (self.file_ignorers) |file_ignorer| {
             if (file_ignorer.is_ignored(relpath)) return true;
         } else return false;
@@ -396,4 +396,8 @@ test "DirWalker.walkDir" {
     _ = &dw; // autofix
 
     try dw.walkDir(alloc, null);
+}
+
+test "refAllDeclsRecursive" {
+    std.testing.refAllDeclsRecursive(@This());
 }

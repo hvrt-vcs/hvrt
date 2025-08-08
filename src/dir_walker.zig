@@ -393,7 +393,6 @@ test "DirWalker.walkDir" {
     const ctype = DirWalker(*anyopaque, dummy);
 
     var dw = ctype.init(tmp_dir.dir, undefined, noop_ignorer);
-    _ = &dw; // autofix
 
     try dw.walkDir(alloc, null);
 }

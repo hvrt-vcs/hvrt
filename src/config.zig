@@ -13,7 +13,7 @@ pub const Value = union(enum) {
     json_num_int: i64,
     json_num_float: f64,
     json_boolean: bool,
-    json_null: bool,
+    json_null,
 };
 
 pub const ConfigPairs = std.StringArrayHashMap(Value);
@@ -71,6 +71,34 @@ pub const Config = struct {
             log.debug("Are we parsing the padded value correctly? \"{s}\"\n", .{padded_value});
             const value = std.mem.trim(u8, padded_value, " \t\n");
             log.debug("Are we parsing the value correctly? \"{s}\"\n", .{value});
+
+            // const map_val: Value = .{ .raw = value };
+            const map_val: Value = blk: {
+                if (std.mem.eql(u8, "null", value)) {
+                    break :blk .json_null;
+                }
+
+                if (std.mem.eql(u8, "true", value)) {
+                    break :blk .{ .json_boolean = true };
+                } else if (std.mem.eql(u8, "true", value)) {
+                    break :blk .{ .json_boolean = false };
+                }
+
+                if (std.fmt.parseInt(i64, value, 10)) |v| {
+                    break :blk .{ .json_num_int = v };
+                } else |_| {}
+
+                if (std.fmt.parseFloat(f64, value)) |v| {
+                    break :blk .{ .json_num_float = v };
+                } else |_| {}
+
+                // TODO: parse a quoted JSON string
+
+                break :blk .{ .raw = value };
+            };
+
+            // Later entries in the config should overwrite earlier ones.
+            config_pairs.putAssumeCapacity(key, map_val);
         }
 
         return .{
@@ -104,6 +132,15 @@ const test_config_good =
 test Config {
     var config = try Config.parse(std.testing.allocator, test_config_good);
     defer config.deinit();
+
+    try std.testing.expectEqual(2, config.config_pairs.count());
+
+    var iterator = config.config_pairs.iterator();
+    const first = iterator.next().?;
+    try std.testing.expectEqualStrings("worktree.repo.type", first.key_ptr.*);
+
+    const must_be_string = first.value_ptr.raw;
+    try std.testing.expectEqualStrings("\"sqlite\"", must_be_string);
 }
 
 // FIXME: "refAllDeclsRecursive" throws an error for some reason.

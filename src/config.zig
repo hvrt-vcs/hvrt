@@ -47,7 +47,7 @@ pub const Config = struct {
         var cur_line: usize = 0;
         while (spliterator.next()) |l| {
             cur_line += 1;
-            const trimmed = std.mem.trimLeft(u8, l, " \t\n");
+            const trimmed = std.mem.trimLeft(u8, l, " \t\r\n");
 
             // Empty line
             if (trimmed.len == 0) continue;
@@ -56,20 +56,20 @@ pub const Config = struct {
             if (trimmed[0] == '#') continue;
 
             const eql_idx = std.mem.indexOfScalar(u8, trimmed, '=') orelse {
-                log.warn("Line {any} of config is invalid\n", .{cur_line});
+                log.warn("Line {any} of config is invalid: \"{s}\" \n", .{ cur_line, l });
                 return error.InvalidConfig;
             };
 
             const padded_key = trimmed[0..eql_idx];
             log.debug("Are we parsing the padded key correctly? \"{s}\"\n", .{padded_key});
-            const key = std.mem.trim(u8, padded_key, " \t\n");
+            const key = std.mem.trim(u8, padded_key, " \t\r\n");
             log.debug("Are we parsing the key correctly? \"{s}\"\n", .{key});
 
             // Value could be empty, so check for that
             const padded_value = if (trimmed[eql_idx..].len == 1) &.{} else trimmed[(eql_idx + 1)..];
 
             log.debug("Are we parsing the padded value correctly? \"{s}\"\n", .{padded_value});
-            const value = std.mem.trim(u8, padded_value, " \t\n");
+            const value = std.mem.trim(u8, padded_value, " \t\r\n");
             log.debug("Are we parsing the value correctly? \"{s}\"\n", .{value});
 
             // const map_val: Value = .{ .raw = value };

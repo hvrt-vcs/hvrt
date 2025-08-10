@@ -7,7 +7,6 @@ const dir_walker = @import("dir_walker.zig");
 const pcre = @import("pcre.zig");
 const sql = @import("sql.zig");
 const sqlite = @import("sqlite.zig");
-const config = @import("config.zig");
 
 const Hasher = core_ds.Hasher;
 

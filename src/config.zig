@@ -154,8 +154,8 @@ test "url parse" {
 
     const uri = try std.Uri.parse(uri_string);
 
-    std.debug.print("What is the uri scheme? {s}\n\n", .{uri.scheme});
-    std.debug.print("What is the uri path? {any}\n\n", .{uri.path});
+    // std.debug.print("What is the uri scheme? {s}\n\n", .{uri.scheme});
+    // std.debug.print("What is the uri path? {any}\n\n", .{uri.path});
 
     const path = switch (uri.path) {
         .raw => |v| v,

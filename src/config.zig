@@ -1,14 +1,98 @@
 const std = @import("std");
 const fspath = std.fs.path;
 const Dir = std.fs.Dir;
+const json = std.json;
 
 const log = std.log.scoped(.add);
 
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
 
-pub const Value = std.json.Value;
-const parseFromSliceLeaky = std.json.parseFromSliceLeaky;
+const whitespace = " \t\r\n";
+
+pub const Value = struct {
+    const Self = @This();
+
+    raw: []const u8,
+
+    pub fn eql(a: Self, b: Self) bool {
+        return std.mem.eql(u8, a.raw, b.raw);
+    }
+
+    pub fn trimWhitespace(self: Self) Self {
+        return .{ .raw = std.mem.trim(u8, self.raw, whitespace) };
+    }
+
+    pub fn isEmpty(self: Self) bool {
+        return self.trimWhitespace().raw.len == 0;
+    }
+
+    /// Checks for a pair of chars, if present. The chars must *not* be padded
+    /// with whitespace. They *must* be the first and last characters of the
+    /// string.
+    fn hasSurroundingChars(self: Self, first: u8, last: u8) bool {
+        // len of 0 means empty string. len of 1 means there aren't at least two
+        // characters to strip.
+        if (self.raw.len <= 1) {
+            return false;
+        } else if (self.raw[0] != first) {
+            return false;
+        } else if (self.raw[self.raw.len - 1] != last) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+    /// Strip a pair of chars, if both are present.
+    fn trimSurroundingChars(self: Self, first: u8, last: u8) Self {
+        if (self.hasSurroundingChars(first, last)) {
+            const trimmed = self.raw[1..(self.raw.len - 1)];
+            return .{ .raw = trimmed };
+        } else {
+            return self;
+        }
+    }
+
+    /// Checks for a pair of double quotes, if present.
+    pub fn hasDoubleQuotes(self: Self) bool {
+        return self.hasSurroundingChars('"', '"');
+    }
+
+    /// Strip a pair of double quotes, if present.
+    pub fn trimDoubleQuotes(self: Self) Self {
+        return self.trimSurroundingChars('"', '"');
+    }
+
+    pub fn parseAsJson(self: Self, arena: std.mem.Allocator) !json.Value {
+        return try json.parseFromSliceLeaky(
+            json.Value,
+            arena,
+            self.raw,
+            .{ .allocate = .alloc_if_needed },
+        );
+    }
+
+    /// Returns `error.UnexpectedToken` when it encounters a JSON array or a
+    /// JSON object. Otherwise, behaves the same as `parseAsJson`.
+    pub fn parseAsJsonScalar(self: Self, arena: std.mem.Allocator) !json.Value {
+        // This matches the error that the JSON library returns.
+        const scalar_error = error.UnexpectedToken;
+
+        // Don't waste time parsing arrays or objects.
+        // If either seems present, fail early.
+        const trimmed = self.trimWhitespace().raw;
+        if (trimmed.len > 0 and (trimmed[0] == '[' or trimmed[0] == '{')) {
+            return scalar_error;
+        }
+
+        const parsed = try self.parseAsJson(arena);
+
+        return parsed;
+    }
+
+    const parseFromSliceLeaky = std.json.parseFromSliceLeaky;
+};
 
 pub const ConfigPairs = std.StringArrayHashMap(Value);
 
@@ -41,7 +125,7 @@ pub const Config = struct {
         var cur_line: usize = 0;
         while (spliterator.next()) |l| {
             cur_line += 1;
-            const ltrimmed = std.mem.trimLeft(u8, l, " \t\r\n");
+            const ltrimmed = std.mem.trimLeft(u8, l, whitespace);
 
             // Empty line
             if (ltrimmed.len == 0) continue;
@@ -58,24 +142,13 @@ pub const Config = struct {
             // could be anything that isn't whitesapce or the equals sign.
             const padded_key = ltrimmed[0..eql_idx];
             log.debug("Are we parsing the padded key correctly? \"{s}\"\n", .{padded_key});
-            const key = std.mem.trim(u8, padded_key, " \t\r\n");
+            const key = std.mem.trim(u8, padded_key, whitespace);
             log.debug("Are we parsing the key correctly? \"{s}\"\n", .{key});
 
             // Value could be empty, so check for that
             const padded_value = if (ltrimmed[eql_idx..].len == 1) &.{} else ltrimmed[(eql_idx + 1)..];
 
-            const map_val: Value = blk: {
-                if (parseFromSliceLeaky(
-                    Value,
-                    arena_ptr.allocator(),
-                    padded_value,
-                    .{ .allocate = .alloc_if_needed },
-                )) |p| {
-                    break :blk p;
-                } else |_| {
-                    break :blk Value{ .string = padded_value };
-                }
-            };
+            const map_val: Value = .{ .raw = padded_value };
 
             // Later entries in the config should overwrite earlier ones.
             config_pairs.putAssumeCapacity(key, map_val);
@@ -111,23 +184,32 @@ const test_config_good =
     \\ some.fake.key = a bare value outside of quotes  
     \\ some.fake.key2 = 123
     \\ some.fake.key3 = 2.0
+    \\
+    \\ a.valid.json.object = {"key": "value"}
+    \\ a.valid.json.array = ["value1", "value2"]
 ;
 
 test Config {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
     var config = try Config.parse(std.testing.allocator, test_config_good);
     defer config.deinit();
 
-    try std.testing.expectEqual(5, config.config_pairs.count());
+    try std.testing.expectEqual(7, config.config_pairs.count());
 
     var iterator = config.config_pairs.iterator();
     const first = iterator.next().?;
     try std.testing.expectEqualStrings("worktree.repo.type", first.key_ptr.*);
 
-    const must_be_string = first.value_ptr.string;
+    const as_json1 = try first.value_ptr.parseAsJsonScalar(arena);
+    const must_be_string = as_json1.string;
     try std.testing.expectEqualStrings("sqlite", must_be_string);
 
     const second = iterator.next().?;
-    const must_be_string2 = second.value_ptr.string;
+    const as_json2 = try second.value_ptr.parseAsJsonScalar(arena);
+    const must_be_string2 = as_json2.string;
     try std.testing.expectEqualStrings("file:.hvrt/repo.hvrt", must_be_string2);
 
     // according to the voll spec, the leading and trailing whitespace should
@@ -136,20 +218,43 @@ test Config {
     //
     // In essence, the whitespace padding below is expected.
     const third = iterator.next().?;
-    const must_be_string3 = third.value_ptr.string;
+    const as_json3 = third.value_ptr.parseAsJsonScalar(arena);
+    try std.testing.expectError(error.SyntaxError, as_json3);
+    const must_be_string3 = third.value_ptr.raw;
     try std.testing.expectEqualStrings(" a bare value outside of quotes  ", must_be_string3);
+    try std.testing.expectEqualStrings("a bare value outside of quotes", third.value_ptr.trimWhitespace().raw);
 
     const fourth = iterator.next().?;
-    const must_be_int = fourth.value_ptr.integer;
+    const as_json4 = try fourth.value_ptr.parseAsJsonScalar(arena);
+    const must_be_int = as_json4.integer;
     try std.testing.expectEqual(123, must_be_int);
 
     const fifth = iterator.next().?;
-    const must_be_float = fifth.value_ptr.float;
+    const as_json5 = try fifth.value_ptr.parseAsJsonScalar(arena);
+    const must_be_float = as_json5.float;
     try std.testing.expectApproxEqRel(
         2.0,
         must_be_float,
         std.math.sqrt(std.math.floatEps(f64)),
     );
+
+    const sixth = iterator.next().?;
+    // This should succeed
+    _ = try sixth.value_ptr.parseAsJson(arena);
+    // This should fail
+    const as_json6 = sixth.value_ptr.parseAsJsonScalar(arena);
+    try std.testing.expectError(error.UnexpectedToken, as_json6);
+    const must_be_string6 = sixth.value_ptr.trimWhitespace().raw;
+    try std.testing.expectEqualStrings("{\"key\": \"value\"}", must_be_string6);
+
+    const seventh = iterator.next().?;
+    // This should succeed
+    _ = try seventh.value_ptr.parseAsJson(arena);
+    // This should fail
+    const as_json7 = seventh.value_ptr.parseAsJsonScalar(arena);
+    try std.testing.expectError(error.UnexpectedToken, as_json7);
+    const must_be_string7 = seventh.value_ptr.trimWhitespace().raw;
+    try std.testing.expectEqualStrings("[\"value1\", \"value2\"]", must_be_string7);
 }
 
 // // FIXME: "refAllDeclsRecursive" throws an error for some reason.

@@ -7,14 +7,8 @@ const log = std.log.scoped(.add);
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
 
-pub const Value = union(enum) {
-    raw: []const u8,
-    json_string: []const u8,
-    json_num_int: i64,
-    json_num_float: f64,
-    json_boolean: bool,
-    json_null,
-};
+pub const Value = std.json.Value;
+const parseFromSliceLeaky = std.json.parseFromSliceLeaky;
 
 pub const ConfigPairs = std.StringArrayHashMap(Value);
 
@@ -74,27 +68,16 @@ pub const Config = struct {
 
             // const map_val: Value = .{ .raw = value };
             const map_val: Value = blk: {
-                if (std.mem.eql(u8, "null", value)) {
-                    break :blk .json_null;
+                if (parseFromSliceLeaky(
+                    Value,
+                    arena_ptr.allocator(),
+                    value,
+                    .{ .allocate = .alloc_if_needed },
+                )) |p| {
+                    break :blk p;
+                } else |_| {
+                    break :blk Value{ .string = value };
                 }
-
-                if (std.mem.eql(u8, "true", value)) {
-                    break :blk .{ .json_boolean = true };
-                } else if (std.mem.eql(u8, "true", value)) {
-                    break :blk .{ .json_boolean = false };
-                }
-
-                if (std.fmt.parseInt(i64, value, 10)) |v| {
-                    break :blk .{ .json_num_int = v };
-                } else |_| {}
-
-                if (std.fmt.parseFloat(f64, value)) |v| {
-                    break :blk .{ .json_num_float = v };
-                } else |_| {}
-
-                // TODO: parse a quoted JSON string
-
-                break :blk .{ .raw = value };
             };
 
             // Later entries in the config should overwrite earlier ones.
@@ -127,20 +110,34 @@ const test_config_good =
     \\
     \\
     \\ # Another comment.
+    \\
+    \\ some.fake.key = a bare value outside of quotes  
 ;
 
 test Config {
     var config = try Config.parse(std.testing.allocator, test_config_good);
     defer config.deinit();
 
-    try std.testing.expectEqual(2, config.config_pairs.count());
+    try std.testing.expectEqual(3, config.config_pairs.count());
 
     var iterator = config.config_pairs.iterator();
     const first = iterator.next().?;
     try std.testing.expectEqualStrings("worktree.repo.type", first.key_ptr.*);
 
-    const must_be_string = first.value_ptr.raw;
-    try std.testing.expectEqualStrings("\"sqlite\"", must_be_string);
+    const must_be_string = first.value_ptr.string;
+    try std.testing.expectEqualStrings("sqlite", must_be_string);
+
+    const second = iterator.next().?;
+    const must_be_string2 = second.value_ptr.string;
+    try std.testing.expectEqualStrings("file:.hvrt/repo.hvrt", must_be_string2);
+
+    const third = iterator.next().?;
+    const must_be_string3 = third.value_ptr.string;
+    try std.testing.expectEqualStrings("a bare value outside of quotes", must_be_string3);
+
+    // FIXME: according to the voll spec, the leading and trailing whitespace
+    // should NOT be stripped by default.
+    // try std.testing.expectEqualStrings(" a bare value outside of quotes  ", must_be_string3);
 }
 
 // FIXME: "refAllDeclsRecursive" throws an error for some reason.

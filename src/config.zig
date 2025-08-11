@@ -41,42 +41,39 @@ pub const Config = struct {
         var cur_line: usize = 0;
         while (spliterator.next()) |l| {
             cur_line += 1;
-            const trimmed = std.mem.trimLeft(u8, l, " \t\r\n");
+            const ltrimmed = std.mem.trimLeft(u8, l, " \t\r\n");
 
             // Empty line
-            if (trimmed.len == 0) continue;
+            if (ltrimmed.len == 0) continue;
 
             // Comment line
-            if (trimmed[0] == '#') continue;
+            if (ltrimmed[0] == '#') continue;
 
-            const eql_idx = std.mem.indexOfScalar(u8, trimmed, '=') orelse {
+            const eql_idx = std.mem.indexOfScalar(u8, ltrimmed, '=') orelse {
                 log.warn("Line {any} of config is invalid: \"{s}\" \n", .{ cur_line, l });
                 return error.InvalidConfig;
             };
 
-            const padded_key = trimmed[0..eql_idx];
+            // FIXME: validate that `key` is a valid voll key. Currently, it
+            // could be anything that isn't whitesapce or the equals sign.
+            const padded_key = ltrimmed[0..eql_idx];
             log.debug("Are we parsing the padded key correctly? \"{s}\"\n", .{padded_key});
             const key = std.mem.trim(u8, padded_key, " \t\r\n");
             log.debug("Are we parsing the key correctly? \"{s}\"\n", .{key});
 
             // Value could be empty, so check for that
-            const padded_value = if (trimmed[eql_idx..].len == 1) &.{} else trimmed[(eql_idx + 1)..];
+            const padded_value = if (ltrimmed[eql_idx..].len == 1) &.{} else ltrimmed[(eql_idx + 1)..];
 
-            log.debug("Are we parsing the padded value correctly? \"{s}\"\n", .{padded_value});
-            const value = std.mem.trim(u8, padded_value, " \t\r\n");
-            log.debug("Are we parsing the value correctly? \"{s}\"\n", .{value});
-
-            // const map_val: Value = .{ .raw = value };
             const map_val: Value = blk: {
                 if (parseFromSliceLeaky(
                     Value,
                     arena_ptr.allocator(),
-                    value,
+                    padded_value,
                     .{ .allocate = .alloc_if_needed },
                 )) |p| {
                     break :blk p;
                 } else |_| {
-                    break :blk Value{ .string = value };
+                    break :blk Value{ .string = padded_value };
                 }
             };
 
@@ -112,13 +109,15 @@ const test_config_good =
     \\ # Another comment.
     \\
     \\ some.fake.key = a bare value outside of quotes  
+    \\ some.fake.key2 = 123
+    \\ some.fake.key3 = 2.0
 ;
 
 test Config {
     var config = try Config.parse(std.testing.allocator, test_config_good);
     defer config.deinit();
 
-    try std.testing.expectEqual(3, config.config_pairs.count());
+    try std.testing.expectEqual(5, config.config_pairs.count());
 
     var iterator = config.config_pairs.iterator();
     const first = iterator.next().?;
@@ -131,16 +130,29 @@ test Config {
     const must_be_string2 = second.value_ptr.string;
     try std.testing.expectEqualStrings("file:.hvrt/repo.hvrt", must_be_string2);
 
+    // according to the voll spec, the leading and trailing whitespace should
+    // NOT be stripped by default from values that cannot trivially be treated
+    // as JSON values.
+    //
+    // In essence, the whitespace padding below is expected.
     const third = iterator.next().?;
     const must_be_string3 = third.value_ptr.string;
-    try std.testing.expectEqualStrings("a bare value outside of quotes", must_be_string3);
+    try std.testing.expectEqualStrings(" a bare value outside of quotes  ", must_be_string3);
 
-    // FIXME: according to the voll spec, the leading and trailing whitespace
-    // should NOT be stripped by default.
-    // try std.testing.expectEqualStrings(" a bare value outside of quotes  ", must_be_string3);
+    const fourth = iterator.next().?;
+    const must_be_int = fourth.value_ptr.integer;
+    try std.testing.expectEqual(123, must_be_int);
+
+    const fifth = iterator.next().?;
+    const must_be_float = fifth.value_ptr.float;
+    try std.testing.expectApproxEqRel(
+        2.0,
+        must_be_float,
+        std.math.sqrt(std.math.floatEps(f64)),
+    );
 }
 
-// FIXME: "refAllDeclsRecursive" throws an error for some reason.
+// // FIXME: "refAllDeclsRecursive" throws an error for some reason.
 // test "refAllDeclsRecursive" {
 //     std.debug.print("Starting refAllDeclsRecursive d\n\n", .{});
 //     std.testing.refAllDeclsRecursive(@This());

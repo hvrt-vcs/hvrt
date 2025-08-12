@@ -27,9 +27,9 @@ pub const Value = struct {
         return self.trimWhitespace().raw.len == 0;
     }
 
-    /// Checks for a pair of chars, if present. The chars must *not* be padded
-    /// with whitespace. They *must* be the first and last characters of the
-    /// string.
+    /// Checks for a pair of chars, if present. The internal raw slice must
+    /// *not* be padded with whitespace. The chars *must* be the first and last
+    /// characters of the internal slice.
     fn hasSurroundingChars(self: Self, first: u8, last: u8) bool {
         // len of 0 means empty string. len of 1 means there aren't at least two
         // characters to strip.
@@ -94,7 +94,8 @@ pub const Value = struct {
     const parseFromSliceLeaky = std.json.parseFromSliceLeaky;
 };
 
-pub const ConfigPairs = std.StringArrayHashMap(Value);
+pub const ValueList = std.ArrayList(Value);
+pub const ConfigPairs = std.StringArrayHashMap(ValueList);
 
 pub const Config = struct {
     const Self = @This();
@@ -111,9 +112,8 @@ pub const Config = struct {
         arena_ptr.* = std.heap.ArenaAllocator.init(gpa);
         errdefer arena_ptr.deinit();
 
-        var config_pairs = ConfigPairs.init(gpa);
-        errdefer config_pairs.deinit();
-
+        const arena = arena_ptr.allocator();
+        var config_pairs = ConfigPairs.init(arena);
         var spliterator = std.mem.splitScalar(u8, config, '\n');
 
         var line_count: usize = 1;
@@ -150,8 +150,14 @@ pub const Config = struct {
 
             const map_val: Value = .{ .raw = padded_value };
 
-            // Later entries in the config should overwrite earlier ones.
-            config_pairs.putAssumeCapacity(key, map_val);
+            // Hold on to all declarations of a config value.
+            if (config_pairs.getEntry(key)) |e| {
+                try e.value_ptr.append(map_val);
+            } else {
+                var value_list = ValueList.init(arena);
+                try value_list.append(map_val);
+                config_pairs.putAssumeCapacity(key, value_list);
+            }
         }
 
         return .{
@@ -161,11 +167,31 @@ pub const Config = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.config_pairs.deinit();
-
         const child_allocator = self.arena_ptr.child_allocator;
         self.arena_ptr.deinit();
         child_allocator.destroy(self.arena_ptr);
+    }
+
+    /// Get the last declaration of the config value by the given config key.
+    ///
+    /// Return `null` if config by that key cannot be found.
+    pub fn get(self: Self, key: []const u8) ?Value {
+        if (self.config_pairs.getEntry(key)) |e| {
+            return e.value_ptr.getLast();
+        } else {
+            return null;
+        }
+    }
+
+    /// Get values from all declaration of the config value by the given config key.
+    ///
+    /// Return `null` if config by that key cannot be found.
+    pub fn getAll(self: Self, key: []const u8) ?ValueList {
+        if (self.config_pairs.getEntry(key)) |e| {
+            return e.value_ptr.*;
+        } else {
+            return null;
+        }
     }
 };
 
@@ -199,38 +225,32 @@ test Config {
 
     try std.testing.expectEqual(7, config.config_pairs.count());
 
-    var iterator = config.config_pairs.iterator();
-    const first = iterator.next().?;
-    try std.testing.expectEqualStrings("worktree.repo.type", first.key_ptr.*);
+    const as_json1 = try config.get("worktree.repo.type").?.parseAsJsonScalar(arena);
+    try std.testing.expectEqualStrings("sqlite", as_json1.string);
 
-    const as_json1 = try first.value_ptr.parseAsJsonScalar(arena);
-    const must_be_string = as_json1.string;
-    try std.testing.expectEqualStrings("sqlite", must_be_string);
-
-    const second = iterator.next().?;
-    const as_json2 = try second.value_ptr.parseAsJsonScalar(arena);
+    const as_json2 = try config.get("worktree.repo.uri").?.parseAsJsonScalar(arena);
     const must_be_string2 = as_json2.string;
     try std.testing.expectEqualStrings("file:.hvrt/repo.hvrt", must_be_string2);
 
-    // according to the voll spec, the leading and trailing whitespace should
+    // according to the voll spec, the leading and trailing whitespace MUST
     // NOT be stripped by default from values that cannot trivially be treated
     // as JSON values.
     //
     // In essence, the whitespace padding below is expected.
-    const third = iterator.next().?;
-    const as_json3 = third.value_ptr.parseAsJsonScalar(arena);
+    const value3 = config.get("some.fake.key") orelse return error.MissingKey;
+    const as_json3 = value3.parseAsJsonScalar(arena);
     try std.testing.expectError(error.SyntaxError, as_json3);
-    const must_be_string3 = third.value_ptr.raw;
+    const must_be_string3 = value3.raw;
     try std.testing.expectEqualStrings(" a bare value outside of quotes  ", must_be_string3);
-    try std.testing.expectEqualStrings("a bare value outside of quotes", third.value_ptr.trimWhitespace().raw);
+    try std.testing.expectEqualStrings("a bare value outside of quotes", value3.trimWhitespace().raw);
 
-    const fourth = iterator.next().?;
-    const as_json4 = try fourth.value_ptr.parseAsJsonScalar(arena);
+    const value4 = config.get("some.fake.key2") orelse return error.MissingKey;
+    const as_json4 = try value4.parseAsJsonScalar(arena);
     const must_be_int = as_json4.integer;
     try std.testing.expectEqual(123, must_be_int);
 
-    const fifth = iterator.next().?;
-    const as_json5 = try fifth.value_ptr.parseAsJsonScalar(arena);
+    const value5 = config.get("some.fake.key3") orelse return error.MissingKey;
+    const as_json5 = try value5.parseAsJsonScalar(arena);
     const must_be_float = as_json5.float;
     try std.testing.expectApproxEqRel(
         2.0,
@@ -238,22 +258,22 @@ test Config {
         std.math.sqrt(std.math.floatEps(f64)),
     );
 
-    const sixth = iterator.next().?;
+    const value6 = config.get("a.valid.json.object") orelse return error.MissingKey;
     // This should succeed
-    _ = try sixth.value_ptr.parseAsJson(arena);
+    _ = try value6.parseAsJson(arena);
     // This should fail
-    const as_json6 = sixth.value_ptr.parseAsJsonScalar(arena);
+    const as_json6 = value6.parseAsJsonScalar(arena);
     try std.testing.expectError(error.UnexpectedToken, as_json6);
-    const must_be_string6 = sixth.value_ptr.trimWhitespace().raw;
+    const must_be_string6 = value6.trimWhitespace().raw;
     try std.testing.expectEqualStrings("{\"key\": \"value\"}", must_be_string6);
 
-    const seventh = iterator.next().?;
+    const value7 = config.get("a.valid.json.array") orelse return error.MissingKey;
     // This should succeed
-    _ = try seventh.value_ptr.parseAsJson(arena);
+    _ = try value7.parseAsJson(arena);
     // This should fail
-    const as_json7 = seventh.value_ptr.parseAsJsonScalar(arena);
+    const as_json7 = value7.parseAsJsonScalar(arena);
     try std.testing.expectError(error.UnexpectedToken, as_json7);
-    const must_be_string7 = seventh.value_ptr.trimWhitespace().raw;
+    const must_be_string7 = value7.trimWhitespace().raw;
     try std.testing.expectEqualStrings("[\"value1\", \"value2\"]", must_be_string7);
 }
 

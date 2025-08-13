@@ -27,7 +27,15 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
     };
     defer if (config_string.len != 0) gpa.free(config_string);
 
-    var parsed_config = try config.Config.parse(gpa, config_string);
+    // Real user configs will have typos.
+    // Be kind and skip bad lines.
+    // Parse out what we can.
+    // The parser will still print warnings for bad lines.
+    var parsed_config = try config.Config.parse(
+        gpa,
+        config_string,
+        .{ .skip_bad_lines = true },
+    );
     defer parsed_config.deinit();
 
     switch (args.command) {

@@ -3,7 +3,7 @@ const fspath = std.fs.path;
 const Dir = std.fs.Dir;
 const json = std.json;
 
-const log = std.log.scoped(.add);
+const log = std.log.scoped(.config);
 
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
@@ -120,13 +120,17 @@ pub const ConfigPairs = std.StringArrayHashMap(ValueList);
 
 pub const Config = struct {
     const Self = @This();
+    pub const ParseOptions = struct {
+        skip_bad_lines: bool = false,
+    };
+
     arena_ptr: *std.heap.ArenaAllocator,
     config_pairs: ConfigPairs,
 
     /// The Config return object creates slices that reference subslices of the
     /// passed in `config` variable. This value should not be deallocated
     /// before the `Config` object has `deinit` called on it.
-    pub fn parse(gpa: std.mem.Allocator, config: []const u8) !Config {
+    pub fn parse(gpa: std.mem.Allocator, config: []const u8, options: ParseOptions) !Config {
         const arena_ptr = try gpa.create(std.heap.ArenaAllocator);
         errdefer gpa.destroy(arena_ptr);
 
@@ -156,7 +160,7 @@ pub const Config = struct {
 
             const eql_idx = std.mem.indexOfScalar(u8, ltrimmed, '=') orelse {
                 log.warn("Line {any} missing equals sign: \"{s}\" \n", .{ cur_line, l });
-                return error.SyntaxError;
+                if (options.skip_bad_lines) continue else return error.SyntaxError;
             };
 
             const padded_key = ltrimmed[0..eql_idx];
@@ -169,7 +173,7 @@ pub const Config = struct {
                     "Line {any} has empty key: \"{s}\" \n",
                     .{ cur_line, l },
                 );
-                return error.SyntaxError;
+                if (options.skip_bad_lines) continue else return error.SyntaxError;
             }
 
             if (indexOfInvalidKeyChar(key)) |bad_index| {
@@ -179,7 +183,7 @@ pub const Config = struct {
                     "Line {any}, around column {any} has bad char '{c}' in key: \"{s}\" \n",
                     .{ cur_line, bad_index + 1, key[bad_index], l },
                 );
-                return error.SyntaxError;
+                if (options.skip_bad_lines) continue else return error.SyntaxError;
             }
 
             // Value could be empty, so check for that
@@ -272,7 +276,7 @@ test Config {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var config1 = try Config.parse(std.testing.allocator, test_config_good);
+    var config1 = try Config.parse(std.testing.allocator, test_config_good, .{});
     defer config1.deinit();
 
     try std.testing.expectEqual(7, config1.config_pairs.count());
@@ -331,7 +335,7 @@ test Config {
     const bad_test_configs: []const []const u8 = &.{ test_config_bad1, test_config_bad2, test_config_bad3 };
 
     for (bad_test_configs) |bad_test_config| {
-        const bad_config = Config.parse(std.testing.allocator, bad_test_config);
+        const bad_config = Config.parse(std.testing.allocator, bad_test_config, .{});
         try std.testing.expectError(error.SyntaxError, bad_config);
     }
 }

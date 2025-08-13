@@ -8,7 +8,28 @@ const log = std.log.scoped(.add);
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
 
-const whitespace = " \t\r\n";
+const whitespace = &std.ascii.whitespace;
+
+/// Check for valid syntax after initial key char
+fn isValidKeyChar(c: u8) bool {
+    return switch (c) {
+        '0'...'9', 'A'...'Z', 'a'...'z', '_', '.' => true,
+        else => false,
+    };
+}
+
+/// Check for valid syntax of key chars
+///
+/// Asserts that key.len is not zero.
+fn indexOfInvalidKeyChar(key: []const u8) ?usize {
+    std.debug.assert(key.len != 0);
+
+    if (!std.ascii.isAlphabetic(key[0])) return 0;
+
+    for (key[1..], 1..) |c, i| {
+        if (!isValidKeyChar(c)) return i;
+    } else return null;
+}
 
 pub const Value = struct {
     const Self = @This();
@@ -134,16 +155,32 @@ pub const Config = struct {
             if (ltrimmed[0] == '#') continue;
 
             const eql_idx = std.mem.indexOfScalar(u8, ltrimmed, '=') orelse {
-                log.warn("Line {any} of config is invalid: \"{s}\" \n", .{ cur_line, l });
-                return error.InvalidConfig;
+                log.warn("Line {any} missing equals sign: \"{s}\" \n", .{ cur_line, l });
+                return error.SyntaxError;
             };
 
-            // FIXME: validate that `key` is a valid voll key. Currently, it
-            // could be anything that isn't whitesapce or the equals sign.
             const padded_key = ltrimmed[0..eql_idx];
             log.debug("Are we parsing the padded key correctly? \"{s}\"\n", .{padded_key});
             const key = std.mem.trim(u8, padded_key, whitespace);
             log.debug("Are we parsing the key correctly? \"{s}\"\n", .{key});
+
+            if (key.len == 0) {
+                log.warn(
+                    "Line {any} has empty key: \"{s}\" \n",
+                    .{ cur_line, l },
+                );
+                return error.SyntaxError;
+            }
+
+            if (indexOfInvalidKeyChar(key)) |bad_index| {
+                // FIXME: This logged column is incorrect,
+                // because padding is already stripped off.
+                log.warn(
+                    "Line {any}, around column {any} has bad char '{c}' in key: \"{s}\" \n",
+                    .{ cur_line, bad_index + 1, key[bad_index], l },
+                );
+                return error.SyntaxError;
+            }
 
             // Value could be empty, so check for that
             const padded_value = if (ltrimmed[eql_idx..].len == 1) &.{} else ltrimmed[(eql_idx + 1)..];
@@ -196,23 +233,38 @@ pub const Config = struct {
 };
 
 const test_config_good =
-    \\ # Start with a comment.
-    \\ worktree.repo.type = "sqlite"
+    \\# Start with a comment.
+    \\worktree.repo.type = "sqlite"
     \\
-    \\ # some blank lines.
-    \\
-    \\
-    \\ worktree.repo.uri = "file:.hvrt/repo.hvrt"
+    \\# some blank lines.
     \\
     \\
-    \\ # Another comment.
+    \\worktree.repo.uri = "file:.hvrt/repo.hvrt"
     \\
-    \\ some.fake.key = a bare value outside of quotes  
-    \\ some.fake.key2 = 123
-    \\ some.fake.key3 = 2.0
     \\
-    \\ a.valid.json.object = {"key": "value"}
-    \\ a.valid.json.array = ["value1", "value2"]
+    \\# Another comment.
+    \\
+    \\some.fake.key = a bare value outside of quotes  
+    \\some.fake.key2 = 123
+    \\some.fake.key3 = 2.0
+    \\
+    \\a.valid.json.object = {"key": "value"}
+    \\a.valid.json.array = ["value1", "value2"]
+;
+
+const test_config_bad1 =
+    \\# bad config with no equals sign.
+    \\a bad config line has no equals sign
+;
+
+const test_config_bad2 =
+    \\# bad config with no key.
+    \\= "there is no key"
+;
+
+const test_config_bad3 =
+    \\# bad config bad char in key.
+    \\ almost.a.good.key! = "Only some values are allowed in keys"
 ;
 
 test Config {
@@ -220,15 +272,15 @@ test Config {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var config = try Config.parse(std.testing.allocator, test_config_good);
-    defer config.deinit();
+    var config1 = try Config.parse(std.testing.allocator, test_config_good);
+    defer config1.deinit();
 
-    try std.testing.expectEqual(7, config.config_pairs.count());
+    try std.testing.expectEqual(7, config1.config_pairs.count());
 
-    const as_json1 = try config.get("worktree.repo.type").?.parseAsJsonScalar(arena);
+    const as_json1 = try config1.get("worktree.repo.type").?.parseAsJsonScalar(arena);
     try std.testing.expectEqualStrings("sqlite", as_json1.string);
 
-    const as_json2 = try config.get("worktree.repo.uri").?.parseAsJsonScalar(arena);
+    const as_json2 = try config1.get("worktree.repo.uri").?.parseAsJsonScalar(arena);
     const must_be_string2 = as_json2.string;
     try std.testing.expectEqualStrings("file:.hvrt/repo.hvrt", must_be_string2);
 
@@ -237,19 +289,19 @@ test Config {
     // as JSON values.
     //
     // In essence, the whitespace padding below is expected.
-    const value3 = config.get("some.fake.key") orelse return error.MissingKey;
+    const value3 = config1.get("some.fake.key") orelse return error.MissingKey;
     const as_json3 = value3.parseAsJsonScalar(arena);
     try std.testing.expectError(error.SyntaxError, as_json3);
     const must_be_string3 = value3.raw;
     try std.testing.expectEqualStrings(" a bare value outside of quotes  ", must_be_string3);
     try std.testing.expectEqualStrings("a bare value outside of quotes", value3.trimWhitespace().raw);
 
-    const value4 = config.get("some.fake.key2") orelse return error.MissingKey;
+    const value4 = config1.get("some.fake.key2") orelse return error.MissingKey;
     const as_json4 = try value4.parseAsJsonScalar(arena);
     const must_be_int = as_json4.integer;
     try std.testing.expectEqual(123, must_be_int);
 
-    const value5 = config.get("some.fake.key3") orelse return error.MissingKey;
+    const value5 = config1.get("some.fake.key3") orelse return error.MissingKey;
     const as_json5 = try value5.parseAsJsonScalar(arena);
     const must_be_float = as_json5.float;
     try std.testing.expectApproxEqRel(
@@ -258,7 +310,7 @@ test Config {
         std.math.sqrt(std.math.floatEps(f64)),
     );
 
-    const value6 = config.get("a.valid.json.object") orelse return error.MissingKey;
+    const value6 = config1.get("a.valid.json.object") orelse return error.MissingKey;
     // This should succeed
     _ = try value6.parseAsJson(arena);
     // This should fail
@@ -267,7 +319,7 @@ test Config {
     const must_be_string6 = value6.trimWhitespace().raw;
     try std.testing.expectEqualStrings("{\"key\": \"value\"}", must_be_string6);
 
-    const value7 = config.get("a.valid.json.array") orelse return error.MissingKey;
+    const value7 = config1.get("a.valid.json.array") orelse return error.MissingKey;
     // This should succeed
     _ = try value7.parseAsJson(arena);
     // This should fail
@@ -275,6 +327,13 @@ test Config {
     try std.testing.expectError(error.UnexpectedToken, as_json7);
     const must_be_string7 = value7.trimWhitespace().raw;
     try std.testing.expectEqualStrings("[\"value1\", \"value2\"]", must_be_string7);
+
+    const bad_test_configs: []const []const u8 = &.{ test_config_bad1, test_config_bad2, test_config_bad3 };
+
+    for (bad_test_configs) |bad_test_config| {
+        const bad_config = Config.parse(std.testing.allocator, bad_test_config);
+        try std.testing.expectError(error.SyntaxError, bad_config);
+    }
 }
 
 // // FIXME: "refAllDeclsRecursive" throws an error for some reason.

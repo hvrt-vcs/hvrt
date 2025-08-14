@@ -12,9 +12,11 @@ const commit = @import("commit.zig").commit;
 pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !void {
     const args = try parse_args.Args.parseArgs(gpa, raw_args);
     defer args.deinit();
+    const arena = args.arena_ptr.allocator();
 
-    const wt = args.gpopts.get_work_tree();
-    const config_path = try std.fs.path.join(gpa, &.{ wt, ".hvrt", "config.voll" });
+    const wt_first = args.gpopts.get_work_tree();
+    const wt_final = args.gpopts.find_work_tree_root(arena) catch wt_first;
+    const config_path = try std.fs.path.join(gpa, &.{ wt_final, ".hvrt", "config.voll" });
     defer gpa.free(config_path);
 
     const config_string = blk: {
@@ -43,15 +45,19 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
             try args.command.notImplemented();
         },
         .init => {
-            try init(gpa, args.gpopts.get_work_tree());
+            try init(gpa, wt_first);
         },
         .add => {
-            try add(gpa, args.gpopts.get_work_tree(), args.trailing_args);
+            try add(
+                gpa,
+                wt_final,
+                args.trailing_args,
+            );
         },
         .commit => |commit_opts| {
             try commit(
                 gpa,
-                args.gpopts.get_work_tree(),
+                wt_final,
                 try commit_opts.get_message(),
             );
         },

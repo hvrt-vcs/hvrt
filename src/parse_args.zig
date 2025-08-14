@@ -120,8 +120,32 @@ pub const GlobalParsedOpts = struct {
         }
     }
 
-    pub fn finalize_opts(self: *Self, arena_alloc: std.mem.Allocator) !void {
-        self.work_tree = if (self.work_tree) |wt| try std.fs.realpathAlloc(arena_alloc, wt) else try std.process.getCwdAlloc(arena_alloc);
+    pub fn finalize_opts(self: *Self, gpa: std.mem.Allocator) !void {
+        self.work_tree = if (self.work_tree) |wt| try std.fs.realpathAlloc(gpa, wt) else try std.process.getCwdAlloc(gpa);
+    }
+
+    /// Walk the parent hierarchy until the repo root is found.
+    /// Return `error.NoRepoRootFound` on failure.
+    pub fn find_work_tree_root(self: Self, gpa: std.mem.Allocator) ![]const u8 {
+        var cur_wt_opt: ?[]const u8 = self.work_tree;
+        var mem_buf2: [1024 * 32]u8 = undefined;
+        var fba_state2 = std.heap.FixedBufferAllocator.init(&mem_buf2);
+        const fba_alloc2 = fba_state2.allocator();
+        while (cur_wt_opt) |cur_wt| {
+            fba_state2.reset();
+            const maybe_wt_root = try std.fs.path.join(fba_alloc2, &.{ cur_wt, ".hvrt/work_tree_state.sqlite" });
+            var wt_db_file = std.fs.openFileAbsolute(maybe_wt_root, .{}) catch {
+                // This will eventually return null if/when we hit root (i.e. '/')
+                cur_wt_opt = std.fs.path.dirname(cur_wt);
+                continue;
+            };
+            wt_db_file.close();
+
+            return try gpa.dupe(u8, cur_wt);
+        }
+
+        log.warn("Does not appear to be within a work tree: {?s}", .{self.work_tree});
+        return error.NoRepoRootFound;
     }
 };
 

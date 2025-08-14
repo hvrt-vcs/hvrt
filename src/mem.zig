@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-var debug_allocator_state = std.heap.DebugAllocator(.{}).init;
+var debug_allocator_state: std.heap.DebugAllocator(.{}) = .init;
 
 /// galloc: the Global Allocator
 ///
@@ -12,9 +12,7 @@ pub const galloc: std.mem.Allocator = blk: {
     } else if (builtin.mode == .Debug) {
         break :blk debug_allocator_state.allocator();
     } else {
-        // TODO: replace this with a faster zig native allocator,
-        // whenever that comes around.
-        break :blk std.heap.c_allocator;
+        break :blk std.heap.smp_allocator;
     }
 };
 

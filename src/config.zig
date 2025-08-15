@@ -250,6 +250,9 @@ const test_config_good =
     \\
     \\some.fake.key = a bare value outside of quotes  
     \\some.fake.key2 = 123
+    \\
+    \\# Overwrite the previous value of a key
+    \\some.fake.key3 = 1.0
     \\some.fake.key3 = 2.0
     \\
     \\a.valid.json.object = {"key": "value"}
@@ -338,6 +341,9 @@ test Config {
         const bad_config = Config.parse(std.testing.allocator, bad_test_config, .{});
         try std.testing.expectError(error.SyntaxError, bad_config);
     }
+
+    const value8 = config1.get("not.an.existing.key");
+    try std.testing.expectEqual(null, value8);
 }
 
 // // FIXME: "refAllDeclsRecursive" throws an error for some reason.

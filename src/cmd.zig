@@ -33,7 +33,7 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
     // Be kind and skip bad lines.
     // Parse out what we can.
     // The parser will still print warnings for bad lines.
-    var parsed_config = try config.Config.parse(
+    var parsed_config = try config.Config.init(
         gpa,
         config_string,
         .{ .skip_bad_lines = true },

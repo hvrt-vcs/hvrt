@@ -120,25 +120,30 @@ pub const ConfigPairs = std.StringArrayHashMap(ValueList);
 
 pub const Config = struct {
     const Self = @This();
-    pub const ParseOptions = struct {
+    pub const InitOptions = struct {
         skip_bad_lines: bool = false,
+        fallback: ?*const Config = null,
     };
 
-    arena_ptr: *std.heap.ArenaAllocator,
+    /// A fallback `Config` object that this config will fallback to if a key
+    /// is not found within this `Config` object. Optional.
+    ///
+    /// The `Config` object will ***not*** deinit its fallback `Config` object
+    /// when `deinit` is called on itself.
+    fallback: ?*const Config,
+
+    /// All keys and values in the parsed config. This also includes repeat keys.
     config_pairs: ConfigPairs,
 
-    /// The Config return object creates slices that reference subslices of the
-    /// passed in `config` variable. This value should not be deallocated
-    /// before the `Config` object has `deinit` called on it.
-    pub fn parse(gpa: std.mem.Allocator, config: []const u8, options: ParseOptions) !Config {
-        const arena_ptr = try gpa.create(std.heap.ArenaAllocator);
-        errdefer gpa.destroy(arena_ptr);
-
-        arena_ptr.* = std.heap.ArenaAllocator.init(gpa);
-        errdefer arena_ptr.deinit();
-
-        const arena = arena_ptr.allocator();
-        var config_pairs = ConfigPairs.init(arena);
+    /// The returned `Config` object creates subslices that point into the
+    /// passed in `config` string. This passed in string should not be
+    /// deallocated until after the `Config` object has `deinit` called on it.
+    pub fn init(gpa: std.mem.Allocator, config: []const u8, options: InitOptions) !Config {
+        var config_pairs = ConfigPairs.init(gpa);
+        errdefer {
+            for (config_pairs.values()) |value| value.deinit();
+            config_pairs.deinit();
+        }
         var spliterator = std.mem.splitScalar(u8, config, '\n');
 
         var line_count: usize = 1;
@@ -195,22 +200,21 @@ pub const Config = struct {
             if (config_pairs.getEntry(key)) |e| {
                 try e.value_ptr.append(map_val);
             } else {
-                var value_list = ValueList.init(arena);
+                var value_list = ValueList.init(gpa);
                 try value_list.append(map_val);
                 config_pairs.putAssumeCapacity(key, value_list);
             }
         }
 
         return .{
-            .arena_ptr = arena_ptr,
+            .fallback = options.fallback,
             .config_pairs = config_pairs,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        const child_allocator = self.arena_ptr.child_allocator;
-        self.arena_ptr.deinit();
-        child_allocator.destroy(self.arena_ptr);
+        for (self.config_pairs.values()) |*value| value.deinit();
+        self.config_pairs.deinit();
     }
 
     /// Get the last declaration of the config value by the given config key.
@@ -219,6 +223,8 @@ pub const Config = struct {
     pub fn get(self: Self, key: []const u8) ?Value {
         if (self.config_pairs.getEntry(key)) |e| {
             return e.value_ptr.getLast();
+        } else if (self.fallback) |fallback| {
+            return fallback.get(key);
         } else {
             return null;
         }
@@ -279,7 +285,7 @@ test Config {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var config1 = try Config.parse(std.testing.allocator, test_config_good, .{});
+    var config1 = try Config.init(std.testing.allocator, test_config_good, .{});
     defer config1.deinit();
 
     try std.testing.expectEqual(7, config1.config_pairs.count());
@@ -338,12 +344,22 @@ test Config {
     const bad_test_configs: []const []const u8 = &.{ test_config_bad1, test_config_bad2, test_config_bad3 };
 
     for (bad_test_configs) |bad_test_config| {
-        const bad_config = Config.parse(std.testing.allocator, bad_test_config, .{});
+        const bad_config = Config.init(std.testing.allocator, bad_test_config, .{});
         try std.testing.expectError(error.SyntaxError, bad_config);
     }
 
     const value8 = config1.get("not.an.existing.key");
     try std.testing.expectEqual(null, value8);
+
+    // test fallback behavior
+    var config2 = try Config.init(std.testing.allocator, "", .{ .fallback = &config1 });
+    defer config2.deinit();
+
+    const value9 = config2.get("a.valid.json.array") orelse return error.MissingKey;
+    // This should succeed
+    _ = try value7.parseAsJson(arena);
+    const must_be_string9 = value9.trimWhitespace().raw;
+    try std.testing.expectEqualStrings("[\"value1\", \"value2\"]", must_be_string9);
 }
 
 // // FIXME: "refAllDeclsRecursive" throws an error for some reason.

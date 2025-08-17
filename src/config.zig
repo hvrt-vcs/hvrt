@@ -146,10 +146,6 @@ pub const Config = struct {
         }
         var spliterator = std.mem.splitScalar(u8, config, '\n');
 
-        var line_count: usize = 1;
-        while (spliterator.next()) |_| line_count += 1;
-        try config_pairs.ensureTotalCapacity(line_count);
-
         spliterator.reset();
 
         var cur_line: usize = 0;
@@ -197,12 +193,12 @@ pub const Config = struct {
             const map_val: Value = .{ .raw = padded_value };
 
             // Hold on to all declarations of a config value.
-            if (config_pairs.getEntry(key)) |e| {
-                try e.value_ptr.append(map_val);
+            if (config_pairs.getPtr(key)) |value| {
+                try value.append(map_val);
             } else {
                 var value_list = ValueList.init(gpa);
                 try value_list.append(map_val);
-                config_pairs.putAssumeCapacity(key, value_list);
+                try config_pairs.put(key, value_list);
             }
         }
 

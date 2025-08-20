@@ -109,10 +109,46 @@ pub const FileAdder = struct {
         errdefer self.rollbackTransaction() catch unreachable;
 
         for (files) |file| {
-            self.addFile(file) catch |e| {
-                log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
+            const stat = self.repo_root.statFile(file) catch |e| {
+                log.warn("Running `stat` on file \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
                 continue;
             };
+
+            switch (stat.kind) {
+                .directory => {
+                    var sub_dir = self.repo_root.openDir(file, .{ .access_sub_paths = true, .iterate = true }) catch |e| {
+                        log.warn("Walking subdir \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
+                        continue;
+                    };
+                    defer sub_dir.close();
+
+                    var dir_iter = sub_dir.iterate();
+                    while (dir_iter.next()) |entry_opt| {
+                        if (entry_opt) |entry| {
+                            const joined_file = std.fs.path.join(self.alloc, &.{ file, entry.name }) catch |e| {
+                                log.warn("Joining filepath \"{s}\" with \"{s}\" failed with error `{s}`\n", .{ file, entry.name, @errorName(e) });
+                                continue;
+                            };
+                            defer self.alloc.free(joined_file);
+
+                            self.addFile(joined_file) catch |e| {
+                                log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ joined_file, @errorName(e) });
+                                continue;
+                            };
+                        }
+                    } else |e| {
+                        log.warn("Failed iterating \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
+                        continue;
+                    }
+                },
+                else => {
+                    // Assume everything other than directories is can be added.
+                    self.addFile(file) catch |e| {
+                        log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
+                        continue;
+                    };
+                },
+            }
         }
 
         try self.commitTransaction();

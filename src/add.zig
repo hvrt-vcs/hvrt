@@ -26,7 +26,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []con
     var file_adder = try FileAdder.init(alloc, repo_path);
     defer file_adder.deinit();
 
-    try file_adder.addFiles(files);
+    try file_adder.addPaths(files);
 }
 
 pub const FileAdder = struct {
@@ -104,11 +104,11 @@ pub const FileAdder = struct {
         self.tx_opt = null;
     }
 
-    pub fn addFiles(self: *FileAdder, files: []const []const u8) !void {
+    pub fn addPaths(self: *FileAdder, relative_paths: []const []const u8) !void {
         try self.initTransaction("add_cmd");
         errdefer self.rollbackTransaction() catch unreachable;
 
-        for (files) |file| {
+        for (relative_paths) |file| {
             const stat = self.repo_root.statFile(file) catch |e| {
                 log.warn("Running `stat` on file \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
                 continue;

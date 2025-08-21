@@ -117,32 +117,18 @@ pub const FileAdder = struct {
             switch (stat.kind) {
                 .directory => {
                     var sub_dir = self.repo_root.openDir(file, .{ .access_sub_paths = true, .iterate = true }) catch |e| {
-                        log.warn("Walking subdir \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
+                        log.warn("Opening subdir \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
                         continue;
                     };
                     defer sub_dir.close();
 
-                    var dir_iter = sub_dir.iterate();
-                    while (dir_iter.next()) |entry_opt| {
-                        if (entry_opt) |entry| {
-                            const joined_file = std.fs.path.join(self.alloc, &.{ file, entry.name }) catch |e| {
-                                log.warn("Joining filepath \"{s}\" with \"{s}\" failed with error `{s}`\n", .{ file, entry.name, @errorName(e) });
-                                continue;
-                            };
-                            defer self.alloc.free(joined_file);
-
-                            self.addFile(joined_file) catch |e| {
-                                log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ joined_file, @errorName(e) });
-                                continue;
-                            };
-                        }
-                    } else |e| {
-                        log.warn("Failed iterating \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
+                    self.addDir(&sub_dir, file) catch |e| {
+                        log.warn("Failed adding directory \"{s}\" with error `{s}`\n", .{ file, @errorName(e) });
                         continue;
-                    }
+                    };
                 },
                 else => {
-                    // Assume everything other than directories is can be added.
+                    // Assume everything other than directories can be added.
                     self.addFile(file) catch |e| {
                         log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ file, @errorName(e) });
                         continue;
@@ -152,6 +138,49 @@ pub const FileAdder = struct {
         }
 
         try self.commitTransaction();
+    }
+
+    pub fn addDir(self: *FileAdder, dir: *std.fs.Dir, path_from_repo_root: []const u8) !void {
+        var dir_iter = dir.iterate();
+        while (dir_iter.next()) |entry_opt| {
+            if (entry_opt) |entry| {
+                const joined_file = std.fs.path.join(self.alloc, &.{ path_from_repo_root, entry.name }) catch |e| {
+                    log.warn("Joining filepath \"{s}\" with \"{s}\" failed with error `{s}`\n", .{ path_from_repo_root, entry.name, @errorName(e) });
+                    continue;
+                };
+                defer self.alloc.free(joined_file);
+
+                switch (entry.kind) {
+                    .directory => {
+                        var sub_dir = self.repo_root.openDir(joined_file, .{ .access_sub_paths = true, .iterate = true }) catch |e| {
+                            log.warn("Walking subdir \"{s}\" failed with error `{s}`\n", .{ joined_file, @errorName(e) });
+                            continue;
+                        };
+                        defer sub_dir.close();
+
+                        self.addDir(&sub_dir, joined_file) catch |e| {
+                            log.warn("Failed adding directory \"{s}\" with error `{s}`\n", .{ joined_file, @errorName(e) });
+                            continue;
+                        };
+                    },
+                    else => {
+                        // Assume everything other than directories can be added.
+                        self.addFile(joined_file) catch |e| {
+                            log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ joined_file, @errorName(e) });
+                            continue;
+                        };
+                    },
+                }
+
+                self.addFile(joined_file) catch |e| {
+                    log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ joined_file, @errorName(e) });
+                    continue;
+                };
+            } else break;
+        } else |e| {
+            log.warn("Failed iterating \"{s}\" with error `{s}`\n", .{ path_from_repo_root, @errorName(e) });
+            return e;
+        }
     }
 
     pub fn addFile(self: *FileAdder, rel_path: []const u8) !void {

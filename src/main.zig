@@ -185,7 +185,15 @@ fn setup_add_test(tmp: *std.testing.TmpDir) !void {
     const files2 = [_][:0]const u8{ "baz.txt", "buz.txt" };
     try setup_test_files(&sub_dir, &files2);
 
-    const basic_args = [_][:0]const u8{ "hvrt", "--work-tree", tmp_pathz, "add", files[0], files[1] };
+    const basic_args = [_][:0]const u8{
+        "hvrt",
+        "--work-tree",
+        tmp_pathz,
+        "add",
+        "child_subdir",
+        files[0],
+        files[1],
+    };
     try cmd.internalMain(test_alloc, &basic_args);
 }
 

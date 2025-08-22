@@ -50,6 +50,7 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
         .add => {
             try add(
                 gpa,
+                parsed_config,
                 wt_final,
                 args.trailing_args,
             );

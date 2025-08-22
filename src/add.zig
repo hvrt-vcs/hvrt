@@ -7,6 +7,7 @@ const dir_walker = @import("dir_walker.zig");
 const pcre = @import("pcre.zig");
 const sql = @import("sql.zig");
 const sqlite = @import("sqlite.zig");
+const config = @import("config.zig");
 
 const Hasher = core_ds.Hasher;
 
@@ -22,8 +23,8 @@ const chunk_size = 1024 * 4;
 
 /// It is the responsibility of the caller of `add` to deallocate and
 /// deinit `alloc`, `repo_path`, and `files`, if necessary.
-pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []const u8) !void {
-    var file_adder = try FileAdder.init(alloc, repo_path);
+pub fn add(alloc: std.mem.Allocator, cfg: config.Config, repo_path: []const u8, files: []const []const u8) !void {
+    var file_adder = try FileAdder.init(alloc, cfg, repo_path);
     defer file_adder.deinit();
 
     try file_adder.addPaths(files);
@@ -31,6 +32,7 @@ pub fn add(alloc: std.mem.Allocator, repo_path: []const u8, files: []const []con
 
 pub const FileAdder = struct {
     alloc: std.mem.Allocator,
+    config: config.Config,
     repo_root: std.fs.Dir,
     wt_db: sqlite.DataBase,
     file_stmt: sqlite.Statement,
@@ -49,7 +51,7 @@ pub const FileAdder = struct {
         self.repo_root.close();
     }
 
-    pub fn init(alloc: std.mem.Allocator, repo_path: []const u8) !FileAdder {
+    pub fn init(alloc: std.mem.Allocator, cfg: config.Config, repo_path: []const u8) !FileAdder {
         const abs_repo_path = try std.fs.realpathAlloc(alloc, repo_path);
         defer alloc.free(abs_repo_path);
 
@@ -81,6 +83,7 @@ pub const FileAdder = struct {
 
         return .{
             .alloc = alloc,
+            .config = cfg,
             .repo_root = repo_root,
             .wt_db = wt_db,
             .file_stmt = file_stmt,

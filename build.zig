@@ -91,12 +91,17 @@ fn compilePcre2(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     _ = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/config.h.generic"), "config.h");
     _ = pcreCopyFiles.addCopyFile(b.path(pcre_include_path ++ "/src/pcre2.h.generic"), "pcre2.h");
 
-    const pcre2_sl = b.addStaticLibrary(.{
-        .name = b.fmt("pcre2-{s}", .{pcre_code_unit_width_value}),
+    const pcre2_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
-        .link_libc = true,
     });
+
+    const pcre2_sl = b.addLibrary(.{
+        .name = b.fmt("pcre2-{s}", .{pcre_code_unit_width_value}),
+        .root_module = pcre2_mod,
+        .linkage = .static,
+    });
+    pcre2_sl.linkLibC();
 
     pcre2_sl.root_module.addCMacro(pcre_code_unit_width_name, pcre_code_unit_width_value);
 

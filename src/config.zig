@@ -112,6 +112,23 @@ pub const Value = struct {
         return parsed;
     }
 
+    pub fn parseAsJsonInt(self: Self, T: type) !T {
+        // This shouldn't ever be needed. Keep it small.
+        var simple_buf: [16]u8 = undefined;
+
+        var fba_state = std.heap.FixedBufferAllocator.init(&simple_buf);
+        const alloc = fba_state.allocator();
+
+        const val = try self.parseAsJsonScalar(alloc);
+
+        const int_val = switch (val) {
+            .integer => |v| v,
+            else => return error.IntegerNotFound,
+        };
+        const final_value = std.math.cast(T, int_val) orelse return error.ValueOutOfRange;
+        return final_value;
+    }
+
     const parseFromSliceLeaky = std.json.parseFromSliceLeaky;
 };
 

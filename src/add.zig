@@ -16,10 +16,10 @@ const log = std.log.scoped(.add);
 const hvrt_dirname: [:0]const u8 = ".hvrt";
 const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
 
-// TODO: use fifo buffer size pulled from config
-const fifo_buffer_size = 1024 * 4;
-// TODO: use chunk size pulled from config
-const chunk_size = 1024 * 4;
+/// Fallback for when config value isn't present.
+const default_buffer_size = 1024 * 4;
+/// Fallback for when config value isn't present.
+const default_chunk_size = 1024 * 4;
 
 /// It is the responsibility of the caller of `add` to deallocate and
 /// deinit `alloc`, `repo_path`, and `files`, if necessary.
@@ -40,6 +40,8 @@ pub const FileAdder = struct {
     blob_chunk_stmt: sqlite.Statement,
     chunk_stmt: sqlite.Statement,
     tx_opt: ?sqlite.Transaction = null,
+    fifo_buffer_size: usize = default_buffer_size,
+    chunk_size: usize = default_chunk_size,
 
     pub fn deinit(self: *FileAdder) void {
         self.chunk_stmt.finalize() catch unreachable;
@@ -81,6 +83,9 @@ pub const FileAdder = struct {
         const chunk_stmt = try sqlite.Statement.prepare(wt_db, wt_sql.add.chunk);
         errdefer chunk_stmt.finalize() catch unreachable;
 
+        const buffer_size = if (cfg.get("buffer_size")) |v| (v.parseAsJsonInt(usize) catch default_buffer_size) else default_buffer_size;
+        const chunk_size = if (cfg.get("chunk_size")) |v| (v.parseAsJsonInt(usize) catch default_chunk_size) else default_chunk_size;
+
         return .{
             .alloc = alloc,
             .config = cfg,
@@ -90,6 +95,8 @@ pub const FileAdder = struct {
             .blob_stmt = blob_stmt,
             .blob_chunk_stmt = blob_chunk_stmt,
             .chunk_stmt = chunk_stmt,
+            .fifo_buffer_size = buffer_size,
+            .chunk_size = chunk_size,
         };
     }
 
@@ -199,10 +206,10 @@ pub const FileAdder = struct {
             return error.AbsoluteFilePath;
         }
 
-        const chunk_buffer = try alloc.alloc(u8, chunk_size);
+        const chunk_buffer = try alloc.alloc(u8, self.chunk_size);
         defer alloc.free(chunk_buffer);
 
-        const fifo_buf = try alloc.alloc(u8, fifo_buffer_size);
+        const fifo_buf = try alloc.alloc(u8, self.fifo_buffer_size);
         defer alloc.free(fifo_buf);
 
         var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
@@ -262,7 +269,7 @@ pub const FileAdder = struct {
 
             var mwriter = std.io.multiWriter(.{ chunk_hasher.writer(), chunk_buf_stream.writer() });
 
-            var lr = std.io.limitedReader(f_in.reader(), chunk_size);
+            var lr = std.io.limitedReader(f_in.reader(), self.chunk_size);
 
             try fifo.pump(lr.reader(), mwriter.writer());
 

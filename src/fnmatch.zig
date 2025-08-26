@@ -59,17 +59,30 @@ pub const Utf8Iterator = struct {
     }
 };
 
+pub const Flags = packed struct {
+    file_name: bool = false,
+    period: bool = false,
+    no_escape: bool = false,
+    leading_dir: bool = false,
+};
+
+const special_runes: []const u21 = &.{
+    '\\',
+    '*',
+    '?',
+    '[',
+};
+
 // Just do this the old fashioned way: with a couple of iterators. No need to
 // get fancy with state machines or anything like that.
 //
 // Take inspiration from the following implementations:
-// * https://github.com/gcc-mirror/gcc/blob/master/libiberty/fnmatch.c
+// * https://github.com/gcc-mirror/gcc/blob/2dfd2779e373dffaae9532d45267497a6246f661/libiberty/fnmatch.c
 // * https://opensource.apple.com/source/Libc/Libc-167/gen.subproj/fnmatch.c.auto.html
-pub fn fnmatch(pattern: []const u8, string: []const u8, flags: u32) !bool {
-    _ = flags; // autofix
-
+pub fn fnmatch(pattern: []const u8, string: []const u8, flags: Flags) !bool {
     const temp_buffer: [std.fs.max_path_bytes * 3]u8 = undefined;
     _ = temp_buffer; // autofix
+    _ = flags;
 
     const string_view = try std.unicode.Utf8View.init(string);
     var string_iter = Utf8Iterator.init(string_view);
@@ -102,17 +115,65 @@ pub fn fnmatch(pattern: []const u8, string: []const u8, flags: u32) !bool {
                     }
                 }
 
-                // star can match against nothing
-                if (string_iter.peekCodepoint() == null) return true;
+                // If star is the last character, and everything has matched up
+                // to this point, then star will simply match the remainder of
+                // the string.
+                const peeked_pattern_rune = pattern_iter.peekCodepoint() orelse return true;
 
-                // // Use recursion to solve this, somehow.
-                // return fnmatch(
-                //     pattern_iter.bytes[pattern_iter.i..],
-                //     string_iter.bytes[string_iter.i..],
-                //     flags,
-                // );
+                if (std.mem.containsAtLeastScalar(u21, special_runes, 1, peeked_pattern_rune)) {
+                    // Pattern rune is special character class.
+                    unreachable;
+
+                    // ...
+                    // When it doubt, use recursion.
+                    // return fnmatch(
+                    //     pattern_iter.bytes[pattern_iter.i..],
+                    //     string_iter.bytes[string_iter.i..],
+                    //     flags,
+                    // );
+                } else {
+                    // Not a special character class. Just a plain old rune.
+                    // Iterate until we find it.
+
+                    // There are more pattern char(s) after star. If the string
+                    // ends now, there is no way it can match the pattern.
+                    var peeked_string_rune = string_iter.peekCodepoint() orelse return false;
+                    while (peeked_string_rune != peeked_pattern_rune) {
+                        // Can't fail. We already peeked for this codepoint.
+                        _ = string_iter.nextCodepoint() orelse unreachable;
+
+                        // The pattern requires more runes to match.
+                        peeked_string_rune = string_iter.peekCodepoint() orelse return false;
+                    }
+                }
             },
-            '[' => {},
+            '[' => {
+                if (string_iter.nextCodepoint()) |string_rune| {
+                    while (pattern_iter.nextCodepoint()) |prune| {
+                        // If we hit the end bracket and haven't matched yet,
+                        // then the string doesn't match.
+                        if (prune == ']') return false;
+
+                        if (string_rune == prune) {
+                            // Found a match! Now iterate past the char set.
+                            while (pattern_iter.nextCodepoint()) |prune2| {
+                                if (prune2 == ']') break;
+                            } else {
+                                // We iterated and never found an end bracket.
+                                return error.BadPattern;
+                            }
+                            break;
+                        }
+                    } else {
+                        // We iterated the whole pattern and never found a
+                        // match or an end bracket.
+                        return error.BadPattern;
+                    }
+                } else {
+                    // Length of input string does not match pattern string
+                    return false;
+                }
+            },
             else => {
                 if (string_iter.nextCodepoint()) |string_rune| {
                     if (string_rune != pattern_rune) return false;
@@ -136,8 +197,29 @@ test fnmatch {
     const alloc = std.testing.allocator;
     _ = alloc; // autofix
 
-    const match = try fnmatch("*bar.baz", "foobar.baz", 0);
-    try std.testing.expect(match);
+    // Leading star
+    const match1 = try fnmatch("*bar.baz", "foobar.baz", .{});
+    try std.testing.expect(match1);
+
+    // Trailing star
+    const match2 = try fnmatch("foobar.*", "foobar.baz", .{});
+    try std.testing.expect(match2);
+
+    // Middle star
+    const match3 = try fnmatch("foo*.baz", "foobar.baz", .{});
+    try std.testing.expect(match3);
+
+    // qmarks
+    const match4 = try fnmatch("foo?ar.?az", "foobar.baz", .{});
+    try std.testing.expect(match4);
+
+    // Escape
+    const match5 = try fnmatch("foobar\\?.baz", "foobar?.baz", .{});
+    try std.testing.expect(match5);
+
+    // Char class
+    const match6 = try fnmatch("fooba[rzt].baz", "foobar.baz", .{});
+    try std.testing.expect(match6);
 }
 
 test translate {}

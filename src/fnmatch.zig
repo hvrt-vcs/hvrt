@@ -8,52 +8,24 @@ const c = @import("c.zig");
 // * https://swtch.com/~rsc/regexp/regexp2.html
 // * https://swtch.com/~rsc/regexp/regexp3.html
 
-/// Copied and modified from stdlib
+/// Wraps a stdlib Utf8Iterator and adds a peekCodepoint function to it.
 pub const Utf8Iterator = struct {
-    bytes: []const u8,
-    i: usize,
+    iter: std.unicode.Utf8Iterator,
 
     pub fn init(s: std.unicode.Utf8View) Utf8Iterator {
         return Utf8Iterator{
-            .bytes = s.bytes,
-            .i = 0,
+            .iter = s.iterator(),
         };
-    }
-    pub fn nextCodepointSlice(it: *Utf8Iterator) ?[]const u8 {
-        if (it.i >= it.bytes.len) {
-            return null;
-        }
-
-        const cp_len = std.unicode.utf8ByteSequenceLength(it.bytes[it.i]) catch unreachable;
-        it.i += cp_len;
-        return it.bytes[it.i - cp_len .. it.i];
     }
 
     pub fn nextCodepoint(it: *Utf8Iterator) ?u21 {
-        const slice = it.nextCodepointSlice() orelse return null;
-        return std.unicode.utf8Decode(slice) catch unreachable;
-    }
-
-    /// Look ahead at the next n codepoints without advancing the iterator.
-    /// If fewer than n codepoints are available, then return the remainder of the string.
-    pub fn peek(it: *Utf8Iterator, n: usize) []const u8 {
-        const original_i = it.i;
-        defer it.i = original_i;
-
-        var end_ix = original_i;
-        var found: usize = 0;
-        while (found < n) : (found += 1) {
-            const next_codepoint = it.nextCodepointSlice() orelse return it.bytes[original_i..];
-            end_ix += next_codepoint.len;
-        }
-
-        return it.bytes[original_i..end_ix];
+        return it.iter.nextCodepoint();
     }
 
     /// Look ahead at one codepoint without advancing the iterator.
     pub fn peekCodepoint(it: *Utf8Iterator) ?u21 {
-        const original_i = it.i;
-        defer it.i = original_i;
+        const original_i = it.iter.i;
+        defer it.iter.i = original_i;
 
         return it.nextCodepoint();
     }

@@ -1,14 +1,11 @@
 const std = @import("std");
-const fspath = std.fs.path;
-
-const c = @import("c.zig");
 
 // This is not a regex, but we can use similar concepts here. To start, we'll make a state machine:
 // * https://swtch.com/~rsc/regexp/regexp1.html
 // * https://swtch.com/~rsc/regexp/regexp2.html
 // * https://swtch.com/~rsc/regexp/regexp3.html
 
-/// Wraps a stdlib Utf8Iterator and adds a peekCodepoint function to it.
+/// Wraps a stdlib Utf8Iterator and adds some peek functions to it.
 pub const Utf8Iterator = struct {
     iter: std.unicode.Utf8Iterator,
 
@@ -73,10 +70,6 @@ const special_runes: []const u21 = &.{
 // * https://github.com/gcc-mirror/gcc/blob/2dfd2779e373dffaae9532d45267497a6246f661/libiberty/fnmatch.c
 // * https://opensource.apple.com/source/Libc/Libc-167/gen.subproj/fnmatch.c.auto.html
 pub fn fnmatch(pattern: []const u8, string: []const u8, flags: Flags) !bool {
-    const temp_buffer: [std.fs.max_path_bytes * 3]u8 = undefined;
-    _ = temp_buffer; // autofix
-    // _ = flags;
-
     const string_view = try std.unicode.Utf8View.init(string);
     var string_iter = Utf8Iterator.init(string_view);
 
@@ -115,7 +108,6 @@ pub fn fnmatch(pattern: []const u8, string: []const u8, flags: Flags) !bool {
 
                 if (std.mem.containsAtLeastScalar(u21, special_runes, 1, peeked_pattern_rune)) {
                     // Pattern rune is special character class.
-                    // unreachable;
 
                     // The current index indicates the next rune.
                     const next_pattern_index = pattern_iter.iter.i;
@@ -164,17 +156,18 @@ pub fn fnmatch(pattern: []const u8, string: []const u8, flags: Flags) !bool {
             },
             '[' => {
                 if (string_iter.nextCodepoint()) |string_rune| {
-                    while (pattern_iter.nextCodepoint()) |prune| {
+                    while (pattern_iter.nextCodepoint()) |pattern_rune2| {
                         // If we hit the end bracket and haven't matched yet,
                         // then the string doesn't match.
-                        if (prune == ']') return false;
+                        if (pattern_rune2 == ']') return false;
 
-                        if (string_rune == prune) {
+                        if (string_rune == pattern_rune2) {
                             // Found a match! Now iterate past the char set.
-                            while (pattern_iter.nextCodepoint()) |prune2| {
-                                if (prune2 == ']') break;
+                            while (pattern_iter.nextCodepoint()) |pattern_rune3| {
+                                if (pattern_rune3 == ']') break;
                             } else {
                                 // We iterated and never found an end bracket.
+                                std.log.warn("bad pattern with match {s}\n", .{pattern});
                                 return error.BadPattern;
                             }
                             break;
@@ -182,6 +175,7 @@ pub fn fnmatch(pattern: []const u8, string: []const u8, flags: Flags) !bool {
                     } else {
                         // We iterated the whole pattern and never found a
                         // match or an end bracket.
+                        std.log.warn("bad pattern without match {s}\n", .{pattern});
                         return error.BadPattern;
                     }
                 } else {
@@ -204,14 +198,7 @@ pub fn fnmatch(pattern: []const u8, string: []const u8, flags: Flags) !bool {
     return string_iter.peekCodepoint() == null;
 }
 
-pub fn translate(gpa: std.mem.Allocator) !void {
-    _ = gpa; // autofix
-}
-
 test fnmatch {
-    const alloc = std.testing.allocator;
-    _ = alloc; // autofix
-
     // Leading star
     const match1 = try fnmatch("*bar.baz", "foobar.baz", .{});
     try std.testing.expect(match1);
@@ -237,15 +224,13 @@ test fnmatch {
     try std.testing.expect(match6);
 
     // special char after star #1
-    // const match7 = try fnmatch("fooba*[rzt].baz", "foobar.baz", .{});
-    // try std.testing.expect(match7);
+    const match7 = try fnmatch("fooba*[rzt].baz", "foobar.baz", .{});
+    try std.testing.expect(match7);
 
     // special char after star #2
     const match8 = try fnmatch("foob*[rzt].baz", "foobar.baz", .{});
     try std.testing.expect(match8);
 }
-
-test translate {}
 
 test "refAllDeclsRecursive" {
     std.testing.refAllDeclsRecursive(@This());

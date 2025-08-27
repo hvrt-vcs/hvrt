@@ -27,7 +27,28 @@ pub const Utf8Iterator = struct {
         const original_i = it.iter.i;
         defer it.iter.i = original_i;
 
-        return it.nextCodepoint();
+        return it.iter.nextCodepoint();
+    }
+
+    /// Progress to the next index.
+    ///
+    /// Return `null` if the iterator cannot iterate anymore.
+    pub fn nextIndex(it: *Utf8Iterator) ?usize {
+        if (it.iter.nextCodepoint()) |_| {
+            return it.iter.i;
+        } else {
+            return null;
+        }
+    }
+
+    /// Look ahead at the next index without advancing the iterator.
+    ///
+    /// Return `null` if the iterator cannot iterate anymore.
+    pub fn peekIndex(it: *Utf8Iterator) ?usize {
+        const original_i = it.iter.i;
+        defer it.iter.i = original_i;
+
+        return it.nextIndex();
     }
 };
 
@@ -54,7 +75,7 @@ const special_runes: []const u21 = &.{
 pub fn fnmatch(pattern: []const u8, string: []const u8, flags: Flags) !bool {
     const temp_buffer: [std.fs.max_path_bytes * 3]u8 = undefined;
     _ = temp_buffer; // autofix
-    _ = flags;
+    // _ = flags;
 
     const string_view = try std.unicode.Utf8View.init(string);
     var string_iter = Utf8Iterator.init(string_view);
@@ -94,15 +115,37 @@ pub fn fnmatch(pattern: []const u8, string: []const u8, flags: Flags) !bool {
 
                 if (std.mem.containsAtLeastScalar(u21, special_runes, 1, peeked_pattern_rune)) {
                     // Pattern rune is special character class.
-                    unreachable;
+                    // unreachable;
 
-                    // ...
-                    // When it doubt, use recursion.
-                    // return fnmatch(
-                    //     pattern_iter.bytes[pattern_iter.i..],
-                    //     string_iter.bytes[string_iter.i..],
-                    //     flags,
-                    // );
+                    // The current index indicates the next rune.
+                    const next_pattern_index = pattern_iter.iter.i;
+                    const next_pattern = pattern_iter.iter.bytes[next_pattern_index..];
+
+                    var cur_index_opt: ?usize = string_iter.iter.i;
+                    while (cur_index_opt) |next_index| : (cur_index_opt = string_iter.nextIndex()) {
+                        // This isn't an optimized solution,
+                        // since it causes backtracking.
+                        // However it generates the correct result.
+                        //
+                        // When in doubt, use brute force.
+                        const next_str = string_iter.iter.bytes[(next_index)..];
+                        const is_match = try fnmatch(
+                            next_pattern,
+                            next_str,
+                            flags,
+                        );
+
+                        if (is_match) {
+                            return true;
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        // We iterated through the whole rest of the string to
+                        // try to find a match for the next special char and
+                        // didn't find a match.
+                        return false;
+                    }
                 } else {
                     // Not a special character class. Just a plain old rune.
                     // Iterate until we find it.
@@ -192,6 +235,14 @@ test fnmatch {
     // Char class
     const match6 = try fnmatch("fooba[rzt].baz", "foobar.baz", .{});
     try std.testing.expect(match6);
+
+    // special char after star #1
+    // const match7 = try fnmatch("fooba*[rzt].baz", "foobar.baz", .{});
+    // try std.testing.expect(match7);
+
+    // special char after star #2
+    const match8 = try fnmatch("foob*[rzt].baz", "foobar.baz", .{});
+    try std.testing.expect(match8);
 }
 
 test translate {}

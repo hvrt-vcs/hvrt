@@ -19,13 +19,15 @@ pub const IgnorePattern = struct {
     /// `ignore_file_path` is assumed to be relative from the root of the
     /// worktree. If it isn't, pattern matching relative to the "current
     /// directory" will not work correctly.
-    pub fn parseIgnoreFile(arena: std.mem.Allocator, ignore_file_path: []const u8, ignore_file_contents: []const u8) ![]IgnorePattern {
+    ///
+    /// The caller owns the returned memory.
+    pub fn parseIgnoreFile(gpa: std.mem.Allocator, ignore_file_path: []const u8, ignore_file_contents: []const u8) ![]IgnorePattern {
         if (std.fs.path.isAbsolute(ignore_file_path)) return error.IgnoreFileIsAbsolute;
 
         // is `null` if there is no parent directory.
         const ignore_root = std.fs.path.dirname(ignore_file_path) orelse ".";
 
-        var array = std.ArrayList(IgnorePattern).init(arena);
+        var array = std.ArrayList(IgnorePattern).init(gpa);
         defer array.deinit();
 
         var tokenizer = std.mem.tokenizeAny(u8, ignore_file_contents, "\r\n");
@@ -42,14 +44,15 @@ pub const IgnorePattern = struct {
             var cur_pat: IgnorePattern = .{
                 .ignore_root = ignore_root,
                 .original_pattern = original_text,
-                .pattern = std.mem.trimRight(u8, original_text, " \t\n\r"),
+                .pattern = std.mem.trimRight(u8, original_text, std.ascii.whitespace),
                 .as_dir = false,
                 .rooted = false,
                 .negated = false,
             };
 
             // Ignore empty or commented lines
-            if (cur_pat.pattern.len == 0 or std.mem.startsWith(u8, cur_pat.pattern, "#")) {
+            const maybe_comment = std.mem.trimLeft(u8, cur_pat.pattern, std.ascii.whitespace);
+            if (cur_pat.pattern.len == 0 or std.mem.startsWith(u8, maybe_comment, "#")) {
                 continue;
             }
 
@@ -78,6 +81,29 @@ pub const IgnorePattern = struct {
         }
 
         return try array.toOwnedSlice();
+    }
+};
+
+pub const PatternIgnorer = struct {
+    const Self = @This();
+
+    ignore_patterns: []IgnorePattern,
+    parent: ?*PatternIgnorer = null,
+
+    pub fn should_ignore(self: Self, rel_path: []const u8) bool {
+        var final_ignore = false;
+        const local_ignore = for (self.ignore_patterns) |pat| {
+            _ = pat;
+            break false;
+        };
+
+        final_ignore = local_ignore;
+
+        if (!local_ignore) {
+            final_ignore = if (self.parent) |parent| parent.should_ignore(rel_path);
+        }
+
+        return final_ignore;
     }
 };
 

@@ -151,6 +151,7 @@ pub const Config = struct {
 
     /// All keys and values in the parsed config. This also includes repeat keys.
     config_pairs: ConfigPairs,
+    alloc: std.mem.Allocator,
 
     /// The returned `Config` object creates subslices that point into the
     /// passed in `config` string. This passed in string should not be
@@ -158,7 +159,7 @@ pub const Config = struct {
     pub fn init(gpa: std.mem.Allocator, config: []const u8, options: InitOptions) !Config {
         var config_pairs = ConfigPairs.init(gpa);
         errdefer {
-            for (config_pairs.values()) |value| value.deinit();
+            for (config_pairs.values()) |*value| value.deinit(gpa);
             config_pairs.deinit();
         }
         var spliterator = std.mem.splitScalar(u8, config, '\n');
@@ -211,10 +212,10 @@ pub const Config = struct {
 
             // Hold on to all declarations of a config value.
             if (config_pairs.getPtr(key)) |value| {
-                try value.append(map_val);
+                try value.append(gpa, map_val);
             } else {
-                var value_list = ValueList.init(gpa);
-                try value_list.append(map_val);
+                var value_list = ValueList.empty;
+                try value_list.append(gpa, map_val);
                 try config_pairs.put(key, value_list);
             }
         }
@@ -222,11 +223,12 @@ pub const Config = struct {
         return .{
             .fallback = options.fallback,
             .config_pairs = config_pairs,
+            .alloc = gpa,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        for (self.config_pairs.values()) |*value| value.deinit();
+        for (self.config_pairs.values()) |*value| value.deinit(self.alloc);
         self.config_pairs.deinit();
     }
 

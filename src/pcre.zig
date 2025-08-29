@@ -1,7 +1,7 @@
 const std = @import("std");
 const unicode = std.unicode;
 
-const c = @import("c.zig");
+const c = @import("c.zig").cnamespace;
 const dir_walker = @import("dir_walker.zig");
 const IgnorePattern = dir_walker.IgnorePattern;
 
@@ -204,20 +204,20 @@ pub const FileIgnorer = struct {
     }
 
     pub fn put_patterns(context: *anyopaque, relpath: []const u8, patterns: []IgnorePattern) anyerror!void {
-        const self = @as(*FileIgnorer, @alignCast(@ptrCast(context)));
+        const self = @as(*FileIgnorer, @ptrCast(@alignCast(context)));
         _ = self; // autofix
         _ = patterns; // autofix
         _ = relpath; // autofix
     }
 
     pub fn remove_patterns(context: *anyopaque, relpath: []const u8) void {
-        const self = @as(*FileIgnorer, @alignCast(@ptrCast(context)));
+        const self = @as(*FileIgnorer, @ptrCast(@alignCast(context)));
         _ = self; // autofix
         _ = relpath; // autofix
     }
 
     pub fn is_ignored(context: *anyopaque, relpath: []const u8) bool {
-        const self = @as(*FileIgnorer, @alignCast(@ptrCast(context)));
+        const self = @as(*FileIgnorer, @ptrCast(@alignCast(context)));
         _ = self; // autofix
         _ = relpath; // autofix
         return false;

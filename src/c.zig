@@ -1,6 +1,6 @@
 //! Single namespace/location for including all C header files
 
-pub usingnamespace @cImport({
+pub const cnamespace = @cImport({
     @cInclude("sqlite3.h");
     @cInclude("sqlite_transient_workaround.h");
 

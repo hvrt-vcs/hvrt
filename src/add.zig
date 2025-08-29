@@ -212,8 +212,12 @@ pub const FileAdder = struct {
         const fifo_buf = try alloc.alloc(u8, self.fifo_buffer_size);
         defer alloc.free(fifo_buf);
 
+        // const f_in_buffer = self.fifo_buffer_size
+        const f_in_buffer = try self.alloc.alloc(u8, self.fifo_buffer_size);
+        defer alloc.free(f_in_buffer);
+
         var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
-        var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
+        // var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
 
         var f_in = try self.repo_root.openFile(rel_path, .{ .lock = .shared });
         defer f_in.close();
@@ -226,9 +230,13 @@ pub const FileAdder = struct {
         std.mem.replaceScalar(u8, slashed_file, std.fs.path.sep_windows, std.fs.path.sep_posix);
 
         var hasher = Hasher.init(null);
-        const hash_algo = @tagName(hasher);
+        const hash_algo: [:0]const u8 = @tagName(hasher);
 
-        try fifo.pump(f_in.reader(), hasher.writer());
+        var f_in_reader1 = f_in.reader(&.{});
+        var hasher_writer1 = hasher.writer();
+        _ = try f_in_reader1.interface.streamRemaining(&hasher_writer1);
+        // try fifo.pump(f_in.reader(), hasher.writer());
+        // FIXME: COPY FILE GUTS!
 
         var hexz_buf: Hasher.Buffer = undefined;
         const file_digest_hexz = hasher.hexFinal(&hexz_buf);
@@ -267,11 +275,23 @@ pub const FileAdder = struct {
             var chunk_hasher = Hasher.init(null);
             const chunk_hash_algo = @tagName(chunk_hasher);
 
-            var mwriter = std.io.multiWriter(.{ chunk_hasher.writer(), chunk_buf_stream.writer() });
+            var chunk_buf_stream2 = std.Io.Writer.Allocating.init(alloc);
+            defer chunk_buf_stream2.deinit();
 
-            var lr = std.io.limitedReader(f_in.reader(), self.chunk_size);
+            // var mwriter = std.Io.multiWriter(.{ chunk_hasher.writer(), chunk_buf_stream.writer() });
+            f_in_reader1 = f_in.reader(&.{});
+            var f_in_reader1_int = f_in_reader1.interface;
 
-            try fifo.pump(lr.reader(), mwriter.writer());
+            // const f_in_limited = std.Io.Reader.Limited.init(&f_in_reader1_int, self.chunk_size, &.{});
+            const f_in_limited = std.Io.Reader.Limited.init(&f_in_reader1_int, std.Io.Limit.limited(self.chunk_size), &.{});
+            var lr = f_in_limited.interface;
+
+            _ = try lr.streamRemaining(&chunk_buf_stream2.writer);
+
+            const chunk = try chunk_buf_stream2.toOwnedSlice();
+
+            _ = try chunk_hasher.write(chunk);
+            // try fifo.pump(lr.reader(), mwriter.writer());
 
             const true_end_pos = try f_in.getPos();
             std.debug.assert(true_end_pos > cur_pos);

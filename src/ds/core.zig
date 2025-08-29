@@ -11,6 +11,7 @@
 const std = @import("std");
 const log = std.log.scoped(.ds_core);
 const Order = std.math.Order;
+const Writer = std.Io.Writer;
 
 const assert = std.debug.assert;
 
@@ -126,17 +127,43 @@ pub const Hasher = union(HashAlgo) {
 
     // Hasher writers cannot throw errors
     pub const Error = error{};
-    pub const Writer = std.io.Writer(*Hasher, Error, write);
+    // pub const Writer = std.Io.Writer(*Hasher, Error, write);
 
     pub fn write(self: *Hasher, bytes: []const u8) Error!usize {
-        return switch (self.*) {
-            .sha1 => try self.sha1.writer().write(bytes),
-            .sha3_256 => try self.sha3_256.writer().write(bytes),
-        };
+        switch (self.*) {
+            .sha1 => self.sha1.update(bytes),
+            .sha3_256 => self.sha3_256.update(bytes),
+        }
+        return bytes.len;
     }
 
+    fn drain(w: *Writer, data: []const []const u8, splat: usize) Writer.Error!usize {
+        const h: *Hasher = @alignCast(@fieldParentPtr("writer", w));
+        std.debug.assert(data.len != 0);
+
+        var written: usize = 0;
+
+        const last_index = data.len - 1;
+
+        for (data, 0..) |slice, i| {
+            const num_writes = if (i == last_index) splat else 1;
+            var j = 0;
+            while (j < num_writes) : (j += 1) {
+                written += try h.write(slice);
+            }
+        }
+
+        return written;
+    }
+
+    const vtable: Writer.VTable = .{ .drain = drain };
+
     pub fn writer(self: *Hasher) Writer {
-        return .{ .context = self };
+        _ = self;
+        return .{
+            .vtable = vtable,
+            .buffer = &.{},
+        };
     }
 
     pub fn getDigestLength(self: Hasher) usize {
@@ -542,7 +569,7 @@ test "Tree.writeSelf" {
     try std.testing.expectEqualStrings(expected, array.items);
 }
 
-/// For the sake of imitating prior art, and perhaps easing compatability,
+/// For the sake of imitating prior art, and perhaps easing compatibility,
 /// we're just using the same filemode bits that git does for now. See link
 /// here: https://stackoverflow.com/a/8347325/1733321
 pub const TreeEntryMode = enum(u32) {

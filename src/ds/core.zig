@@ -53,6 +53,24 @@ pub const HashAlgo = enum {
 
     pub const default = .sha3_256;
 
+    // TODO: calculate `max_digest_length` using `@typeInfo().fields.type` so
+    // that it dynamically deals with adding/removing union fields/types.
+    const max_digest_length = std.mem.max(
+        comptime_int,
+        &.{
+            std.crypto.hash.Sha1.digest_length,
+            std.crypto.hash.sha3.Sha3_256.digest_length,
+        },
+    );
+
+    /// An Array type big enough to hold the largest largest possible hexified
+    /// digest, plus a trailing 0 sentinel. Non-hexified digests, or digests
+    /// from hash algorithms with smaller bit widths will fit within this.
+    ///
+    /// The functions that use this take it as a pointer and return a slice of
+    /// it after filling it with the requested digest type.
+    pub const Buffer = [max_digest_length * 2:0]u8;
+
     pub fn HasherType(comptime hash_algo: HashAlgo) type {
         return switch (hash_algo) {
             .sha1 => std.crypto.hash.Sha1,

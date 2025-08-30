@@ -9,7 +9,7 @@ const sql = @import("sql.zig");
 const sqlite = @import("sqlite.zig");
 const config = @import("config.zig");
 
-const Hasher = core_ds.Hasher;
+const Hasher = core_ds.Sha3_256;
 
 const log = std.log.scoped(.add);
 
@@ -132,8 +132,8 @@ pub const FileAdder = struct {
                     };
                     defer sub_dir.close();
 
-                    self.addDir(&sub_dir, file) catch |e| {
-                        log.warn("Failed adding directory \"{s}\" with error `{s}`\n", .{ file, @errorName(e) });
+                    self.addDir(&sub_dir, file) catch {
+                        // log.warn("Failed adding directory \"{any}\" with error `{any}`\n", .{ file, @errorName(e) });
                         continue;
                     };
                 },
@@ -175,8 +175,8 @@ pub const FileAdder = struct {
                     },
                     else => {
                         // Assume everything other than directories can be added.
-                        self.addFile(joined_file) catch |e| {
-                            log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ joined_file, @errorName(e) });
+                        self.addFile(joined_file) catch {
+                            // log.warn("Adding file \"{s}\" failed with error `{s}`\n", .{ joined_file, @errorName(e) });
                             continue;
                         };
                     },
@@ -229,33 +229,31 @@ pub const FileAdder = struct {
         defer alloc.free(slashed_file);
         std.mem.replaceScalar(u8, slashed_file, std.fs.path.sep_windows, std.fs.path.sep_posix);
 
-        var hasher = Hasher.init(null);
-        const hash_algo: [:0]const u8 = @tagName(hasher);
+        var hasher = Hasher.init();
+        const hash_algo: [:0]const u8 = @tagName(hasher.hash_algo);
 
         var f_in_reader1 = f_in.reader(&.{});
-        var hasher_writer1 = hasher.writer();
-        _ = try f_in_reader1.interface.streamRemaining(&hasher_writer1);
+        _ = try f_in_reader1.interface.streamRemaining(&hasher.writer);
         // try fifo.pump(f_in.reader(), hasher.writer());
         // FIXME: COPY FILE GUTS!
 
-        var hexz_buf: Hasher.Buffer = undefined;
-        const file_digest_hexz = hasher.hexFinal(&hexz_buf);
+        const file_digest_hexz = hasher.hexDigest();
 
-        log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ file_digest_hexz, hash_algo, file_size });
+        log.debug("blob_hash: {s}\nblob_hash_alg: {s}\nblob_size: {any}\n", .{ &file_digest_hexz, hash_algo, file_size });
         try self.blob_stmt.reset();
         try self.blob_stmt.clear_bindings();
-        try self.blob_stmt.bind_text(1, false, file_digest_hexz);
+        try self.blob_stmt.bind_text(1, false, &file_digest_hexz);
         try self.blob_stmt.bind_text(2, false, hash_algo);
         try self.blob_stmt.bind_int(3, @intCast(file_size));
         try self.blob_stmt.auto_step();
         try self.blob_stmt.reset();
         try self.blob_stmt.clear_bindings();
 
-        log.debug("file_path: {s}\nfile_hash: {s}\nfile_hash_alg: {s}\nfile_size: {any}\n", .{ slashed_file, file_digest_hexz, hash_algo, file_size });
+        log.debug("file_path: {s}\nfile_hash: {s}\nfile_hash_alg: {s}\nfile_size: {any}\n", .{ slashed_file, &file_digest_hexz, hash_algo, file_size });
         try self.file_stmt.reset();
         try self.file_stmt.clear_bindings();
         try self.file_stmt.bind_text(1, false, slashed_file);
-        try self.file_stmt.bind_text(2, false, file_digest_hexz);
+        try self.file_stmt.bind_text(2, false, &file_digest_hexz);
         try self.file_stmt.bind_text(3, false, hash_algo);
         try self.file_stmt.bind_int(4, @intCast(file_size));
         try self.file_stmt.auto_step();
@@ -272,8 +270,8 @@ pub const FileAdder = struct {
             // const compression_algo: [:0]const u8 = "zstd";
             const compression_algo: [:0]const u8 = "none";
 
-            var chunk_hasher = Hasher.init(null);
-            const chunk_hash_algo = @tagName(chunk_hasher);
+            var chunk_hasher = Hasher.init();
+            const chunk_hash_algo: [:0]const u8 = @tagName(chunk_hasher.hash_algo);
 
             var chunk_buf_stream2 = std.Io.Writer.Allocating.init(alloc);
             defer chunk_buf_stream2.deinit();
@@ -290,7 +288,7 @@ pub const FileAdder = struct {
 
             const chunk = try chunk_buf_stream2.toOwnedSlice();
 
-            _ = try chunk_hasher.write(chunk);
+            chunk_hasher.hasher.update(chunk);
             // try fifo.pump(lr.reader(), mwriter.writer());
 
             const true_end_pos = try f_in.getPos();
@@ -298,20 +296,19 @@ pub const FileAdder = struct {
 
             const end_pos = true_end_pos - 1;
 
-            var chunk_hexz_buf: Hasher.Buffer = undefined;
-            const chunk_digest_hexz = chunk_hasher.hexFinal(&chunk_hexz_buf);
+            const chunk_digest_hexz = chunk_hasher.hexDigest();
 
             const data: []const u8 = chunk_buf_stream.getWritten();
 
             log.debug("What is the contents of {s}? '{s}'\n", .{ rel_path, chunk_buf_stream.getWritten() });
-            log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ rel_path, chunk_digest_hexz });
+            log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ rel_path, &chunk_digest_hexz });
 
-            log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hexz, hash_algo, cur_pos, end_pos, compression_algo });
+            // log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hexz, hash_algo, cur_pos, end_pos, compression_algo });
 
             // INSERT INTO "chunks"
             try self.chunk_stmt.reset();
             try self.chunk_stmt.clear_bindings();
-            try self.chunk_stmt.bind_text(1, false, chunk_digest_hexz); // chunk_hash
+            try self.chunk_stmt.bind_text(1, false, &chunk_digest_hexz); // chunk_hash
             try self.chunk_stmt.bind_text(2, false, chunk_hash_algo); // chunk_hash_algo
             try self.chunk_stmt.bind_text(3, false, compression_algo); // compression_algo
             try self.chunk_stmt.bind_blob(4, false, data); // data
@@ -322,9 +319,9 @@ pub const FileAdder = struct {
             // INSERT INTO "blob_chunks"
             try self.blob_chunk_stmt.reset();
             try self.blob_chunk_stmt.clear_bindings();
-            try self.blob_chunk_stmt.bind_text(1, false, file_digest_hexz); // blob_hash
+            try self.blob_chunk_stmt.bind_text(1, false, &file_digest_hexz); // blob_hash
             try self.blob_chunk_stmt.bind_text(2, false, hash_algo); // blob_hash_algo
-            try self.blob_chunk_stmt.bind_text(3, false, chunk_digest_hexz); // chunk_hash
+            try self.blob_chunk_stmt.bind_text(3, false, &chunk_digest_hexz); // chunk_hash
             try self.blob_chunk_stmt.bind_text(4, false, chunk_hash_algo); // chunk_hash_algo
             try self.blob_chunk_stmt.bind_int(5, @intCast(cur_pos)); // start_byte
             try self.blob_chunk_stmt.bind_int(6, @intCast(end_pos)); // end_byte

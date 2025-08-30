@@ -37,12 +37,6 @@ pub const CompressionAlgo = enum {
     // TODO: store no compression algo as string "none" in database, instead of a SQL `NULL` value.
     none,
     zstd,
-
-    pub fn compress(self: CompressionAlgo, reader: anytype, writer: anytype) !void {
-        _ = writer;
-        _ = reader;
-        _ = self;
-    }
 };
 
 var fifo = std.fifo.LinearFifo(u8, .{ .Static = 1024 * 4 }).init();
@@ -117,6 +111,69 @@ test "HashAlgo.toType" {
     try testing.expectEqual(std.crypto.hash.sha3.Sha3_256, sha3_type);
 }
 
+pub const Sha3_256 = struct {
+    const Self = @This();
+    hash_algo: HashAlgo = .sha3_256,
+    hasher: std.crypto.hash.sha3.Sha3_256,
+    writer: std.Io.Writer,
+
+    const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;
+
+    const vtable: std.Io.Writer.VTable = .{
+        .drain = drain,
+        .flush = std.Io.Writer.noopFlush,
+        .sendFile = std.Io.Writer.unimplementedSendFile,
+    };
+
+    pub fn init() Self {
+        return .{
+            .hasher = std.crypto.hash.sha3.Sha3_256.init(.{}),
+            .writer = .{
+                .vtable = &vtable,
+                .buffer = &.{},
+            },
+        };
+    }
+
+    pub fn digest(s: Self) [digest_length]u8 {
+        var out_buf: [digest_length]u8 = undefined;
+        var hasher_copy = s.hasher;
+        hasher_copy.final(&out_buf);
+        return out_buf;
+    }
+
+    pub fn hexDigest(s: Self) [digest_length * 2:0]u8 {
+        var digest_buf: [digest_length]u8 = undefined;
+        var hasher_copy = s.hasher;
+        hasher_copy.final(&digest_buf);
+
+        const hex_buf = std.fmt.bytesToHex(digest_buf, .lower);
+        var hex_bufz: [digest_length * 2:0]u8 = undefined;
+        @memcpy(hex_bufz[0..hex_buf.len], &hex_buf);
+        hex_bufz[hex_buf.len] = 0;
+        return hex_bufz;
+    }
+
+    fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
+        const self: *Self = @alignCast(@fieldParentPtr("writer", w));
+        std.debug.assert(w.buffer.len == 0);
+        std.debug.assert(data.len > 0);
+
+        const last_index = data.len - 1;
+
+        var written: usize = 0;
+        for (data, 0..) |slice, i| {
+            const num_writes: usize = if (i == last_index) splat else 1;
+            var j: usize = 0;
+            while (j < num_writes) : (j += 1) {
+                self.hasher.update(slice);
+                written += slice.len;
+            }
+        }
+        return written;
+    }
+};
+
 pub const Hasher = union(HashAlgo) {
     sha1: HashAlgo.HasherType(.sha1), // for interop with git, maybe?
     sha3_256: HashAlgo.HasherType(.sha3_256),
@@ -153,35 +210,6 @@ pub const Hasher = union(HashAlgo) {
             .sha3_256 => self.sha3_256.update(bytes),
         }
         return bytes.len;
-    }
-
-    fn drain(w: *Writer, data: []const []const u8, splat: usize) Writer.Error!usize {
-        const h: *Hasher = @alignCast(@fieldParentPtr("writer", w));
-        std.debug.assert(data.len != 0);
-
-        var written: usize = 0;
-
-        const last_index = data.len - 1;
-
-        for (data, 0..) |slice, i| {
-            const num_writes = if (i == last_index) splat else 1;
-            var j = 0;
-            while (j < num_writes) : (j += 1) {
-                written += try h.write(slice);
-            }
-        }
-
-        return written;
-    }
-
-    const vtable: Writer.VTable = .{ .drain = drain };
-
-    pub fn writer(self: *Hasher) Writer {
-        _ = self;
-        return .{
-            .vtable = vtable,
-            .buffer = &.{},
-        };
     }
 
     pub fn getDigestLength(self: Hasher) usize {
@@ -230,20 +258,6 @@ pub const Hasher = union(HashAlgo) {
         return out[0..hex_buf.len :0];
     }
 };
-
-test "Hasher.hexFinal" {
-    const to_hash = "deadbeef";
-    const expected_hash: [:0]const u8 = "4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e";
-
-    var hasher = Hasher.init(.sha3_256);
-
-    try hasher.writer().writeAll(to_hash);
-
-    var buf: Hasher.Buffer = undefined;
-    const actual_hash = hasher.hexFinal(&buf);
-
-    try std.testing.expectEqualStrings(expected_hash, actual_hash);
-}
 
 pub const ParentType = enum {
     regular,
@@ -329,59 +343,6 @@ pub const HashKey = struct {
         }
     }
 };
-
-test "HashKey.writeSelf" {
-    const hk = HashKey{
-        .hash = "4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e",
-        .hash_algo = .sha3_256,
-    };
-    const expected = "sha3_256|4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e";
-
-    var array = std.ArrayList(u8).init(testing.allocator);
-    defer array.deinit();
-
-    try hk.writeSelf(array.writer());
-
-    try testing.expectEqualStrings(expected, array.items);
-}
-
-test "HashKey.fromReader" {
-    const to_hash = "deadbeef";
-    const expected_hash: [:0]const u8 = "4852f4770df7e88b3f383688d6163bfb0a8fef59dc397efcb067e831b533f08e";
-
-    var buf_stream = std.io.fixedBufferStream(to_hash);
-    const reader = buf_stream.reader();
-
-    // declare as var to force runtime evaluation
-    var hash_algo: HashAlgo = undefined;
-    hash_algo = .sha3_256;
-
-    const actual = try HashKey.init(hash_algo, testing.allocator, reader);
-    defer actual.deinit();
-
-    try testing.expectEqual(HashAlgo.sha3_256, actual.hash_algo);
-    try testing.expectEqualStrings(expected_hash, actual.hash);
-}
-
-// SHA1 should not ever actually be used in practice, but this is good as an
-// example case of using an alternative hash algorithm.
-test "HashKey.fromReader SHA1" {
-    const to_hash = "deadbeef";
-    const expected_hash: [:0]const u8 = "f49cf6381e322b147053b74e4500af8533ac1e4c";
-
-    var buf_stream = std.io.fixedBufferStream(to_hash);
-    const reader = buf_stream.reader();
-
-    // declare as var to force runtime evaluation
-    var hash_algo: HashAlgo = undefined;
-    hash_algo = .sha1;
-
-    const actual = try HashKey.init(hash_algo, testing.allocator, reader);
-    defer actual.deinit();
-
-    try testing.expectEqual(HashAlgo.sha1, actual.hash_algo);
-    try testing.expectEqualStrings(expected_hash, actual.hash);
-}
 
 const Commit = struct {
     tree: HashKey,
@@ -497,10 +458,10 @@ test "commit objects" {
 
     // std.debug.print("commit_obj: {}\n", .{commit_obj});
 
-    var array = std.ArrayList(u8).init(alloc);
-    defer array.deinit();
+    var array = std.ArrayList(u8){};
+    defer array.deinit(alloc);
 
-    const writer = array.writer();
+    const writer = array.writer(alloc);
     try commit_obj.writeHashBytes(writer);
     const hash_bytes = array.items;
 

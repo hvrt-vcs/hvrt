@@ -9,7 +9,8 @@ const sql = @import("sql.zig");
 const sqlite = @import("sqlite.zig");
 const config = @import("config.zig");
 
-const Hasher = core_ds.Sha3_256;
+const Sha3_256 = core_ds.Sha3_256;
+const HashAlgo = core_ds.HashAlgo;
 
 const log = std.log.scoped(.add);
 
@@ -229,11 +230,11 @@ pub const FileAdder = struct {
         defer alloc.free(slashed_file);
         std.mem.replaceScalar(u8, slashed_file, std.fs.path.sep_windows, std.fs.path.sep_posix);
 
-        var hasher = Hasher.init();
+        var hasher = Sha3_256.init();
         const hash_algo: [:0]const u8 = @tagName(hasher.hash_algo);
 
         var f_in_reader1 = f_in.reader(&.{});
-        _ = try f_in_reader1.interface.streamRemaining(&hasher.writer);
+        _ = try f_in_reader1.interface.streamRemaining(&hasher.hasher.writer);
         // try fifo.pump(f_in.reader(), hasher.writer());
         // FIXME: COPY FILE GUTS!
 
@@ -270,7 +271,7 @@ pub const FileAdder = struct {
             // const compression_algo: [:0]const u8 = "zstd";
             const compression_algo: [:0]const u8 = "none";
 
-            var chunk_hasher = Hasher.init();
+            var chunk_hasher = Sha3_256.init();
             const chunk_hash_algo: [:0]const u8 = @tagName(chunk_hasher.hash_algo);
 
             var chunk_buf_stream2 = std.Io.Writer.Allocating.init(alloc);
@@ -280,7 +281,6 @@ pub const FileAdder = struct {
             f_in_reader1 = f_in.reader(&.{});
             var f_in_reader1_int = f_in_reader1.interface;
 
-            // const f_in_limited = std.Io.Reader.Limited.init(&f_in_reader1_int, self.chunk_size, &.{});
             const f_in_limited = std.Io.Reader.Limited.init(&f_in_reader1_int, std.Io.Limit.limited(self.chunk_size), &.{});
             var lr = f_in_limited.interface;
 
@@ -288,7 +288,7 @@ pub const FileAdder = struct {
 
             const chunk = try chunk_buf_stream2.toOwnedSlice();
 
-            chunk_hasher.hasher.update(chunk);
+            chunk_hasher.hasher.hasher.update(chunk);
             // try fifo.pump(lr.reader(), mwriter.writer());
 
             const true_end_pos = try f_in.getPos();

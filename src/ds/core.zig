@@ -113,38 +113,27 @@ test "HashAlgo.toType" {
 
 pub const Sha3_256 = struct {
     const Self = @This();
+    const HashType = std.crypto.hash.sha3.Sha3_256;
+    const digest_length = HashType.digest_length;
     hash_algo: HashAlgo = .sha3_256,
-    hasher: std.crypto.hash.sha3.Sha3_256,
-    writer: std.Io.Writer,
-
-    const digest_length = std.crypto.hash.sha3.Sha3_256.digest_length;
-
-    const vtable: std.Io.Writer.VTable = .{
-        .drain = drain,
-        .flush = std.Io.Writer.noopFlush,
-        .sendFile = std.Io.Writer.unimplementedSendFile,
-    };
+    hasher: std.Io.Writer.Hashing(HashType),
 
     pub fn init() Self {
         return .{
-            .hasher = std.crypto.hash.sha3.Sha3_256.init(.{}),
-            .writer = .{
-                .vtable = &vtable,
-                .buffer = &.{},
-            },
+            .hasher = .init(&.{}),
         };
     }
 
     pub fn digest(s: Self) [digest_length]u8 {
         var out_buf: [digest_length]u8 = undefined;
-        var hasher_copy = s.hasher;
+        var hasher_copy = s.hasher.hasher;
         hasher_copy.final(&out_buf);
         return out_buf;
     }
 
     pub fn hexDigest(s: Self) [digest_length * 2:0]u8 {
         var digest_buf: [digest_length]u8 = undefined;
-        var hasher_copy = s.hasher;
+        var hasher_copy = s.hasher.hasher;
         hasher_copy.final(&digest_buf);
 
         const hex_buf = std.fmt.bytesToHex(digest_buf, .lower);
@@ -152,25 +141,6 @@ pub const Sha3_256 = struct {
         @memcpy(hex_bufz[0..hex_buf.len], &hex_buf);
         hex_bufz[hex_buf.len] = 0;
         return hex_bufz;
-    }
-
-    fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
-        const self: *Self = @alignCast(@fieldParentPtr("writer", w));
-        std.debug.assert(w.buffer.len == 0);
-        std.debug.assert(data.len > 0);
-
-        const last_index = data.len - 1;
-
-        var written: usize = 0;
-        for (data, 0..) |slice, i| {
-            const num_writes: usize = if (i == last_index) splat else 1;
-            var j: usize = 0;
-            while (j < num_writes) : (j += 1) {
-                self.hasher.update(slice);
-                written += slice.len;
-            }
-        }
-        return written;
     }
 };
 

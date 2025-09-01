@@ -237,6 +237,8 @@ pub const ParentType = enum {
 };
 
 pub const HashKey = struct {
+    const Self = @This();
+
     pub const hash_key_sep: [:0]const u8 = "|";
 
     /// The allocator that originally allocated the hash string. If not
@@ -246,16 +248,14 @@ pub const HashKey = struct {
     hash_algo: HashAlgo = HashAlgo.default,
 
     pub const HashMapContext = struct {
-        const Self = @This();
-
-        pub fn hash(_: Self, a: HashKey) u64 {
+        pub fn hash(_: @This(), a: HashKey) u64 {
             var final_hash: u64 = 0;
             for (@tagName(a.hash_algo)) |byte| final_hash = final_hash +% byte;
             for (a.hash) |byte| final_hash = final_hash +% byte;
             return final_hash;
         }
 
-        pub fn eql(_: Self, a: HashKey, b: HashKey) bool {
+        pub fn eql(_: @This(), a: HashKey, b: HashKey) bool {
             return a.hash_algo == b.hash_algo and std.mem.eql(u8, a, b);
         }
     };
@@ -287,7 +287,7 @@ pub const HashKey = struct {
         return self.hash_algo == other.hash_algo and std.mem.eql(u8, self.hash, other.hash);
     }
 
-    pub fn writeSelf(self: HashKey, writer: anytype) !void {
+    pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         const parts = [_][]const u8{ @tagName(self.hash_algo), self.hash };
         for (parts, 0..) |part, i| {
             if (i != 0) try writer.writeAll(hash_key_sep);
@@ -295,7 +295,7 @@ pub const HashKey = struct {
         }
     }
 
-    pub fn prePostWriter(self: HashKey, prefix_parts_opt: ?[]const []const u8, postfix_parts_opt: ?[]const []const u8, writer: anytype) !void {
+    pub fn prePostWriter(self: Self, prefix_parts_opt: ?[]const []const u8, postfix_parts_opt: ?[]const []const u8, writer: *std.Io.Writer) !void {
         const prefix_parts = prefix_parts_opt orelse &.{};
         const postfix_parts = postfix_parts_opt orelse &.{};
 
@@ -305,7 +305,7 @@ pub const HashKey = struct {
         }
 
         if (prefix_parts.len != 0) try writer.writeByte(utf8_space);
-        try self.writeSelf(writer);
+        try writer.print("{f}", .{self});
 
         for (postfix_parts) |part| {
             try writer.writeByte(utf8_space);
@@ -315,6 +315,8 @@ pub const HashKey = struct {
 };
 
 const Commit = struct {
+    const Self = @This();
+
     tree: HashKey,
 
     parents: []CommitParent,
@@ -340,49 +342,28 @@ const Commit = struct {
     /// Commit message
     message: [:0]const u8,
 
-    fn writeAuthor(author: [:0]const u8, author_time: i64, author_utc_offset: i11, writer: anytype) !void {
-        const space: u8 = ' ';
-        const fill: u8 = '0';
-
-        try writer.writeAll(author);
-        try writer.writeByte(space);
-
-        try std.fmt.formatInt(author_time, 10, .lower, .{}, writer);
-        try writer.writeByte(space);
-
+    fn writeAuthor(author: [:0]const u8, author_time: i64, author_utc_offset: i11, writer: *std.Io.Writer) !void {
         const sign: u8 = if (author_utc_offset < 0) '-' else '+';
-        try writer.writeByte(sign);
+        const hours = @abs(@divTrunc(author_utc_offset, 60));
+        const minutes = @abs(@mod(author_utc_offset, 60));
 
-        const hours = @divTrunc(author_utc_offset, 60);
-        const minutes = @mod(author_utc_offset, 60);
+        try writer.print("{s} {d} {c}", .{ author, author_time, sign });
 
-        var buf: [4]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        const fb_writer = fbs.writer();
+        if (hours < 10) try writer.writeByte('0');
+        try writer.print("{d}", .{hours});
 
-        try std.fmt.formatInt(hours, 10, .lower, .{}, fb_writer);
-        if (fbs.getWritten().len == 1) {
-            try writer.writeByte(fill);
-        }
-        try writer.writeAll(fbs.getWritten());
-
-        fbs.reset();
-        try std.fmt.formatInt(minutes, 10, .lower, .{}, fb_writer);
-        if (fbs.getWritten().len == 1) {
-            try writer.writeByte(fill);
-        }
-        try writer.writeAll(fbs.getWritten());
+        if (minutes < 10) try writer.writeByte('0');
+        try writer.print("{d}", .{minutes});
     }
 
-    pub fn writeHashBytes(self: Commit, writer: anytype) !void {
+    pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         const new_line: u8 = '\n';
 
         try self.tree.prePostWriter(&.{"tree"}, null, writer);
         try writer.writeByte(new_line);
 
         for (self.parents) |parent| {
-            try parent.writeSelf(writer);
-            try writer.writeByte(new_line);
+            try writer.print("{f}\n", .{parent});
         }
 
         try writer.writeAll("author ");
@@ -428,31 +409,34 @@ test "commit objects" {
 
     // std.debug.print("commit_obj: {}\n", .{commit_obj});
 
-    var array = std.ArrayList(u8){};
-    defer array.deinit(alloc);
+    // var alloc_writer = std.Io.Writer.Allocating.init(alloc);
+    var alloc_writer = try std.Io.Writer.Allocating.initCapacity(alloc, 1024 * 64);
+    defer alloc_writer.deinit();
 
-    const writer = array.writer(alloc);
-    try commit_obj.writeHashBytes(writer);
-    const hash_bytes = array.items;
+    var writer = &alloc_writer.writer;
+    try writer.print("{f}", .{commit_obj});
+
+    const hash_bytes = alloc_writer.written();
 
     try std.testing.expectEqualStrings(expected, hash_bytes);
 }
 
 pub const CommitParent = struct {
+    const Self = @This();
     commit: HashKey,
     parent_type: ParentType,
 
-    pub fn toString(self: CommitParent, alloc: std.mem.Allocator) ![:0]u8 {
-        var array_list = std.ArrayList(u8).init(alloc);
-        defer array_list.deinit();
+    /// Caller owns the returned slice.
+    pub fn toString(self: Self, gpa: std.mem.Allocator) ![:0]u8 {
+        var alloc_writer = std.Io.Writer.Allocating.init(gpa);
+        defer alloc_writer.deinit();
 
-        const writer = array_list.writer();
-        try self.writeSelf(writer);
+        try alloc_writer.writer.print("{f}", .{self});
 
-        return try array_list.toOwnedSliceSentinel(0);
+        return try alloc_writer.toOwnedSliceSentinel(0);
     }
 
-    pub fn writeSelf(self: CommitParent, writer: anytype) !void {
+    pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try self.commit.prePostWriter(
             &.{ "parent", @tagName(self.parent_type) },
             null,
@@ -472,6 +456,8 @@ pub const CommitParent = struct {
 };
 
 pub const Tree = struct {
+    const Self = @This();
+
     // Entries are `const` because we assume entries are already sorted and do
     // not need to be modified after Tree object is created.
     tree_entries: []const TreeEntry,
@@ -492,9 +478,17 @@ pub const Tree = struct {
             try writer.writeByte(utf8_new_line);
         }
     }
+
+    pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        for (self.tree_entries) |entry| {
+            try writer.print("{f}\n", .{entry});
+        }
+    }
 };
 
 test "Tree.writeSelf" {
+    const alloc = std.testing.allocator;
+
     const expected =
         \\040000 tree sha3_256|deadbeef1 filename1
         \\100644 blob sha3_256|deadbeef2 filename2
@@ -502,26 +496,29 @@ test "Tree.writeSelf" {
         \\
     ;
 
-    const alloc = std.testing.allocator;
-    var array = std.ArrayList(u8).init(alloc);
-    defer array.deinit();
-    const writer = array.writer();
-
     var tree_entries = [_]TreeEntry{
         .{ .hash = .{ .hash = "deadbeef2" }, .mode = .regular_file, .name = "filename2" },
         .{ .hash = .{ .hash = "deadbeef1" }, .mode = .directory, .name = "filename1" },
         .{ .hash = .{ .hash = "deadbeef3" }, .mode = .regular_file, .name = "filename3" },
     };
     const test_tree: Tree = Tree.init(&tree_entries);
-    try test_tree.writeSelf(writer);
 
-    try std.testing.expectEqualStrings(expected, array.items);
+    var alloc_writer = std.Io.Writer.Allocating.init(alloc);
+    defer alloc_writer.deinit();
+
+    try alloc_writer.writer.print("{f}", .{test_tree});
+    const actual = try alloc_writer.toOwnedSlice();
+    defer alloc.free(actual);
+
+    try std.testing.expectEqualStrings(expected, actual);
 }
 
 /// For the sake of imitating prior art, and perhaps easing compatibility,
 /// we're just using the same filemode bits that git does for now. See link
 /// here: https://stackoverflow.com/a/8347325/1733321
 pub const TreeEntryMode = enum(u32) {
+    const Self = @This();
+
     directory = 0o040000,
     regular_file = 0o100644,
     group_writable_file = 0o100664,
@@ -541,6 +538,10 @@ pub const TreeEntryMode = enum(u32) {
         };
     }
 
+    pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        try writer.writeAll(self.toString());
+    }
+
     pub fn treeOrBlob(self: TreeEntryMode) [:0]const u8 {
         return switch (self) {
             .directory => "tree",
@@ -550,6 +551,8 @@ pub const TreeEntryMode = enum(u32) {
 };
 
 pub const TreeEntry = struct {
+    const Self = @This();
+
     mode: TreeEntryMode,
     hash: HashKey,
     name: [:0]const u8,
@@ -595,6 +598,15 @@ pub const TreeEntry = struct {
         try writer.writeByte(utf8_space);
 
         try writer.writeAll(self.name);
+    }
+
+    pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        try writer.print("{s} {s} {f} {s}", .{
+            self.mode.toString(),
+            self.mode.treeOrBlob(),
+            self.hash,
+            self.name,
+        });
     }
 };
 

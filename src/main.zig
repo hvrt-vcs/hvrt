@@ -131,34 +131,70 @@ fn prngReadHex(prng: std.rand.Random, buffer: []u8) !usize {
     return buffer.len;
 }
 
+const RandReader = struct {
+    const Self = @This();
+
+    const Reader = std.Io.Reader;
+    const Writer = std.Io.Writer;
+    const Limit = std.Io.Limit;
+    prng: std.Random.DefaultPrng,
+    reader: Reader,
+
+    pub fn init(seed: u64) Self {
+        return .{
+            .prng = std.Random.DefaultPrng.init(seed),
+            .reader = .{
+                .buffer = &.{},
+                .seek = 0,
+                .end = 0,
+                .vtable = &.{ .stream = stream },
+            },
+        };
+    }
+
+    fn stream(r: *Reader, w: *Writer, limit: Limit) Reader.StreamError!usize {
+        const self: *RandReader = @alignCast(@fieldParentPtr("reader", r));
+
+        var buf: [1]u8 = undefined;
+
+        const end = Limit.toInt(limit) orelse unreachable;
+        var n: usize = 0;
+        while (n < end) : (n += 1) {
+            self.prng.fill(&buf);
+            try w.writeByte(buf[0]);
+        }
+        return n;
+    }
+};
+
 fn setup_test_files(dir: *std.fs.Dir, files: []const [:0]const u8) !void {
     const target_sz = 1024 * 8;
     const fifo_buffer_size = 1024 * 4;
 
-    var prng = std.Random.DefaultPrng.init(0);
-    const prngRand = prng.random();
-    const prng_reader = std.io.Reader(std.Random, anyerror, prngRead){ .context = prngRand };
+    var prng_reader_state = RandReader.init(0);
+    var prng_reader = &prng_reader_state.reader;
     const prng_hex_reader = hexReader(prng_reader, 80);
     _ = prng_hex_reader;
-    const fifo_buf = try test_alloc.alloc(u8, fifo_buffer_size);
-    defer test_alloc.free(fifo_buf);
-
-    var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
+    const wrtr_buf = try test_alloc.alloc(u8, fifo_buffer_size);
+    defer test_alloc.free(wrtr_buf);
 
     for (files) |file| {
         // std.debug.print("\nWhat is filename? {s}\n", .{file});
 
         var fp = try dir.createFile(file, .{ .exclusive = true });
         defer fp.close();
-        var fp_wrtr = fp.writer();
+
+        var fp_wrtr_state = fp.writer(wrtr_buf);
+        var fp_wrtr = &fp_wrtr_state.interface;
+        defer fp_wrtr.flush() catch unreachable;
 
         try fp_wrtr.print("The filename of this file is '{s}'.\n", .{file});
         try fp_wrtr.print("Enjoy some random hex bytes below:\n", .{});
 
-        var lr = std.io.limitedReader(prng_reader, target_sz);
-        // var lr = std.io.limitedReader(prng_hex_reader, target_sz);
+        // var lr = std.io.limitedReader(prng_reader, target_sz);
+        // // var lr = std.io.limitedReader(prng_hex_reader, target_sz);
 
-        try fifo.pump(lr.reader(), fp.writer());
+        try prng_reader.streamExact(fp_wrtr, target_sz);
     }
 }
 

@@ -118,9 +118,9 @@ pub const Sha3_256 = struct {
     hash_algo: HashAlgo = .sha3_256,
     hasher: std.Io.Writer.Hashing(HashType),
 
-    pub fn init() Self {
+    pub fn init(buf: []u8) Self {
         return .{
-            .hasher = .init(&.{}),
+            .hasher = .init(buf),
         };
     }
 

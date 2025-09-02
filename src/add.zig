@@ -214,12 +214,6 @@ pub const FileAdder = struct {
         defer alloc.free(fifo_buf);
 
         // const f_in_buffer = self.fifo_buffer_size
-        const f_in_buffer = try self.alloc.alloc(u8, self.fifo_buffer_size);
-        defer alloc.free(f_in_buffer);
-
-        var chunk_buf_stream = std.io.fixedBufferStream(chunk_buffer);
-        // var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
-
         var f_in = try self.repo_root.openFile(rel_path, .{ .lock = .shared });
         defer f_in.close();
 
@@ -230,11 +224,18 @@ pub const FileAdder = struct {
         defer alloc.free(slashed_file);
         std.mem.replaceScalar(u8, slashed_file, std.fs.path.sep_windows, std.fs.path.sep_posix);
 
-        var hasher = Sha3_256.init();
+        var hash_buf: [1]u8 = undefined;
+        var hasher = Sha3_256.init(&hash_buf);
+        var hasher_writer = &hasher.hasher.writer;
         const hash_algo: [:0]const u8 = @tagName(hasher.hash_algo);
 
-        var f_in_reader1 = f_in.reader(&.{});
-        _ = try f_in_reader1.interface.streamRemaining(&hasher.hasher.writer);
+        const f_in_buffer = try alloc.alloc(u8, self.fifo_buffer_size);
+        defer alloc.free(f_in_buffer);
+
+        var f_in_reader1 = f_in.reader(f_in_buffer);
+        var f_in_reader1_int = &f_in_reader1.interface;
+        _ = try f_in_reader1_int.streamRemaining(hasher_writer);
+        try hasher_writer.flush();
         // try fifo.pump(f_in.reader(), hasher.writer());
         // FIXME: COPY FILE GUTS!
 
@@ -266,27 +267,29 @@ pub const FileAdder = struct {
 
         var cur_pos: @TypeOf(file_size) = 0;
         while (cur_pos < file_size) : (cur_pos = try f_in.getPos()) {
-            chunk_buf_stream.reset();
-
             // const compression_algo: [:0]const u8 = "zstd";
             const compression_algo: [:0]const u8 = "none";
 
-            var chunk_hasher = Sha3_256.init();
+            var chunk_hasher = Sha3_256.init(&hash_buf);
             const chunk_hash_algo: [:0]const u8 = @tagName(chunk_hasher.hash_algo);
 
             var chunk_buf_stream2 = std.Io.Writer.Allocating.init(alloc);
             defer chunk_buf_stream2.deinit();
 
             // var mwriter = std.Io.multiWriter(.{ chunk_hasher.writer(), chunk_buf_stream.writer() });
-            f_in_reader1 = f_in.reader(&.{});
-            var f_in_reader1_int = f_in_reader1.interface;
+            var f_in_reader2_buf: [8]u8 = undefined;
+            var f_in_reader2 = f_in.reader(&f_in_reader2_buf);
+            const f_in_reader2_int = &f_in_reader2.interface;
 
-            const f_in_limited = std.Io.Reader.Limited.init(&f_in_reader1_int, std.Io.Limit.limited(self.chunk_size), &.{});
-            var lr = f_in_limited.interface;
+            var f_in_limited_buf: [8]u8 = undefined;
+            var f_in_limited = std.Io.Reader.Limited.init(f_in_reader2_int, std.Io.Limit.limited(self.chunk_size), &f_in_limited_buf);
+            const lr = &f_in_limited.interface;
 
+            // FIXME: Currently the code gets into an endless loop or something
+            // in the line below.
             _ = try lr.streamRemaining(&chunk_buf_stream2.writer);
 
-            const chunk = try chunk_buf_stream2.toOwnedSlice();
+            const chunk = chunk_buf_stream2.written();
 
             chunk_hasher.hasher.hasher.update(chunk);
             // try fifo.pump(lr.reader(), mwriter.writer());
@@ -298,9 +301,9 @@ pub const FileAdder = struct {
 
             const chunk_digest_hexz = chunk_hasher.hexDigest();
 
-            const data: []const u8 = chunk_buf_stream.getWritten();
+            const data: []const u8 = chunk;
 
-            log.debug("What is the contents of {s}? '{s}'\n", .{ rel_path, chunk_buf_stream.getWritten() });
+            log.debug("What is the contents of {s}? '{s}'\n", .{ rel_path, chunk });
             log.debug("What is the hash contents of chunk for {s}? {s}\n", .{ rel_path, &chunk_digest_hexz });
 
             // log.debug("blob_hash: {s}, blob_hash_algo: {s}, chunk_hash: {s}, chunk_hash_algo: {s}, start_byte: {any}, end_byte: {any}, compression_algo: {?s}\n", .{ file_digest_hexz, hash_algo, chunk_digest_hexz, hash_algo, cur_pos, end_pos, compression_algo });

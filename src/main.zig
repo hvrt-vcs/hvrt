@@ -256,6 +256,9 @@ test "invoke with init sub-command" {
     _ = try tmp.dir.statFile(".hvrt/work_tree_state.sqlite");
 }
 
+// TODO: add more robust testing of add command to ensure that files are added
+// properly to the worktree database. Checking before and after sizes is not
+// sufficient testing.
 test "invoke with add sub-command" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

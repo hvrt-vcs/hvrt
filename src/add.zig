@@ -276,18 +276,16 @@ pub const FileAdder = struct {
             var chunk_buf_stream2 = std.Io.Writer.Allocating.init(alloc);
             defer chunk_buf_stream2.deinit();
 
-            // var mwriter = std.Io.multiWriter(.{ chunk_hasher.writer(), chunk_buf_stream.writer() });
-            var f_in_reader2_buf: [8]u8 = undefined;
-            var f_in_reader2 = f_in.reader(&f_in_reader2_buf);
+            var f_in_reader2_buf: [1024 * 4]u8 = undefined;
+            var f_in_reader2 = f_in.readerStreaming(&f_in_reader2_buf);
             const f_in_reader2_int = &f_in_reader2.interface;
 
-            var f_in_limited_buf: [8]u8 = undefined;
-            var f_in_limited = std.Io.Reader.Limited.init(f_in_reader2_int, std.Io.Limit.limited(self.chunk_size), &f_in_limited_buf);
-            const lr = &f_in_limited.interface;
-
-            // FIXME: Currently the code gets into an endless loop or something
-            // in the line below.
-            _ = try lr.streamRemaining(&chunk_buf_stream2.writer);
+            f_in_reader2_int.streamExact(&chunk_buf_stream2.writer, self.chunk_size) catch |e| {
+                switch (e) {
+                    error.EndOfStream => {},
+                    else => return e,
+                }
+            };
 
             const chunk = chunk_buf_stream2.written();
 

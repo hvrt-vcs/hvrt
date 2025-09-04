@@ -167,6 +167,9 @@ const RandReader = struct {
     }
 };
 
+const known_test_file_name1: [:0]const u8 = "lorem_ipsum1.md";
+const known_test_file_contents1: [:0]const u8 = @embedFile("embedded/" ++ known_test_file_name1);
+
 fn setup_test_files(dir: *std.fs.Dir, files: []const [:0]const u8) !void {
     const target_sz = 1024 * 8;
     const fifo_buffer_size = 1024 * 4;
@@ -196,6 +199,15 @@ fn setup_test_files(dir: *std.fs.Dir, files: []const [:0]const u8) !void {
 
         try prng_reader.streamExact(fp_wrtr, target_sz);
     }
+
+    var fp = try dir.createFile(known_test_file_name1, .{ .exclusive = true });
+    defer fp.close();
+
+    var fp_wrtr_state = fp.writer(wrtr_buf);
+    var fp_wrtr = &fp_wrtr_state.interface;
+    defer fp_wrtr.flush() catch unreachable;
+
+    try fp_wrtr.writeAll(known_test_file_contents1);
 }
 
 fn setup_init_test(tmp: *std.testing.TmpDir) !void {

@@ -31,26 +31,26 @@ const chunk_size = 1024 * 4;
 const fba_size = 1024 * 64;
 
 /// It is the responsibility of the caller of `commit` to deallocate and
-/// deinit alloc, repo_path, and files, if necessary.
-pub fn commit(alloc: std.mem.Allocator, repo_path: []const u8, message: []const u8) !void {
+/// deinit gpa, repo_path, and files, if necessary.
+pub fn commit(gpa: std.mem.Allocator, repo_path: []const u8, message: []const u8) !void {
     log.debug("what is the message: {s}\n", .{message});
 
     // We allocate lots of short lived memory for copying between databases.
     // Instead of using manually manipulated stack allocated fixed size
     // buffers, or using a (potentially slow) heap allocator, just use a
     // `FixedBufferAllocator`. We get the best of both worlds this way.
-    const fixed_buffer = try alloc.alloc(u8, fba_size);
-    defer alloc.free(fixed_buffer);
+    const fixed_buffer = try gpa.alloc(u8, fba_size);
+    defer gpa.free(fixed_buffer);
 
     var fba = std.heap.FixedBufferAllocator.init(fixed_buffer);
     var buf_alloc = fba.allocator();
 
-    const abs_repo_path = try std.fs.realpathAlloc(alloc, repo_path);
-    defer alloc.free(abs_repo_path);
+    const abs_repo_path = try std.fs.realpathAlloc(gpa, repo_path);
+    defer gpa.free(abs_repo_path);
 
     const wt_db_path_parts = [_][]const u8{ abs_repo_path, hvrt_dirname, work_tree_db_name };
-    const wt_db_path = try fspath.joinZ(alloc, &wt_db_path_parts);
-    defer alloc.free(wt_db_path);
+    const wt_db_path = try fspath.joinZ(gpa, &wt_db_path_parts);
+    defer gpa.free(wt_db_path);
     log.debug("what is wt_db_path: {s}\n", .{wt_db_path});
 
     // Should fail if either the directory or db files do not exist
@@ -58,16 +58,16 @@ pub fn commit(alloc: std.mem.Allocator, repo_path: []const u8, message: []const 
     defer wt_db.close() catch unreachable;
 
     const repo_db_path_parts = [_][]const u8{ abs_repo_path, hvrt_dirname, repo_db_name };
-    const repo_db_path = try fspath.joinZ(alloc, &repo_db_path_parts);
-    defer alloc.free(repo_db_path);
+    const repo_db_path = try fspath.joinZ(gpa, &repo_db_path_parts);
+    defer gpa.free(repo_db_path);
     log.debug("what is repo_db_path: {s}\n", .{repo_db_path});
 
     // Should fail if either the directory or db files do not exist
     const repo_db = try sqlite.DataBase.open(repo_db_path);
     defer repo_db.close() catch unreachable;
 
-    const fifo_buf = try alloc.alloc(u8, fifo_buffer_size);
-    defer alloc.free(fifo_buf);
+    const fifo_buf = try gpa.alloc(u8, fifo_buffer_size);
+    defer gpa.free(fifo_buf);
 
     // var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
     // _ = fifo;

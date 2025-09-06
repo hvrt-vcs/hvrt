@@ -17,7 +17,7 @@ pub const Command = enum {
 
     pub fn notImplemented(cmd: Command) !void {
         log.warn("Sub-command not implemented yet: {s}.\n", .{@tagName(cmd)});
-        return error.NotImplementedError;
+        return error.NotImplemented;
     }
 };
 
@@ -35,7 +35,7 @@ pub const CommandOpts = union(Command) {
 
     pub fn notImplemented(cmd: CommandOpts) !void {
         log.warn("Sub-command not implemented yet: {s}.\n", .{@tagName(cmd)});
-        return error.NotImplementedError;
+        return error.NotImplemented;
     }
 };
 
@@ -177,7 +177,7 @@ pub const CommitParsedOpts = struct {
             // the message is saved if a crash happens for some reason:
             // https://git-scm.com/docs/git-commit#Documentation/git-commit.txt-GITDIRCOMMITEDITMSG
             log.warn("This needs to implement using an external editor to set commit message.\n", .{});
-            return error.NotImplementedError;
+            return error.NotImplemented;
         }
     }
 

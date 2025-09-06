@@ -16,7 +16,7 @@ const version: [:0]const u8 = @embedFile("embedded/VERSION.txt");
 
 /// It is the responsibility of the caller of `init` to deallocate and
 /// deinit dir_path and alloc, if necessary.
-pub fn init(alloc: std.mem.Allocator, repo_path: []const u8) !void {
+pub fn init(gpa: std.mem.Allocator, repo_path: []const u8) !void {
     var repo_dir = try std.fs.openDirAbsolute(repo_path, .{});
     defer repo_dir.close();
 
@@ -34,8 +34,8 @@ pub fn init(alloc: std.mem.Allocator, repo_path: []const u8) !void {
 
     // Worktree
     const wt_db_path_parts = [_][]const u8{ repo_path, hvrt_dirname, work_tree_db_name };
-    const wt_db_path = try fspath.joinZ(alloc, &wt_db_path_parts);
-    defer alloc.free(wt_db_path);
+    const wt_db_path = try fspath.joinZ(gpa, &wt_db_path_parts);
+    defer gpa.free(wt_db_path);
     std.log.debug("what is wt_db_path: {s}\n", .{wt_db_path});
 
     const wt_sql = sql.sqlite.work_tree;
@@ -43,8 +43,8 @@ pub fn init(alloc: std.mem.Allocator, repo_path: []const u8) !void {
 
     // Repo
     const repo_db_path_parts = [_][]const u8{ repo_path, hvrt_dirname, repo_db_name };
-    const repo_db_path = try fspath.joinZ(alloc, &repo_db_path_parts);
-    defer alloc.free(repo_db_path);
+    const repo_db_path = try fspath.joinZ(gpa, &repo_db_path_parts);
+    defer gpa.free(repo_db_path);
 
     // TODO: add postgres support
     const repo_sql = sql.sqlite.repo;

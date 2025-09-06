@@ -304,7 +304,7 @@ test "invoke without args" {
     const basic_args = [_][:0]const u8{"test_prog_name"};
     cmd.internalMain(std.testing.allocator, &basic_args) catch |err| {
         // const expected_error = error.ArgumentError;
-        const expected_error = error.NotImplementedError;
+        const expected_error = error.NotImplemented;
         const actual_error_union: anyerror!void = err;
         try std.testing.expectError(expected_error, actual_error_union);
     };
@@ -328,7 +328,7 @@ test "invoke with unimplemented subcommand" {
     const basic_args = [_][:0]const u8{ "test_prog_name", "cp" };
     cmd.internalMain(std.testing.allocator, &basic_args) catch |err| {
         // const expected_error = error.ArgumentError;
-        const expected_error = error.NotImplementedError;
+        const expected_error = error.NotImplemented;
         const actual_error_union: anyerror!void = err;
         try std.testing.expectError(expected_error, actual_error_union);
     };

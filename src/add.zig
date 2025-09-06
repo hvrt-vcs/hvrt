@@ -23,9 +23,9 @@ const default_buffer_size = 1024 * 4;
 const default_chunk_size = 1024 * 4;
 
 /// It is the responsibility of the caller of `add` to deallocate and
-/// deinit `alloc`, `repo_path`, and `files`, if necessary.
-pub fn add(alloc: std.mem.Allocator, cfg: config.Config, repo_path: []const u8, files: []const []const u8) !void {
-    var file_adder = try FileAdder.init(alloc, cfg, repo_path);
+/// deinit `gpa`, `repo_path`, and `files`, if necessary.
+pub fn add(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8, files: []const []const u8) !void {
+    var file_adder = try FileAdder.init(gpa, cfg, repo_path);
     defer file_adder.deinit();
 
     try file_adder.addPaths(files);

@@ -57,6 +57,7 @@ pub fn internalMain(gpa: std.mem.Allocator, raw_args: []const [:0]const u8) !voi
         .commit => |commit_opts| {
             try commit(
                 gpa,
+                parsed_config,
                 wt_final,
                 try commit_opts.get_message(),
             );

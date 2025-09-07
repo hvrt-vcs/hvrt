@@ -5,6 +5,7 @@ const Dir = std.fs.Dir;
 
 const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
+const config = @import("config.zig");
 
 const core_ds = @import("ds/core.zig");
 const Hasher = core_ds.Hasher;
@@ -20,10 +21,10 @@ const work_tree_db_name: [:0]const u8 = "work_tree_state.sqlite";
 const repo_db_name: [:0]const u8 = "repo.hvrt";
 
 // TODO: use fifo buffer size pulled from config
-const fifo_buffer_size = 1024 * 4;
+const default_buffer_size = 1024 * 4;
 
 // TODO: use chunk size pulled from config
-const chunk_size = 1024 * 4;
+const default_chunk_size = 1024 * 4;
 
 // TODO: maybe use fba size pulled from config, or somewhere else dynamic, like
 // getting the max chunk size in the work tree database, and allocate double
@@ -32,18 +33,18 @@ const fba_size = 1024 * 64;
 
 /// It is the responsibility of the caller of `commit` to deallocate and
 /// deinit gpa, repo_path, and files, if necessary.
-pub fn commit(gpa: std.mem.Allocator, repo_path: []const u8, message: []const u8) !void {
+pub fn commit(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8, message: []const u8) !void {
+    _ = cfg;
     log.debug("what is the message: {s}\n", .{message});
 
     // We allocate lots of short lived memory for copying between databases.
-    // Instead of using manually manipulated stack allocated fixed size
-    // buffers, or using a (potentially slow) heap allocator, just use a
-    // `FixedBufferAllocator`. We get the best of both worlds this way.
-    const fixed_buffer = try gpa.alloc(u8, fba_size);
-    defer gpa.free(fixed_buffer);
+    // Use an arena to speed things up.
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    var arena = arena_state.allocator();
 
-    var fba = std.heap.FixedBufferAllocator.init(fixed_buffer);
-    var buf_alloc = fba.allocator();
+    // const chunk_size = if (cfg.get("chunk_size")) |v| (v.parseAsJsonInt(usize) catch default_chunk_size) else default_chunk_size;
+    // const buffer_size = if (cfg.get("buffer_size")) |v| (v.parseAsJsonInt(usize) catch default_buffer_size) else default_buffer_size;
 
     const abs_repo_path = try std.fs.realpathAlloc(gpa, repo_path);
     defer gpa.free(abs_repo_path);
@@ -65,12 +66,6 @@ pub fn commit(gpa: std.mem.Allocator, repo_path: []const u8, message: []const u8
     // Should fail if either the directory or db files do not exist
     const repo_db = try sqlite.DataBase.open(repo_db_path);
     defer repo_db.close() catch unreachable;
-
-    const fifo_buf = try gpa.alloc(u8, fifo_buffer_size);
-    defer gpa.free(fifo_buf);
-
-    // var fifo = std.fifo.LinearFifo(u8, .Slice).init(fifo_buf);
-    // _ = fifo;
 
     const wt_sql = sql.sqlite.work_tree;
     const repo_sql = sql.sqlite.repo;
@@ -109,14 +104,13 @@ pub fn commit(gpa: std.mem.Allocator, repo_path: []const u8, message: []const u8
                 log.debug("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;
             }
+            _ = arena_state.reset(.retain_capacity);
 
             const hash_tmp = read_blobs_stmt.column_text(0) orelse unreachable;
-            const hash = try buf_alloc.dupeZ(u8, hash_tmp);
-            defer buf_alloc.free(hash);
+            const hash = try arena.dupeZ(u8, hash_tmp);
 
             const hash_algo_tmp = read_blobs_stmt.column_text(1) orelse unreachable;
-            const hash_algo = try buf_alloc.dupeZ(u8, hash_algo_tmp);
-            defer buf_alloc.free(hash_algo);
+            const hash_algo = try arena.dupeZ(u8, hash_algo_tmp);
 
             const byte_length = read_blobs_stmt.column_i64(2);
 
@@ -136,22 +130,19 @@ pub fn commit(gpa: std.mem.Allocator, repo_path: []const u8, message: []const u8
                 log.debug("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;
             }
+            _ = arena_state.reset(.retain_capacity);
 
             const hash_tmp = read_chunks_stmt.column_text(0) orelse unreachable;
-            const hash = try buf_alloc.dupeZ(u8, hash_tmp);
-            defer buf_alloc.free(hash);
+            const hash = try arena.dupeZ(u8, hash_tmp);
 
             const hash_algo_tmp = read_chunks_stmt.column_text(1) orelse unreachable;
-            const hash_algo = try buf_alloc.dupeZ(u8, hash_algo_tmp);
-            defer buf_alloc.free(hash_algo);
+            const hash_algo = try arena.dupeZ(u8, hash_algo_tmp);
 
             const compression_algo_tmp = read_chunks_stmt.column_text(2) orelse unreachable;
-            const compression_algo = try buf_alloc.dupeZ(u8, compression_algo_tmp);
-            defer buf_alloc.free(compression_algo);
+            const compression_algo = try arena.dupeZ(u8, compression_algo_tmp);
 
             const data_blob_tmp = read_chunks_stmt.column_blob(3) orelse unreachable;
-            const data_blob = try buf_alloc.dupe(u8, data_blob_tmp);
-            defer buf_alloc.free(data_blob);
+            const data_blob = try arena.dupe(u8, data_blob_tmp);
 
             log.debug("chunk_entry: {}, hash_algo: {s}, hash: {s}, compression_algo: {s}, data_blob.len: {}\n", .{ i, hash_algo, hash, compression_algo, data_blob.len });
 
@@ -170,24 +161,21 @@ pub fn commit(gpa: std.mem.Allocator, repo_path: []const u8, message: []const u8
                 log.debug("What is the result code? {s}\n", .{@tagName(rc)});
                 return error.NotImplemented;
             }
+            _ = arena_state.reset(.retain_capacity);
 
             // SELECT "blob_hash", "blob_hash_algo", "chunk_hash", "chunk_hash_algo", "start_byte", "end_byte" FROM "blob_chunks";
 
             const blob_hash_tmp = read_blob_chunks_stmt.column_text(0) orelse unreachable;
-            const blob_hash = try buf_alloc.dupeZ(u8, blob_hash_tmp);
-            defer buf_alloc.free(blob_hash);
+            const blob_hash = try arena.dupeZ(u8, blob_hash_tmp);
 
             const blob_hash_algo_tmp = read_blob_chunks_stmt.column_text(1) orelse unreachable;
-            const blob_hash_algo = try buf_alloc.dupeZ(u8, blob_hash_algo_tmp);
-            defer buf_alloc.free(blob_hash_algo);
+            const blob_hash_algo = try arena.dupeZ(u8, blob_hash_algo_tmp);
 
             const chunk_hash_tmp = read_blob_chunks_stmt.column_text(2) orelse unreachable;
-            const chunk_hash = try buf_alloc.dupeZ(u8, chunk_hash_tmp);
-            defer buf_alloc.free(chunk_hash);
+            const chunk_hash = try arena.dupeZ(u8, chunk_hash_tmp);
 
             const chunk_hash_algo_tmp = read_blob_chunks_stmt.column_text(3) orelse unreachable;
-            const chunk_hash_algo = try buf_alloc.dupeZ(u8, chunk_hash_algo_tmp);
-            defer buf_alloc.free(chunk_hash_algo);
+            const chunk_hash_algo = try arena.dupeZ(u8, chunk_hash_algo_tmp);
 
             const start_byte = read_blob_chunks_stmt.column_i64(4);
             const end_byte = read_blob_chunks_stmt.column_i64(5);

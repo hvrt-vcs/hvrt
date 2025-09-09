@@ -33,6 +33,7 @@ pub fn add(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8, fi
 
 pub const FileAdder = struct {
     alloc: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
     config: config.Config,
     repo_root: std.fs.Dir,
     wt_db: sqlite.DataBase,
@@ -45,6 +46,10 @@ pub const FileAdder = struct {
     chunk_size: usize = default_chunk_size,
 
     pub fn deinit(self: *FileAdder) void {
+        const child_allocator = self.arena.child_allocator;
+        self.arena.deinit();
+        child_allocator.destroy(self.arena);
+
         self.chunk_stmt.finalize() catch unreachable;
         self.blob_chunk_stmt.finalize() catch unreachable;
         self.blob_stmt.finalize() catch unreachable;
@@ -54,7 +59,16 @@ pub const FileAdder = struct {
         self.repo_root.close();
     }
 
-    pub fn init(alloc: std.mem.Allocator, cfg: config.Config, repo_path: []const u8) !FileAdder {
+    pub fn init(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8) !FileAdder {
+        const arena = try gpa.create(std.heap.ArenaAllocator);
+        arena.* = .init(gpa);
+        errdefer {
+            arena.deinit();
+            gpa.destroy(arena);
+        }
+
+        const alloc = gpa;
+
         const abs_repo_path = try std.fs.realpathAlloc(alloc, repo_path);
         defer alloc.free(abs_repo_path);
 
@@ -89,6 +103,7 @@ pub const FileAdder = struct {
 
         return .{
             .alloc = alloc,
+            .arena = arena,
             .config = cfg,
             .repo_root = repo_root,
             .wt_db = wt_db,
@@ -195,7 +210,8 @@ pub const FileAdder = struct {
     }
 
     pub fn addFile(self: *FileAdder, rel_path: []const u8) !void {
-        const alloc = self.alloc;
+        defer _ = self.arena.reset(.retain_capacity);
+        const arena = self.arena.allocator();
 
         const file_sp_opt: ?sqlite.Savepoint = if (self.tx_opt) |tx| tx.createSavepoint("add_single_file") catch null else null;
         errdefer if (file_sp_opt) |file_sp| file_sp.rollback() catch unreachable;
@@ -207,11 +223,8 @@ pub const FileAdder = struct {
             return error.AbsoluteFilePath;
         }
 
-        const chunk_buffer = try alloc.alloc(u8, self.chunk_size);
-        defer alloc.free(chunk_buffer);
-
-        const fifo_buf = try alloc.alloc(u8, self.fifo_buffer_size);
-        defer alloc.free(fifo_buf);
+        const chunk_buffer = try arena.alloc(u8, self.chunk_size);
+        const fifo_buf = try arena.alloc(u8, self.fifo_buffer_size);
 
         // const f_in_buffer = self.fifo_buffer_size
         var f_in = try self.repo_root.openFile(rel_path, .{ .lock = .shared });
@@ -220,8 +233,7 @@ pub const FileAdder = struct {
         const f_stat = try f_in.stat();
         const file_size = f_stat.size;
 
-        const slashed_file = try alloc.dupeZ(u8, rel_path);
-        defer alloc.free(slashed_file);
+        const slashed_file = try arena.dupeZ(u8, rel_path);
         std.mem.replaceScalar(u8, slashed_file, std.fs.path.sep_windows, std.fs.path.sep_posix);
 
         var hash_buf: [1]u8 = undefined;
@@ -229,10 +241,7 @@ pub const FileAdder = struct {
         var hasher_writer = &hasher.hasher.writer;
         const hash_algo: [:0]const u8 = @tagName(hasher.hash_algo);
 
-        const f_in_buffer = try alloc.alloc(u8, self.fifo_buffer_size);
-        defer alloc.free(f_in_buffer);
-
-        var f_in_reader1 = f_in.reader(f_in_buffer);
+        var f_in_reader1 = f_in.reader(fifo_buf);
         var f_in_reader1_int = &f_in_reader1.interface;
         _ = try f_in_reader1_int.streamRemaining(hasher_writer);
         try hasher_writer.flush();
@@ -273,24 +282,22 @@ pub const FileAdder = struct {
             var chunk_hasher = Sha3_256.init(&hash_buf);
             const chunk_hash_algo: [:0]const u8 = @tagName(chunk_hasher.hash_algo);
 
-            var chunk_buf_stream2 = std.Io.Writer.Allocating.init(alloc);
-            defer chunk_buf_stream2.deinit();
+            var chunk_buf_stream = std.Io.Writer.fixed(chunk_buffer);
 
             var f_in_reader2_buf: [1024 * 4]u8 = undefined;
             var f_in_reader2 = f_in.readerStreaming(&f_in_reader2_buf);
             const f_in_reader2_int = &f_in_reader2.interface;
 
-            f_in_reader2_int.streamExact(&chunk_buf_stream2.writer, self.chunk_size) catch |e| {
+            f_in_reader2_int.streamExact(&chunk_buf_stream, chunk_buffer.len) catch |e| {
                 switch (e) {
                     error.EndOfStream => {},
                     else => return e,
                 }
             };
 
-            const chunk = chunk_buf_stream2.written();
+            const chunk = chunk_buf_stream.buffered();
 
             chunk_hasher.hasher.hasher.update(chunk);
-            // try fifo.pump(lr.reader(), mwriter.writer());
 
             const true_end_pos = try f_in.getPos();
             std.debug.assert(true_end_pos > cur_pos);

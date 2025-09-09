@@ -66,7 +66,7 @@ pub const Matcher = struct {
         }
     }
 
-    pub fn convertGlob(alloc: std.mem.Allocator, glob: []const u8) ![:0]u8 {
+    pub fn convertGlob(gpa: std.mem.Allocator, glob: []const u8) ![:0]u8 {
         const options: u32 = 0 | c.PCRE2_CONVERT_GLOB;
         var output_opt: [*c]u8 = null;
         var output_size: usize = 0;
@@ -95,7 +95,7 @@ pub const Matcher = struct {
 
         if (output_opt) |output| {
             const output_slice = output[0..output_size];
-            return try alloc.dupeZ(u8, output_slice);
+            return try gpa.dupeZ(u8, output_slice);
         } else {
             return error.Pcre2Error;
         }
@@ -153,11 +153,11 @@ test "Matcher.dfaMatch" {
 test "Matcher.convertGlob" {
     _ = Matcher;
 
-    const alloc = std.testing.allocator;
+    const gpa = std.testing.allocator;
 
     const glob = "*.zig";
-    const converted = try Matcher.convertGlob(alloc, glob);
-    defer alloc.free(converted);
+    const converted = try Matcher.convertGlob(gpa, glob);
+    defer gpa.free(converted);
 
     log.debug(
         "\n\nWhat is the converted pattern? \"{s}\" -> \"{s}\"\n\n",
@@ -175,6 +175,33 @@ test "Matcher.convertGlob" {
 
     const matches3 = matcher.dfaMatchBool("add.zig", null);
     try std.testing.expect(matches3);
+}
+
+test "Matcher.convertGlob 2" {
+    _ = Matcher;
+
+    const gpa = std.testing.allocator;
+
+    const glob = "**/*.zig";
+    const converted = try Matcher.convertGlob(gpa, glob);
+    defer gpa.free(converted);
+
+    log.debug(
+        "\n\nWhat is the converted pattern? \"{s}\" -> \"{s}\"\n\n",
+        .{ glob, converted },
+    );
+
+    const matcher = try Matcher.compile(converted);
+    defer matcher.free();
+
+    const matches1 = matcher.dfaMatchBool("blah blah", null);
+    try std.testing.expect(!matches1);
+
+    const matches2 = matcher.dfaMatchBool("src/add.zig", null);
+    try std.testing.expect(matches2);
+
+    const matches3 = matcher.dfaMatchBool("add.zig", null);
+    try std.testing.expect(!matches3);
 }
 
 pub const FileIgnorer = struct {

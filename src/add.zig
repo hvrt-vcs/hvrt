@@ -84,7 +84,13 @@ pub const FileAdder = struct {
         log.debug("what is db_path: {s}\n", .{db_path});
 
         // Should fail if either the directory or db files do not exist
-        const wt_db = try sqlite.DataBase.open(db_path);
+        const wt_db = try sqlite.DataBase.open(db_path, .{
+            .flags = &.{
+                .readwrite,
+                .uri,
+                .exrescode,
+            },
+        });
         errdefer wt_db.close() catch unreachable;
 
         const wt_sql = sql.sqlite.work_tree;

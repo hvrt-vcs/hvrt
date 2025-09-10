@@ -8,29 +8,76 @@ pub const SqliteError = @TypeOf(Error.SQLITE_ERROR);
 pub const DataBase = struct {
     db: *c.sqlite3,
 
+    /// Direct mapping to Sqlite3 open flags.
+    ///
+    /// See Sqlite3 docs here: https://sqlite.org/c3ref/c_open_autoproxy.html
+    ///
+    /// This is a non-exhaustive enum, so values other than those explicitly
+    /// defined can be used by casting with the @enumFromInt builtin function.
+    pub const OpenFlags = enum(c_int) {
+        readonly = c.SQLITE_OPEN_READONLY,
+        readwrite = c.SQLITE_OPEN_READWRITE,
+        create = c.SQLITE_OPEN_CREATE,
+        uri = c.SQLITE_OPEN_URI,
+        memory = c.SQLITE_OPEN_MEMORY,
+        nomutex = c.SQLITE_OPEN_NOMUTEX,
+        fullmutex = c.SQLITE_OPEN_FULLMUTEX,
+        sharedcache = c.SQLITE_OPEN_SHAREDCACHE,
+        privatecache = c.SQLITE_OPEN_PRIVATECACHE,
+        nofollow = c.SQLITE_OPEN_NOFOLLOW,
+
+        /// Extended result codes
+        exrescode = c.SQLITE_OPEN_EXRESCODE,
+        _,
+    };
+
+    /// Roughly based on open options from the following docs:
+    /// https://sqlite.org/c3ref/open.html
+    pub const Options = struct {
+        /// Bit flags to pass to `sqlite3_open_v2`.
+        flags: []const OpenFlags = &.{
+            .readonly,
+            .uri,
+            .exrescode,
+        },
+
+        /// String name for a previously registered Sqlite VFS module.
+        /// Optional.
+        zVfs: ?[:0]const u8 = null,
+
+        /// Set some default pragmas upon opening, such as enforcing
+        /// `foreign_keys` by default. You can set this to `false` if you
+        /// prefer full control over the database configuration. See the source
+        /// code to inspect what pragmas are run by default.
+        default_pragmas: bool = true,
+    };
+
     /// Open and return a sqlite database or return an error if a database
     /// cannot be opened for some reason.
-    pub fn open(filename: [:0]const u8) !DataBase {
+    pub fn open(filename: [:0]const u8, options: Options) !DataBase {
+        var flags: c_int = 0;
+        for (options.flags) |f| {
+            flags |= @intFromEnum(f);
+        }
+
+        const zVfs = if (options.zVfs) |zVfs_slice| zVfs_slice.ptr else null;
+
         var db_optional: ?*c.sqlite3 = null;
-        var rc: c_int = 0;
-
-        const flags: c_int = c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE | c.SQLITE_OPEN_URI;
-
-        rc = c.sqlite3_open_v2(filename.ptr, &db_optional, flags, null);
+        const rc = c.sqlite3_open_v2(filename.ptr, &db_optional, flags, zVfs);
         errdefer if (db_optional) |db| DataBase.close(.{ .db = db }) catch unreachable; // NO_COV_LINE
         try ResultCode.fromInt(rc).check(if (db_optional) |db| .{ .db = db } else null);
 
         // Enable extended error codes
         if (db_optional) |db| {
             const self: DataBase = .{ .db = db };
-            rc = c.sqlite3_extended_result_codes(self.db, 1);
-            try ResultCode.fromInt(rc).check(self);
 
-            // For Havarti, we almost always want to default these pragmas to
-            // the values below.
-            try self.exec("PRAGMA foreign_keys = true;");
-            try self.exec("PRAGMA ignore_check_constraints = false;");
-            try self.exec("PRAGMA automatic_index = true;");
+            if (options.default_pragmas) {
+                // For Havarti, we almost always want to default these pragmas
+                // to the values below.
+                try self.exec("PRAGMA foreign_keys = true;");
+                try self.exec("PRAGMA ignore_check_constraints = false;");
+                try self.exec("PRAGMA automatic_index = true;");
+            }
 
             return self;
         } else {

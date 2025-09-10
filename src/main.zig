@@ -346,7 +346,13 @@ test "first commit parent must have `regular` parent type" {
     const repo_db_pathz = try test_alloc.dupeZ(u8, repo_db_path);
     defer test_alloc.free(repo_db_pathz);
 
-    const repo_db = try sqlite.DataBase.open(repo_db_pathz);
+    const repo_db = try sqlite.DataBase.open(repo_db_pathz, .{
+        .flags = &.{
+            .readwrite,
+            .uri,
+            .exrescode,
+        },
+    });
     defer repo_db.close() catch unreachable;
 
     const commit_parent_stmt_txt = sql.sqlite.repo.commit.commit_parent;

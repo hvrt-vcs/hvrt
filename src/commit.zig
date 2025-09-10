@@ -55,7 +55,13 @@ pub fn commit(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8,
     log.debug("what is wt_db_path: {s}\n", .{wt_db_path});
 
     // Should fail if either the directory or db files do not exist
-    const wt_db = try sqlite.DataBase.open(wt_db_path);
+    const wt_db = try sqlite.DataBase.open(wt_db_path, .{
+        .flags = &.{
+            .readwrite,
+            .uri,
+            .exrescode,
+        },
+    });
     defer wt_db.close() catch unreachable;
 
     const repo_db_path_parts = [_][]const u8{ abs_repo_path, hvrt_dirname, repo_db_name };
@@ -64,7 +70,13 @@ pub fn commit(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8,
     log.debug("what is repo_db_path: {s}\n", .{repo_db_path});
 
     // Should fail if either the directory or db files do not exist
-    const repo_db = try sqlite.DataBase.open(repo_db_path);
+    const repo_db = try sqlite.DataBase.open(repo_db_path, .{
+        .flags = &.{
+            .readwrite,
+            .uri,
+            .exrescode,
+        },
+    });
     defer repo_db.close() catch unreachable;
 
     const wt_sql = sql.sqlite.work_tree;

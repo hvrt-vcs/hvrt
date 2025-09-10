@@ -52,7 +52,14 @@ pub fn init(gpa: std.mem.Allocator, repo_path: []const u8) !void {
 }
 
 fn initDatabase(db_uri: [:0]const u8, tx_name: [:0]const u8, sqlfiles: anytype) !void {
-    const db = try sqlite.DataBase.open(db_uri);
+    const db = try sqlite.DataBase.open(db_uri, .{
+        .flags = &.{
+            .readwrite,
+            .create,
+            .uri,
+            .exrescode,
+        },
+    });
     defer db.close() catch unreachable;
 
     const tx = try sqlite.Transaction.init(db, tx_name);

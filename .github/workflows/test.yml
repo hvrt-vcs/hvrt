@@ -27,6 +27,8 @@ jobs:
           verbose: true
       - name: Coveralls
         uses: coverallsapp/github-action@v2
+        with:
+          base-path: src/
   test:
     strategy:
       matrix:

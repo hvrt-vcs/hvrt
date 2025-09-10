@@ -25,6 +25,8 @@ jobs:
           directory: ./zig-out/kcov-out
           fail_ci_if_error: true
           verbose: true
+      - name: Coveralls
+        uses: coverallsapp/github-action@2
   test:
     strategy:
       matrix:

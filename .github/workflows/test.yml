@@ -25,10 +25,8 @@ jobs:
           directory: ./zig-out/kcov-out
           fail_ci_if_error: true
           verbose: true
-      - name: Coveralls
+      - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
-        with:
-          base-path: src/
   test:
     strategy:
       matrix:

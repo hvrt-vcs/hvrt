@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const parse_args = @import("parse_args.zig");
-const Config = @import("config.zig").Config;
+const Config = @import("voll.zig").Config;
 const init = @import("init.zig").init;
 const add = @import("add.zig").add;
 const commit = @import("commit.zig").commit;

@@ -7,7 +7,7 @@ const dir_walker = @import("dir_walker.zig");
 const pcre = @import("pcre.zig");
 const sql = @import("sql.zig");
 const sqlite = @import("sqlite.zig");
-const config = @import("config.zig");
+const voll = @import("voll.zig");
 
 const Sha3_256 = core_ds.Sha3_256;
 const HashAlgo = core_ds.HashAlgo;
@@ -24,7 +24,7 @@ const default_chunk_size = 1024 * 4;
 
 /// It is the responsibility of the caller of `add` to deallocate and
 /// deinit `gpa`, `repo_path`, and `files`, if necessary.
-pub fn add(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8, files: []const []const u8) !void {
+pub fn add(gpa: std.mem.Allocator, cfg: voll.Config, repo_path: []const u8, files: []const []const u8) !void {
     var file_adder = try FileAdder.init(gpa, cfg, repo_path);
     defer file_adder.deinit();
 
@@ -34,7 +34,7 @@ pub fn add(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8, fi
 pub const FileAdder = struct {
     alloc: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
-    config: config.Config,
+    config: voll.Config,
     repo_root: std.fs.Dir,
     wt_db: sqlite.DataBase,
     file_stmt: sqlite.Statement,
@@ -59,7 +59,7 @@ pub const FileAdder = struct {
         self.repo_root.close();
     }
 
-    pub fn init(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8) !FileAdder {
+    pub fn init(gpa: std.mem.Allocator, cfg: voll.Config, repo_path: []const u8) !FileAdder {
         const arena = try gpa.create(std.heap.ArenaAllocator);
         arena.* = .init(gpa);
         errdefer {

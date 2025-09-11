@@ -5,7 +5,7 @@ const Dir = std.fs.Dir;
 
 const sqlite = @import("sqlite.zig");
 const sql = @import("sql.zig");
-const config = @import("config.zig");
+const voll = @import("voll.zig");
 
 const core_ds = @import("ds/core.zig");
 const Hasher = core_ds.Hasher;
@@ -33,7 +33,7 @@ const fba_size = 1024 * 64;
 
 /// It is the responsibility of the caller of `commit` to deallocate and
 /// deinit gpa, repo_path, and files, if necessary.
-pub fn commit(gpa: std.mem.Allocator, cfg: config.Config, repo_path: []const u8, message: []const u8) !void {
+pub fn commit(gpa: std.mem.Allocator, cfg: voll.Config, repo_path: []const u8, message: []const u8) !void {
     _ = cfg;
     log.debug("what is the message: {s}\n", .{message});
 

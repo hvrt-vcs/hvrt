@@ -313,10 +313,12 @@ pub const Savepoint = struct {
     pub fn init(db: DataBase, name: ?[:0]const u8) !Savepoint {
         const self: Savepoint = .{ .db = db, .name = name orelse default_name };
 
+        if (self.name.len == 0) return error.NameTooShort;
+
         // Add 1 for the sentinel `0` value in the cstring.
         if (self.name.len + max_fmt_sz + 1 > buf_sz) return error.NameTooLong;
 
-        // Name length check above already caught any large values,
+        // Name length check above already caught any values larger than a c_int,
         // so this cast is safe at this point.
         const len_cast: c_int = @intCast(self.name.len);
 

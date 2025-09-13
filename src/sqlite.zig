@@ -296,10 +296,10 @@ pub const Statement = struct {
 };
 
 pub const Savepoint = struct {
-    const _begin_fmt = "SAVEPOINT {s};";
-    const _commit_fmt = "RELEASE SAVEPOINT {s};";
-    const _rollback_fmt = "ROLLBACK TO SAVEPOINT {s};";
-    const _max_fmt_sz = @max(@max(_begin_fmt.len, _commit_fmt.len), _rollback_fmt.len);
+    const begin_fmt = "SAVEPOINT {s};";
+    const commit_fmt = "RELEASE SAVEPOINT {s};";
+    const rollback_fmt = "ROLLBACK TO SAVEPOINT {s};";
+    const max_fmt_sz = @max(begin_fmt.len, commit_fmt.len, rollback_fmt.len);
 
     const Self = @This();
     const default_name = "default_savepoint_name";
@@ -314,18 +314,26 @@ pub const Savepoint = struct {
         const self: Savepoint = .{ .db = db, .name = name orelse default_name };
 
         // Add 1 for the sentinel `0` value in the cstring.
-        if (self.name.len + _max_fmt_sz + 1 > buf_sz) return error.NameTooLong;
+        if (self.name.len + max_fmt_sz + 1 > buf_sz) return error.NameTooLong;
+
+        // Name length check above already caught any large values,
+        // so this cast is safe at this point.
+        const len_cast: c_int = @intCast(self.name.len);
 
         // Attempt to check if the name is a keyword.
-        const rc = c.sqlite3_keyword_check(self.name.ptr, 0);
-        try ResultCode.fromInt(rc).check(self.db);
+        const rc = c.sqlite3_keyword_check(self.name.ptr, len_cast);
+        const name_is_keyword = rc != 0;
+        if (name_is_keyword) {
+            log.err("Name '{s}' is a SQLite keyword and cannot be used for a savepoint name.\n", .{self.name});
+            return Error.SQLITE_ERROR;
+        }
 
         // XXX: We add extra spaces at the end to ensure that if the name fails
         // because it is too long, it will fail now (before executing anything)
         // instead of failing later when attempting to rollback a bad
         // statement, or commit a good statement.
         var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _begin_fmt, .{self.name});
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, begin_fmt, .{self.name});
 
         try self.db.exec(trans_stmt);
         return self;
@@ -333,7 +341,7 @@ pub const Savepoint = struct {
 
     pub fn commit(self: *const Self) !void {
         var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _commit_fmt, .{self.name});
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, commit_fmt, .{self.name});
         self.db.exec(trans_stmt) catch |err| {
             log.err("Savepoint '{s}' commit failed: {any}\n", .{ self.name, err });
             return err;
@@ -342,7 +350,7 @@ pub const Savepoint = struct {
 
     pub fn rollback(self: *const Self) !void {
         var stmt_buf: [buf_sz]u8 = undefined;
-        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, _rollback_fmt, .{self.name});
+        const trans_stmt = try std.fmt.bufPrintZ(&stmt_buf, rollback_fmt, .{self.name});
         self.db.exec(trans_stmt) catch |err| {
             log.err("Savepoint '{s}' rollback failed: {any}\n", .{ self.name, err });
             return err;
@@ -351,9 +359,9 @@ pub const Savepoint = struct {
 };
 
 pub const Transaction = struct {
-    const _begin_stmt = "BEGIN TRANSACTION;";
-    const _commit_stmt = "COMMIT TRANSACTION;";
-    const _rollback_stmt = "ROLLBACK TRANSACTION;";
+    const begin_stmt = "BEGIN TRANSACTION;";
+    const commit_stmt = "COMMIT TRANSACTION;";
+    const rollback_stmt = "ROLLBACK TRANSACTION;";
 
     const Self = @This();
     const default_name = "default_transaction_name";
@@ -366,19 +374,19 @@ pub const Transaction = struct {
     pub fn init(db: DataBase, name: ?[:0]const u8) !Transaction {
         const self: Transaction = .{ .db = db, .name = name orelse default_name };
 
-        try self.db.exec(_begin_stmt);
+        try self.db.exec(begin_stmt);
         return self;
     }
 
     pub fn commit(self: *const Self) !void {
-        self.db.exec(_commit_stmt) catch |err| {
+        self.db.exec(commit_stmt) catch |err| {
             log.err("Transaction '{s}' commit failed: {any}\n", .{ self.name, err });
             return err;
         };
     }
 
     pub fn rollback(self: *const Self) !void {
-        self.db.exec(_rollback_stmt) catch |err| {
+        self.db.exec(rollback_stmt) catch |err| {
             log.err("Transaction '{s}' rollback failed: {any}\n", .{ self.name, err });
             return err;
         };

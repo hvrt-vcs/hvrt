@@ -216,7 +216,7 @@ pub const FileAdder = struct {
     }
 
     pub fn addFile(self: *FileAdder, rel_path: []const u8) !void {
-        defer _ = self.arena.reset(.retain_capacity);
+        _ = self.arena.reset(.retain_capacity);
         const arena = self.arena.allocator();
 
         const file_sp_opt: ?sqlite.Savepoint = if (self.tx_opt) |tx| tx.createSavepoint("add_single_file") catch null else null;

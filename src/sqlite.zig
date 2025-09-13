@@ -327,7 +327,7 @@ pub const Savepoint = struct {
         const name_is_keyword = rc != 0;
         if (name_is_keyword) {
             log.err("Name '{s}' is a SQLite keyword and cannot be used for a savepoint name.\n", .{self.name});
-            return Error.SQLITE_ERROR;
+            return error.NameIsKeyword;
         }
 
         // XXX: We add extra spaces at the end to ensure that if the name fails

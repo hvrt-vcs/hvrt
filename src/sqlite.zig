@@ -371,8 +371,8 @@ pub const Transaction = struct {
     db: DataBase,
     name: [:0]const u8,
 
-    /// Creates an (optionally) named transaction. This does not use parameter
-    /// binding or escaping, so the name should be a valid SQLite identifier.
+    /// Creates a transaction. This does not use parameter binding or escaping.
+    /// The name is only used for logging.
     pub fn init(db: DataBase, name: ?[:0]const u8) !Transaction {
         const self: Transaction = .{ .db = db, .name = name orelse default_name };
 

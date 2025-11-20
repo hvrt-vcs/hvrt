@@ -1,16 +1,27 @@
 .{
     .name = .hvrt,
     .fingerprint = 0xc5cbba43afd6c71a,
-    .minimum_zig_version = "0.15.1",
+    .minimum_zig_version = "0.15.2",
     .version = "0.1.0",
+    .spdx_license = "0BSD",
     .dependencies = .{
         .sqlite = .{
             .url = "https://www.sqlite.org/2025/sqlite-amalgamation-3490200.zip",
             .hash = "N-V-__8AAH-mpwB7g3MnqYU-ooUBF1t99RP27dZ9addtMVXD",
+            .spdx_license = "blessing",
+            .human_url = "https://www.sqlite.org/download.html",
         },
         .pcre2 = .{
             .url = "https://github.com/PCRE2Project/pcre2/archive/bf50eeef64fc4f5ddfc93a041e2f4d7357f3c431.zip",
             .hash = "N-V-__8AACmh4ADOCAV0jWoP1aROj0YE9MDpWkXtSpPL3JZb",
+            .spdx_license = "BSD-3-Clause WITH PCRE2-exception",
+            .human_url = "https://github.com/PCRE2Project/pcre2/tree/bf50eeef64fc4f5ddfc93a041e2f4d7357f3c431",
+        },
+        .wildmatch = .{
+            .url = "https://github.com/davvid/wildmatch/archive/b7b00ad937b654a5abd3109bbfff4540494473c8.zip",
+            .hash = "N-V-__8AACLnAAC7sKfh4LNxrnL3nHN4-vLvqaLL0bLp5lRL",
+            .spdx_license = "BSD-3-Clause",
+            .human_url = "https://github.com/davvid/wildmatch/tree/b7b00ad937b654a5abd3109bbfff4540494473c8",
         },
     },
     .paths = .{"."},

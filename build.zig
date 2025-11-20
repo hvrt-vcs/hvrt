@@ -24,6 +24,9 @@ const pcre_include_path = third_party_path ++ "/" ++ pcre_prefix;
 const sqlite_flags = &[_][]const u8{
     "-std=c99",
 };
+const wildmatch_flags = &[_][]const u8{
+    "-std=c99",
+};
 
 fn compileSqlite(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
 
@@ -155,8 +158,45 @@ fn compilePcre2(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     return pcre2_sl;
 }
 
+fn compileWildmatch(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+
+    // refer to the dependency in build.zig.zon
+    const wildmatch_dep = b.dependency("wildmatch", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const wildmatch_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    b.modules.put(b.dupe("wildmatch"), wildmatch_mod) catch unreachable;
+
+    const wildmatch_sl = b.addLibrary(.{
+        .name = "wildmatch",
+        .root_module = wildmatch_mod,
+        .linkage = .static,
+    });
+
+    wildmatch_sl.addCSourceFile(.{
+        .file = wildmatch_dep.path("wildmatch/wildmatch.c"),
+        .flags = wildmatch_flags,
+    });
+    wildmatch_sl.addIncludePath(wildmatch_dep.path("wildmatch"));
+
+    wildmatch_sl.linkLibC();
+
+    return wildmatch_sl;
+}
+
 fn compileExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
     const sqlite_dep = b.dependency("sqlite", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const wildmatch_dep = b.dependency("wildmatch", .{
         .target = target,
         .optimize = optimize,
     });
@@ -164,6 +204,8 @@ fn compileExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
     const sqlite_sl = compileSqlite(b, target, optimize);
 
     const pcre2_sl = compilePcre2(b, target, optimize);
+
+    const wildmatch_sl = compileWildmatch(b, target, optimize);
 
     const exe = b.addExecutable(.{
         .name = "hvrt",
@@ -178,11 +220,13 @@ fn compileExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
 
     exe.linkLibrary(sqlite_sl);
     exe.linkLibrary(pcre2_sl);
+    exe.linkLibrary(wildmatch_sl);
     exe.addIncludePath(sqlite_dep.path("."));
+    exe.addIncludePath(wildmatch_dep.path("wildmatch"));
     exe.addIncludePath(b.path("src/c"));
 
-    // We use c_allocator from libc for allocator implementation, since it is
-    // the fastest builtin allocator currently offered by zig.
+    // Some systems other than Linux use libc as the system interface, so it
+    // must be linked for now.
     exe.linkLibC();
 
     return exe;

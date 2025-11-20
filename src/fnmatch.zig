@@ -230,6 +230,10 @@ test fnmatch {
     // special char after star #2
     const match8 = try fnmatch("foob*[rzt].baz", "foobar.baz", .{});
     try std.testing.expect(match8);
+
+    // Directory
+    const match9 = try fnmatch("**/*bar.baz", "blah/foobar.baz", .{});
+    try std.testing.expect(match9);
 }
 
 test "refAllDeclsRecursive" {

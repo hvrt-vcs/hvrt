@@ -31,6 +31,16 @@ pub fn add(gpa: std.mem.Allocator, cfg: voll.Config, repo_path: []const u8, file
     try file_adder.addPaths(files);
 }
 
+const StringArray = std.ArrayList([]const u8);
+
+const IgnoreFile = struct {
+    const Self = @This();
+    parent: ?*Self = null,
+    patterns: StringArray = .empty,
+
+    pub const empty: Self = .{};
+};
+
 pub const FileAdder = struct {
     alloc: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
@@ -154,7 +164,7 @@ pub const FileAdder = struct {
                     };
                     defer sub_dir.close();
 
-                    self.addDir(&sub_dir, file) catch {
+                    self.addDir(&sub_dir, file, null) catch {
                         // log.warn("Failed adding directory \"{any}\" with error `{any}`\n", .{ file, @errorName(e) });
                         continue;
                     };
@@ -172,7 +182,8 @@ pub const FileAdder = struct {
         try self.commitTransaction();
     }
 
-    pub fn addDir(self: *FileAdder, dir: *std.fs.Dir, path_from_repo_root: []const u8) !void {
+    pub fn addDir(self: *FileAdder, dir: *std.fs.Dir, path_from_repo_root: []const u8, parent_dir_ignore_file: ?*IgnoreFile) !void {
+        var current_dir_ignore_file: IgnoreFile = .{ .parent = parent_dir_ignore_file };
         var dir_iter = dir.iterate();
         while (dir_iter.next()) |entry_opt| {
             if (entry_opt) |entry| {
@@ -190,7 +201,7 @@ pub const FileAdder = struct {
                         };
                         defer sub_dir.close();
 
-                        self.addDir(&sub_dir, joined_file) catch |e| {
+                        self.addDir(&sub_dir, joined_file, &current_dir_ignore_file) catch |e| {
                             log.warn("Failed adding directory \"{s}\" with error `{s}`\n", .{ joined_file, @errorName(e) });
                             continue;
                         };

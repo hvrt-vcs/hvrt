@@ -35,10 +35,14 @@ const StringArray = std.ArrayList([]const u8);
 
 const IgnoreFile = struct {
     const Self = @This();
+    pub const empty: Self = .{};
+
     parent: ?*Self = null,
     patterns: StringArray = .empty,
 
-    pub const empty: Self = .{};
+    fn deinit(self: *Self, alloc: std.mem.Allocator) void {
+        self.patterns.deinit(alloc);
+    }
 };
 
 pub const FileAdder = struct {
@@ -184,6 +188,8 @@ pub const FileAdder = struct {
 
     pub fn addDir(self: *FileAdder, dir: *std.fs.Dir, path_from_repo_root: []const u8, parent_dir_ignore_file: ?*IgnoreFile) !void {
         var current_dir_ignore_file: IgnoreFile = .{ .parent = parent_dir_ignore_file };
+        defer current_dir_ignore_file.deinit(self.alloc);
+
         var dir_iter = dir.iterate();
         while (dir_iter.next()) |entry_opt| {
             if (entry_opt) |entry| {

@@ -52,6 +52,9 @@ const IgnoreFile = struct {
         });
         defer ignore_file.close();
 
+        // FIXME: maybe use an allocating, buffered bytestream. The current
+        // implementation can error by having a line that is too long to fit
+        // into the internal buffer.
         var buffer: [1024]u8 = undefined;
         var reader = ignore_file.reader(&buffer);
         var interface = &reader.interface;

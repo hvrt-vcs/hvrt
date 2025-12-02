@@ -40,8 +40,28 @@ const IgnoreFile = struct {
     parent: ?*Self = null,
     patterns: StringArray = .empty,
 
-    fn deinit(self: *Self, alloc: std.mem.Allocator) void {
+    pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
         self.patterns.deinit(alloc);
+    }
+
+    pub fn parsePatterns(self: *Self, dir: *std.fs.Dir) !void {
+        _ = self;
+        const ignore_file = try dir.openFile(".hvrtignore", .{
+            .mode = .read_only,
+            // .lock = .shared,
+        });
+        defer ignore_file.close();
+
+        var buffer: [1024]u8 = undefined;
+        var reader = ignore_file.reader(&buffer);
+        var interface = &reader.interface;
+
+        while (interface.takeDelimiter('\n') catch |err| {
+            log.err("Failed to read line: {s}", .{@errorName(err)});
+            return err;
+        }) |line| {
+            log.warn("What's the line? {s}", .{line});
+        }
     }
 };
 
@@ -189,6 +209,8 @@ pub const FileAdder = struct {
     pub fn addDir(self: *FileAdder, dir: *std.fs.Dir, path_from_repo_root: []const u8, parent_dir_ignore_file: ?*IgnoreFile) !void {
         var current_dir_ignore_file: IgnoreFile = .{ .parent = parent_dir_ignore_file };
         defer current_dir_ignore_file.deinit(self.alloc);
+
+        try current_dir_ignore_file.parsePatterns(dir);
 
         var dir_iter = dir.iterate();
         while (dir_iter.next()) |entry_opt| {

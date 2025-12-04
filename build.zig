@@ -244,6 +244,7 @@ fn compileExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
 // runner.
 pub fn build(b: *std.Build) void {
     const report_coverage = b.option(bool, "report-coverage", "Generates a test code coverage report using kcov") orelse false;
+    const build_all_targets = b.option(bool, "build-all-targets", "Build exe for all targets") orelse false;
 
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -267,20 +268,22 @@ pub fn build(b: *std.Build) void {
     // step when running `zig build`).
     b.installArtifact(native_exe);
 
-    // Build artifacts for all desired targets
-    for (targets) |t| {
-        const exe = compileExe(b, b.resolveTargetQuery(t), optimize);
+    if (build_all_targets) {
+        // Build artifacts for all desired targets
+        for (targets) |t| {
+            const exe = compileExe(b, b.resolveTargetQuery(t), optimize);
 
-        const custom_dest = t.zigTriple(b.allocator) catch unreachable;
-        const target_output = b.addInstallArtifact(exe, .{
-            .dest_dir = .{
-                .override = .{
-                    .custom = custom_dest,
+            const custom_dest = t.zigTriple(b.allocator) catch unreachable;
+            const target_output = b.addInstallArtifact(exe, .{
+                .dest_dir = .{
+                    .override = .{
+                        .custom = custom_dest,
+                    },
                 },
-            },
-        });
+            });
 
-        b.getInstallStep().dependOn(&target_output.step);
+            b.getInstallStep().dependOn(&target_output.step);
+        }
     }
 
     // This *creates* a Run step in the build graph, to be executed when another

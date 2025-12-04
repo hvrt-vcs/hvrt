@@ -4,7 +4,11 @@ const targets: []const std.Target.Query = &.{
     .{ .cpu_arch = .aarch64, .os_tag = .macos },
     .{ .cpu_arch = .aarch64, .os_tag = .linux },
     .{ .cpu_arch = .aarch64, .os_tag = .windows },
+    .{ .cpu_arch = .aarch64, .os_tag = .freebsd },
+    .{ .cpu_arch = .aarch64, .os_tag = .netbsd },
     .{ .cpu_arch = .arm, .os_tag = .linux },
+    .{ .cpu_arch = .arm, .os_tag = .freebsd },
+    .{ .cpu_arch = .arm, .os_tag = .netbsd },
     .{ .cpu_arch = .x86, .os_tag = .linux, .abi = .gnu },
     .{ .cpu_arch = .x86, .os_tag = .linux, .abi = .musl },
     .{ .cpu_arch = .x86, .os_tag = .windows },
@@ -12,6 +16,8 @@ const targets: []const std.Target.Query = &.{
     .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
     .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
     .{ .cpu_arch = .x86_64, .os_tag = .windows },
+    .{ .cpu_arch = .x86_64, .os_tag = .freebsd },
+    .{ .cpu_arch = .x86_64, .os_tag = .netbsd },
 };
 
 const third_party_path = "third_party";

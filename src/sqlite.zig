@@ -67,7 +67,6 @@ pub const DataBase = struct {
         errdefer if (db_optional) |db| DataBase.close(.{ .db = db }) catch unreachable; // NO_COV_LINE
         try ResultCode.fromInt(rc).check(if (db_optional) |db| .{ .db = db } else null);
 
-        // Enable extended error codes
         if (db_optional) |db| {
             const self: DataBase = .{ .db = db };
 
